@@ -41,13 +41,39 @@ local function topButton(txt,x,color)
  local b=New("TextButton",{Parent=header,Position=UDim2.new(1,x,0,25),Size=UDim2.fromOffset(43,43),BackgroundColor3=color or C.panel,Text=txt,TextColor3=C.text,TextSize=22,Font=Enum.Font.GothamBold}); corner(b,13); return b
 end
 local mini=topButton("−",-108,Color3.fromRGB(120,82,22)); local close=topButton("×",-58,Color3.fromRGB(125,35,48)); close.MouseButton1Click:Connect(function() gui:Destroy() end)
-local hidden=false; mini.MouseButton1Click:Connect(function() hidden=not hidden; sidebar.Visible=not hidden; for _,v in ipairs(win:GetChildren()) do if v~=header and v~=sidebar and not v:IsA("UIGradient") and not v:IsA("UICorner") and not v:IsA("UIStroke") then v.Visible=not hidden end end; win.Size=hidden and UDim2.fromOffset(420,110) or UDim2.fromOffset(1280,690) end)
-local content=New("ScrollingFrame",{Parent=win,Position=UDim2.fromOffset(275,110),Size=UDim2.new(1,-300,1,-130),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=4,ScrollBarImageColor3=C.accent,CanvasSize=UDim2.fromOffset(0,0)})
+
+local dragging, dragStart, startPos
+header.Active=true
+header.InputBegan:Connect(function(input)
+ if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then
+  dragging=true; dragStart=input.Position; startPos=win.Position
+ end
+end)
+UIS.InputChanged:Connect(function(input)
+ if dragging and (input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseMovement) then
+  local delta=input.Position-dragStart
+  win.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
+ end
+end)
+UIS.InputEnded:Connect(function(input)
+ if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
+end)
+
+local restore=New("TextButton",{Parent=gui,AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,-22,.5,0),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="V",TextColor3=C.text,TextSize=30,Font=Enum.Font.GothamBold,Visible=false,AutoButtonColor=false})
+corner(restore,18); stroke(restore,C.accent,.05)
+mini.MouseButton1Click:Connect(function() win.Visible=false; restore.Visible=true end)
+restore.MouseButton1Click:Connect(function() restore.Visible=false; win.Visible=true end)
+local content=New("ScrollingFrame",{Parent=win,Position=UDim2.fromOffset(275,110),Size=UDim2.new(1,-300,1,-130),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=7,ScrollBarImageColor3=C.accent,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollingDirection=Enum.ScrollingDirection.Y,ScrollingEnabled=true,Active=true,ElasticBehavior=Enum.ElasticBehavior.WhenScrollable,VerticalScrollBarInset=Enum.ScrollBarInset.Always})
 local cols={}
 for i=1,2 do cols[i]=New("Frame",{Parent=content,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=cols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
 local sectionCount=0
 local controls={}
-local function refreshCanvas() task.defer(function() content.CanvasSize=UDim2.fromOffset(0,math.max(cols[1].AbsoluteSize.Y,cols[2].AbsoluteSize.Y)+20) end) end
+local function refreshCanvas()
+ task.defer(function()
+  local h=math.max(cols[1].AbsoluteSize.Y,cols[2].AbsoluteSize.Y)+80
+  content.CanvasSize=UDim2.fromOffset(0,h)
+ end)
+end
 local host={}
 function host.Notify(title,duration)
  local toast=New("TextLabel",{Parent=gui,AnchorPoint=Vector2.new(1,1),Position=UDim2.new(1,-22,1,-22),Size=UDim2.fromOffset(330,58),BackgroundColor3=C.panel,Text="  "..tostring(title),TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left}); corner(toast,13); stroke(toast,C.accent,.15); task.delay(duration or 3,function() if toast.Parent then toast:Destroy() end end)
