@@ -32,6 +32,8 @@ New("UIGradient",{Parent=logo,Color=ColorSequence.new(C.text,C.accent),Rotation=
 text(sidebar,"V E L V E T",20,UDim2.fromOffset(35,132)); text(sidebar,"U I  L I B R A R Y",10,UDim2.fromOffset(38,162),true)
 local search=New("TextBox",{Parent=sidebar,Position=UDim2.fromOffset(20,205),Size=UDim2.fromOffset(210,48),BackgroundColor3=C.panel,PlaceholderText="  Search features...",Text="",TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.Gotham,ClearTextOnFocus=false}); corner(search,12); stroke(search)
 local home=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,278),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(49,31,92),Text="⌂    Home                         5",TextColor3=C.text,TextSize=17,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(home,12); stroke(home,C.accent,.05)
+local configsNav=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,346),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(20,20,34),Text="▣    Configs",TextColor3=C.dim,TextSize=17,Font=Enum.Font.Gotham,AutoButtonColor=false})
+corner(configsNav,12); stroke(configsNav,C.border,.55)
 local status=New("Frame",{Parent=sidebar,Position=UDim2.fromOffset(18,590),Size=UDim2.fromOffset(214,78),BackgroundColor3=C.panel}); corner(status,14); stroke(status)
 text(status,"●  Connected",13,UDim2.fromOffset(16,10)); text(status,"Noir Client",16,UDim2.fromOffset(16,35));
 local header=New("Frame",{Parent=win,Position=UDim2.fromOffset(250,0),Size=UDim2.new(1,-250,0,110),BackgroundTransparency=1})
@@ -66,14 +68,47 @@ restore.MouseButton1Click:Connect(function() restore.Visible=false; win.Visible=
 local content=New("ScrollingFrame",{Parent=win,Position=UDim2.fromOffset(275,110),Size=UDim2.new(1,-300,1,-130),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=7,ScrollBarImageColor3=C.accent,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollingDirection=Enum.ScrollingDirection.Y,ScrollingEnabled=true,Active=true,ElasticBehavior=Enum.ElasticBehavior.WhenScrollable,VerticalScrollBarInset=Enum.ScrollBarInset.Always})
 local cols={}
 for i=1,2 do cols[i]=New("Frame",{Parent=content,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=cols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
+local configContent=content:Clone(); configContent.Name="ConfigContent"; configContent.Parent=win; configContent.Visible=false; configContent:ClearAllChildren()
+local configCols={}
+for i=1,2 do configCols[i]=New("Frame",{Parent=configContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=configCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
+local activePage="home"
+local function selectPage(page)
+ activePage=page; content.Visible=page=="home"; configContent.Visible=page=="config"
+ home.BackgroundColor3=page=="home" and Color3.fromRGB(49,31,92) or C.panel; home.TextColor3=page=="home" and C.text or C.dim
+ configsNav.BackgroundColor3=page=="config" and Color3.fromRGB(49,31,92) or C.panel; configsNav.TextColor3=page=="config" and C.text or C.dim
+end
+home.MouseButton1Click:Connect(function() selectPage("home") end)
+configsNav.MouseButton1Click:Connect(function() selectPage("config") end)
 local sectionCount=0
+local configSectionCount=0
+local sectionPanels={}
 local controls={}
 local function refreshCanvas()
  task.defer(function()
   local h=math.max(cols[1].AbsoluteSize.Y,cols[2].AbsoluteSize.Y)+80
   content.CanvasSize=UDim2.fromOffset(0,h)
+  local ch=math.max(configCols[1].AbsoluteSize.Y,configCols[2].AbsoluteSize.Y)+80
+  configContent.CanvasSize=UDim2.fromOffset(0,ch)
  end)
 end
+search:GetPropertyChangedSignal("Text"):Connect(function()
+ local q=string.lower(search.Text or "")
+ local homeMatches, configMatches=0,0
+ for _,entry in ipairs(sectionPanels) do
+  local hay=entry.name
+  for _,d in ipairs(entry.panel:GetDescendants()) do
+   if d:IsA("TextLabel") or d:IsA("TextButton") then hay=hay.." "..string.lower(d.Text or "") end
+  end
+  local match=q=="" or string.find(hay,q,1,true)~=nil
+  entry.panel.Visible=match
+  if match then if entry.page=="config" then configMatches+=1 else homeMatches+=1 end end
+ end
+ if q~="" then
+  if activePage=="home" and homeMatches==0 and configMatches>0 then selectPage("config")
+  elseif activePage=="config" and configMatches==0 and homeMatches>0 then selectPage("home") end
+ end
+ refreshCanvas()
+end)
 local host={}
 function host.Notify(title,duration)
  local toast=New("TextLabel",{Parent=gui,AnchorPoint=Vector2.new(1,1),Position=UDim2.new(1,-22,1,-22),Size=UDim2.fromOffset(330,58),BackgroundColor3=C.panel,Text="  "..tostring(title),TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left}); corner(toast,13); stroke(toast,C.accent,.15); task.delay(duration or 3,function() if toast.Parent then toast:Destroy() end end)
@@ -81,8 +116,11 @@ end
 function host.CreateTab()
  local tab={}
  function tab:AddSection(name,description)
-  sectionCount+=1; local col=cols[(sectionCount-1)%2+1]
+  local isConfig=name=="NOIR CONFIG"
+  local col
+  if isConfig then configSectionCount+=1; col=configCols[(configSectionCount-1)%2+1] else sectionCount+=1; col=cols[(sectionCount-1)%2+1] end
   local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.12}); corner(panel,16); stroke(panel,C.border,.2)
+  table.insert(sectionPanels,{panel=panel,page=isConfig and "config" or "home",name=string.lower(name.." "..(description or ""))})
   local bar=New("Frame",{Parent=panel,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(4,42),BackgroundColor3=C.accent}); corner(bar,4)
   text(panel,name,19,UDim2.fromOffset(24,14)); if description and description~="" then text(panel,description,12,UDim2.fromOffset(24,42),true) end
   local holder=New("Frame",{Parent=panel,Position=UDim2.fromOffset(20,description~="" and 72 or 55),Size=UDim2.new(1,-40,0,0),AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1})
@@ -112,9 +150,21 @@ function host.CreateTab()
    return {SetValue=function(_,v)set(v)end}
   end
   function api:AddDropdown(label,values,callback)
-   local r=row(label,64); local idx=1; local b=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),Size=UDim2.fromOffset(190,42),BackgroundColor3=C.surface,Text=tostring(values[1]).."  ⌄",TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham}); corner(b,10); stroke(b)
-   local function set(v) local found=table.find(values,v); idx=found or idx; b.Text=tostring(values[idx]).."  ⌄"; callback(values[idx]) end
-   b.MouseButton1Click:Connect(function() idx=idx%#values+1; set(values[idx]) end); return {SetValue=function(_,v)set(v)end}
+   local r=row(label,64); local idx=1
+   local b=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),Size=UDim2.fromOffset(190,42),BackgroundColor3=C.surface,Text=tostring(values[1] or "None").."  ⌄",TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,ZIndex=5}); corner(b,10); stroke(b)
+   local popup
+   local function close() if popup then popup:Destroy(); popup=nil end end
+   local function set(v) local found=table.find(values,v); if found then idx=found end; b.Text=tostring(values[idx] or "None").."  ⌄"; if values[idx]~=nil then callback(values[idx]) end end
+   local function open()
+    close(); popup=New("ScrollingFrame",{Parent=gui,Position=UDim2.fromOffset(b.AbsolutePosition.X/scale.Scale,(b.AbsolutePosition.Y+b.AbsoluteSize.Y+4)/scale.Scale),Size=UDim2.fromOffset(b.AbsoluteSize.X/scale.Scale,math.min(#values*38,190)),CanvasSize=UDim2.fromOffset(0,#values*38),BackgroundColor3=C.surface,BorderSizePixel=0,ScrollBarThickness=4,ZIndex=50}); corner(popup,10); stroke(popup,C.accent,.2)
+    local list=New("UIListLayout",{Parent=popup,SortOrder=Enum.SortOrder.LayoutOrder})
+    for _,v in ipairs(values) do local item=New("TextButton",{Parent=popup,Size=UDim2.new(1,0,0,38),BackgroundTransparency=1,Text=tostring(v),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,ZIndex=51}); item.MouseButton1Click:Connect(function() set(v); close() end) end
+   end
+   b.MouseButton1Click:Connect(function() if popup then close() else open() end end)
+   local ctl={}
+   function ctl:SetValue(v) set(v) end
+   function ctl:Refresh(newValues,selected) values=newValues or {}; idx=1; set(selected or values[1]) end
+   return ctl
   end
   function api:AddTextBox(label,callback)
    local r=row(label,72); local box=New("TextBox",{Parent=r,Position=UDim2.fromOffset(0,30),Size=UDim2.new(1,0,0,38),BackgroundColor3=C.surface,Text="",PlaceholderText=label,TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.Gotham,ClearTextOnFocus=false}); corner(box,9); stroke(box); box.FocusLost:Connect(function()callback(box.Text)end); return {SetValue=function(_,v)box.Text=tostring(v)end}
@@ -178,6 +228,7 @@ local PRESET_FOLDER = "Ixry Shizuka/presets"
 local revertControls = {}
 local revertToggleStates = {}
 local syncRevertControls
+local presetDropdown
 local motionPart
 local motionPosition
 local motionTime
@@ -902,17 +953,23 @@ local function applyRevertConfig(data)
     return true
 end
 
+local presetNames
+
 local function savePreset()
-    if type(writefile) ~= "function" then return end
+    if type(writefile) ~= "function" then notify("Executor does not support writefile", 4) return end
     ensurePresetFolder()
     local ok, encoded = pcall(function() return HttpService:JSONEncode(exportRevertConfig()) end)
     if ok then
-        pcall(writefile, PRESET_FOLDER .. "/" .. cleanPresetName(presetName) .. ".preset", xorPreset(encoded))
-    end
+        local wrote, err = pcall(writefile, PRESET_FOLDER .. "/" .. cleanPresetName(presetName) .. ".preset", xorPreset(encoded))
+        if wrote then
+            notify("Preset saved: " .. cleanPresetName(presetName), 3)
+            if presetDropdown and presetDropdown.Refresh then presetDropdown:Refresh(presetNames(), cleanPresetName(presetName)) end
+        else notify("Preset save failed: " .. tostring(err), 4) end
+    else notify("Preset encode failed", 4) end
 end
 
 local function loadPreset()
-    if type(readfile) ~= "function" then return end
+    if type(readfile) ~= "function" then notify("Executor does not support readfile", 4) return end
     local path = PRESET_FOLDER .. "/" .. cleanPresetName(presetName) .. ".preset"
     local ok, decoded = pcall(function()
         local raw = readfile(path)
@@ -920,10 +977,11 @@ local function loadPreset()
     end)
     if ok and applyRevertConfig(decoded) then
         if type(syncRevertControls) == "function" then syncRevertControls() end
-    end
+        notify("Preset loaded: " .. cleanPresetName(presetName), 3)
+    else notify("Preset not found or invalid: " .. cleanPresetName(presetName), 4) end
 end
 
-local function presetNames()
+presetNames = function()
     local names = {"default"}
     if type(listfiles) == "function" then
         ensurePresetFolder()
@@ -957,7 +1015,7 @@ end)
 shootSection:AddButton("Shoot Murderer Now", shootMurderer)
 
 local revert = tab:AddSection("NOIR CONFIG", "Standalone Silent Aim settings; .preset-compatible")
-revert:AddDropdown("Your Presets", presetNames(), function(value) presetName = cleanPresetName(value) end)
+presetDropdown = revert:AddDropdown("Your Presets", presetNames(), function(value) presetName = cleanPresetName(value) end)
 if type(revert.AddTextBox) == "function" then
     revert:AddTextBox("Preset Name", function(value) presetName = cleanPresetName(value) end)
 else
