@@ -20,7 +20,7 @@ local gui=New("ScreenGui",{Name="NoirSilentAimUI",ResetOnSpawn=false,IgnoreGuiIn
 local scale=New("UIScale",{Parent=gui,Scale=1})
 local function rescale()
  local v=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
- scale.Scale=math.min(v.X/1360,v.Y/760,0.88)
+ scale.Scale=math.min(v.X/1360,v.Y/760,0.80)
 end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
 local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.04,ClipsDescendants=true})
@@ -54,7 +54,11 @@ end)
 UIS.InputChanged:Connect(function(input)
  if dragging and (input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseMovement) then
   local delta=input.Position-dragStart
-  win.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
+  local view=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
+  local half=win.AbsoluteSize/2
+  local desired=Vector2.new(startPos.X.Scale*view.X+startPos.X.Offset*scale.Scale+delta.X,startPos.Y.Scale*view.Y+startPos.Y.Offset*scale.Scale+delta.Y)
+  desired=Vector2.new(math.clamp(desired.X,half.X,view.X-half.X),math.clamp(desired.Y,half.Y,view.Y-half.Y))
+  win.Position=UDim2.fromOffset(desired.X/scale.Scale,desired.Y/scale.Scale)
  end
 end)
 UIS.InputEnded:Connect(function(input)
@@ -163,7 +167,7 @@ function host.CreateTab()
    local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(52,34,98),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
   end
   function api:AddSlider(label,min,max,default,callback)
-   local r=row(label,76); local value=text(r,tostring(default),14,UDim2.new(1,-72,0,10)); value.TextXAlignment=Enum.TextXAlignment.Right
+   local r=row(label,76); local value=text(r,tostring(default),14,UDim2.new(1,-72,0,10)); value.Size=UDim2.fromOffset(72,22); value.TextXAlignment=Enum.TextXAlignment.Right
    local track=New("Frame",{Parent=r,Position=UDim2.new(0,0,1,-18),Size=UDim2.new(1,0,0,5),BackgroundColor3=C.off}); corner(track,3)
    local fill=New("Frame",{Parent=track,Size=UDim2.fromScale((default-min)/(max-min),1),BackgroundColor3=C.accent}); corner(fill,3)
    local current=default
@@ -222,6 +226,8 @@ local config = {
     knifeEnabled = false,
     knifeWallCheck = false,
     knifePrioritizeSheriff = true,
+    espOutline = false,
+    espBox = false,
     prioritizePing = true,
     predictJump = false,
     predictLag = true,
@@ -271,6 +277,68 @@ local function validTarget(player)
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
     return player ~= LocalPlayer and character ~= nil and humanoid ~= nil and humanoid.Health > 0
 end
+
+local ESP_OUTLINE_NAME = "NoirESPOutline"
+local ESP_BOX_NAME = "NoirESPBox"
+local function clearESPCharacter(character)
+    if not character then return end
+    local outline = character:FindFirstChild(ESP_OUTLINE_NAME)
+    if outline then outline:Destroy() end
+    for _, item in ipairs(character:GetDescendants()) do
+        if item.Name == ESP_BOX_NAME then item:Destroy() end
+    end
+end
+local function applyESPPlayer(player)
+    if player == LocalPlayer then return end
+    local character = player.Character
+    if not character then return end
+    clearESPCharacter(character)
+    if config.espOutline then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = ESP_OUTLINE_NAME
+        highlight.Adornee = character
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillTransparency = 1
+        highlight.OutlineTransparency = 0
+        highlight.OutlineColor = Color3.fromRGB(145, 85, 255)
+        highlight.Parent = character
+    end
+    if config.espBox then
+        local root = character:FindFirstChild("HumanoidRootPart")
+        if root then
+            local box = Instance.new("BillboardGui")
+            box.Name = ESP_BOX_NAME
+            box.Adornee = root
+            box.AlwaysOnTop = true
+            box.LightInfluence = 0
+            box.Size = UDim2.fromOffset(72, 108)
+            box.StudsOffset = Vector3.new(0, 0.35, 0)
+            box.Parent = root
+            local frame = Instance.new("Frame")
+            frame.BackgroundTransparency = 1
+            frame.Size = UDim2.fromScale(1, 1)
+            frame.Parent = box
+            local line = Instance.new("UIStroke")
+            line.Color = Color3.fromRGB(90, 220, 255)
+            line.Thickness = 1.5
+            line.Transparency = 0
+            line.Parent = frame
+            local rounding = Instance.new("UICorner")
+            rounding.CornerRadius = UDim.new(0, 4)
+            rounding.Parent = frame
+        end
+    end
+end
+local function refreshESP()
+    for _, player in ipairs(Players:GetPlayers()) do applyESPPlayer(player) end
+end
+local function bindESPPlayer(player)
+    if player == LocalPlayer then return end
+    player.CharacterAdded:Connect(function() task.wait(0.5); applyESPPlayer(player) end)
+    if player.Character then applyESPPlayer(player) end
+end
+for _, player in ipairs(Players:GetPlayers()) do bindESPPlayer(player) end
+Players.PlayerAdded:Connect(bindESPPlayer)
 
 local function setTarget(player)
     if not validTarget(player) then player = nil end
@@ -1023,11 +1091,15 @@ presetNames = function()
     local names = {"default"}
     if type(listfiles) == "function" then
         ensurePresetFolder()
-        local ok, files = pcall(listfiles, PRESET_FOLDER)
-        if ok and typeof(files) == "table" then
-            for _, file in ipairs(files) do
-                local name = tostring(file):match("([^/\\]+)%.preset$")
-                if name and not table.find(names, name) then names[#names + 1] = name end
+        local folders = {PRESET_FOLDER, "Ixry Shizuka\presets", "Ixry Shizuka"}
+        for _, folder in ipairs(folders) do
+            local ok, files = pcall(listfiles, folder)
+            if ok and typeof(files) == "table" then
+                for _, file in ipairs(files) do
+                    local normalized = tostring(file):gsub("\\", "/")
+                    local name = normalized:match("([^/]+)%.preset$")
+                    if name and not table.find(names, name) then names[#names + 1] = name end
+                end
             end
         end
     end
@@ -1043,6 +1115,10 @@ local knifeSection = tab:AddSection("Knife Silent Aim", "")
 knifeSection:AddToggle("Knife Silent Aim", function(value) config.knifeEnabled = value == true; if config.knifeEnabled then installHook() end end)
 knifeSection:AddToggle("Knife Wall Check", function(value) config.knifeWallCheck = value == true end)
 knifeSection:AddToggle("Prioritize Sheriff", function(value) config.knifePrioritizeSheriff = value == true end)
+
+local visualSection = tab:AddSection("Visuals", "Player ESP")
+visualSection:AddToggle("Outline ESP", function(value) config.espOutline = value == true; refreshESP() end)
+visualSection:AddToggle("Box ESP", function(value) config.espBox = value == true; refreshESP() end)
 
 local shootSection = tab:AddSection("Shoot Murderer", "Mobile shoot button")
 shootSection:AddToggle("Show Shoot Murderer Button", setShootButtonVisible)
@@ -1061,6 +1137,11 @@ else
 end
 revert:AddButton("Save Preset", savePreset)
 revert:AddButton("Load Preset", loadPreset)
+revert:AddButton("Refresh Presets", function()
+    local names = presetNames()
+    if presetDropdown and presetDropdown.Refresh then presetDropdown:Refresh(names, table.find(names, presetName) and presetName or names[1]) end
+    notify("Presets found: " .. tostring(#names - 1), 3)
+end)
 local function addTrackedToggle(key, label, callback)
     revertToggleStates[key] = false
     local toggle = revert:AddToggle(label, function(value)
