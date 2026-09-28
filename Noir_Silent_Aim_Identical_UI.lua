@@ -1,6 +1,9 @@
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 local guiParent = CoreGui
@@ -97,15 +100,39 @@ for i=1,2 do cols[i]=New("Frame",{Parent=content,Position=UDim2.new((i-1)*.5,(i-
 local configContent=content:Clone(); configContent.Name="ConfigContent"; configContent.Parent=win; configContent.Visible=false; configContent:ClearAllChildren()
 local configCols={}
 for i=1,2 do configCols[i]=New("Frame",{Parent=configContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=configCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
+sidebar.Visible=false
+header.Position=UDim2.fromOffset(0,0); header.Size=UDim2.new(1,0,0,105)
+content.Position=UDim2.fromOffset(24,112); content.Size=UDim2.new(1,-48,1,-210); content.Visible=false
+configContent.Position=content.Position; configContent.Size=content.Size
+local visualContent=content:Clone(); visualContent.Name="VisualContent"; visualContent.Parent=win; visualContent.Visible=false; visualContent:ClearAllChildren()
+local visualCols={}
+for i=1,2 do visualCols[i]=New("Frame",{Parent=visualContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=visualCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
+local dashboard=New("Frame",{Parent=win,Position=content.Position,Size=content.Size,BackgroundTransparency=1})
+local profile=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,22),Size=UDim2.fromOffset(500,180),BackgroundColor3=C.panel,BackgroundTransparency=.08}); corner(profile,22); stroke(profile,C.border,.15)
+local avatar=New("ImageLabel",{Parent=profile,Position=UDim2.fromOffset(24,28),Size=UDim2.fromOffset(118,118),BackgroundColor3=C.surface}); corner(avatar,28); stroke(avatar,C.accent,.05)
+task.spawn(function() local ok,img=pcall(function() return Players:GetUserThumbnailAsync(LocalPlayer.UserId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size180x180) end); if ok then avatar.Image=img end end)
+text(profile,LocalPlayer.DisplayName,25,UDim2.fromOffset(166,38)); text(profile,"@"..LocalPlayer.Name,16,UDim2.fromOffset(167,78),true); text(profile,"Noir Client • Connected",15,UDim2.fromOffset(167,112))
+local fpsCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(545,22),Size=UDim2.fromOffset(310,180),BackgroundColor3=C.panel,BackgroundTransparency=.08}); corner(fpsCard,22); stroke(fpsCard,C.border,.15)
+text(fpsCard,"FPS",16,UDim2.fromOffset(24,25),true); local fpsText=text(fpsCard,"60",46,UDim2.fromOffset(24,62)); fpsText.TextColor3=Color3.fromRGB(80,235,125)
+local pingCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(880,22),Size=UDim2.new(1,-900,0,180),BackgroundColor3=C.panel,BackgroundTransparency=.08}); corner(pingCard,22); stroke(pingCard,C.border,.15)
+text(pingCard,"NETWORK LATENCY",16,UDim2.fromOffset(24,25),true); local pingText=text(pingCard,"-- ms",38,UDim2.fromOffset(24,66)); pingText.TextColor3=C.accent2
+local infoCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,225),Size=UDim2.new(1,-40,1,-245),BackgroundColor3=C.panel,BackgroundTransparency=.16}); corner(infoCard,24); stroke(infoCard,C.border,.18)
+text(infoCard,"NOIR SILENT AIM",28,UDim2.fromOffset(28,26)); text(infoCard,"Gun prediction • Knife prediction • Player and object ESP • Preset profiles",16,UDim2.fromOffset(29,68),true)
+local frameCounter,lastFps=0,os.clock(); RunService.RenderStepped:Connect(function() frameCounter+=1; local now=os.clock(); if now-lastFps>=1 then fpsText.Text=tostring(math.floor(frameCounter/(now-lastFps)+.5)); frameCounter=0; lastFps=now; local ok,v=pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end); pingText.Text=ok and (tostring(math.floor(v+.5)).." ms") or "-- ms" end end)
+local bottom=New("Frame",{Parent=win,AnchorPoint=Vector2.new(.5,1),Position=UDim2.new(.5,0,1,-18),Size=UDim2.fromOffset(650,70),BackgroundColor3=C.panel,BackgroundTransparency=.04}); corner(bottom,22); stroke(bottom,C.border,.1)
+local navButtons={}
+local navDefs={{"home","⌂  Home"},{"aim","⊙  Aim + Configs"},{"visual","◉  Visuals"}}
+for i,d in ipairs(navDefs) do local b=New("TextButton",{Parent=bottom,Position=UDim2.fromOffset(12+(i-1)*209,10),Size=UDim2.fromOffset(202,50),BackgroundColor3=C.surface,Text=d[2],TextColor3=C.dim,TextSize=16,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(b,15); navButtons[d[1]]=b end
+search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
 local activePage="home"
 local function selectPage(page)
- activePage=page; content.Visible=page=="home"; configContent.Visible=page=="config"
- home.BackgroundColor3=page=="home" and Color3.fromRGB(49,31,92) or C.panel; home.TextColor3=page=="home" and C.text or C.dim
- configsNav.BackgroundColor3=page=="config" and Color3.fromRGB(49,31,92) or C.panel; configsNav.TextColor3=page=="config" and C.text or C.dim
+ activePage=page; dashboard.Visible=page=="home"; content.Visible=page=="aim"; visualContent.Visible=page=="visual"; configContent.Visible=false
+ for name,b in pairs(navButtons) do b.BackgroundColor3=name==page and Color3.fromRGB(58,35,110) or C.surface; b.TextColor3=name==page and C.text or C.dim end
 end
-home.MouseButton1Click:Connect(function() selectPage("home") end)
-configsNav.MouseButton1Click:Connect(function() selectPage("config") end)
+for name,b in pairs(navButtons) do b.MouseButton1Click:Connect(function() selectPage(name) end) end
+selectPage("home")
 local sectionCount=0
+local visualSectionCount=0
 local configSectionCount=0
 local sectionPanels={}
 local controls={}
@@ -115,24 +142,21 @@ local function refreshCanvas()
   content.CanvasSize=UDim2.fromOffset(0,h)
   local ch=math.max(configCols[1].AbsoluteSize.Y,configCols[2].AbsoluteSize.Y)+80
   configContent.CanvasSize=UDim2.fromOffset(0,ch)
+  local vh=math.max(visualCols[1].AbsoluteSize.Y,visualCols[2].AbsoluteSize.Y)+80
+  visualContent.CanvasSize=UDim2.fromOffset(0,vh)
  end)
 end
 search:GetPropertyChangedSignal("Text"):Connect(function()
  local q=string.lower(search.Text or "")
- local homeMatches, configMatches=0,0
+ local counts={aim=0,visual=0}
  for _,entry in ipairs(sectionPanels) do
   local hay=entry.name
-  for _,d in ipairs(entry.panel:GetDescendants()) do
-   if d:IsA("TextLabel") or d:IsA("TextButton") then hay=hay.." "..string.lower(d.Text or "") end
-  end
+  for _,d in ipairs(entry.panel:GetDescendants()) do if d:IsA("TextLabel") or d:IsA("TextButton") then hay=hay.." "..string.lower(d.Text or "") end end
   local match=q=="" or string.find(hay,q,1,true)~=nil
   entry.panel.Visible=match
-  if match then if entry.page=="config" then configMatches+=1 else homeMatches+=1 end end
+  if match then counts[entry.page]=(counts[entry.page] or 0)+1 end
  end
- if q~="" then
-  if activePage=="home" and homeMatches==0 and configMatches>0 then selectPage("config")
-  elseif activePage=="config" and configMatches==0 and homeMatches>0 then selectPage("home") end
- end
+ if q~="" and activePage~="home" and (counts[activePage] or 0)==0 then for _,page in ipairs({"aim","visual"}) do if counts[page]>0 then selectPage(page) break end end end
  refreshCanvas()
 end)
 local host={}
@@ -143,10 +167,13 @@ function host.CreateTab()
  local tab={}
  function tab:AddSection(name,description)
   local isConfig=name=="NOIR CONFIG"
+  local isVisual=name=="Visuals" or name=="Object ESP"
   local col
-  if isConfig then configSectionCount+=1; col=configCols[(configSectionCount-1)%2+1] else sectionCount+=1; col=cols[(sectionCount-1)%2+1] end
-  local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.12}); corner(panel,20); stroke(panel,C.border,.2)
-  table.insert(sectionPanels,{panel=panel,page=isConfig and "config" or "home",name=string.lower(name.." "..(description or ""))})
+  local page="aim"
+  if isVisual then visualSectionCount+=1; col=visualCols[(visualSectionCount-1)%2+1]; page="visual"
+  else sectionCount+=1; col=cols[(sectionCount-1)%2+1] end
+  local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.12,ClipsDescendants=true}); corner(panel,22); stroke(panel,C.border,.2)
+  table.insert(sectionPanels,{panel=panel,page=page,name=string.lower(name.." "..(description or ""))})
   local bar=New("Frame",{Parent=panel,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(4,42),BackgroundColor3=C.accent}); corner(bar,4)
   text(panel,name,19,UDim2.fromOffset(24,14)); if description and description~="" then text(panel,description,12,UDim2.fromOffset(24,42),true) end
   local holder=New("Frame",{Parent=panel,Position=UDim2.fromOffset(20,description~="" and 72 or 55),Size=UDim2.new(1,-40,0,0),AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1})
@@ -227,7 +254,19 @@ local config = {
     knifeWallCheck = false,
     knifePrioritizeSheriff = true,
     espOutline = false,
+    espOutlineMurderer = false,
+    espOutlineSheriff = false,
     espBox = false,
+    espBoxMurderer = false,
+    espBoxSheriff = false,
+    outlineDroppedGun = false,
+    outlineTraps = false,
+    outlineThrowingKnives = false,
+    outlineCoins = false,
+    boxDroppedGun = false,
+    boxTraps = false,
+    boxThrowingKnives = false,
+    boxCoins = false,
     prioritizePing = true,
     predictJump = false,
     predictLag = true,
@@ -252,7 +291,7 @@ local shootButton
 local shootGui
 local shootBusy = false
 local presetName = "default"
-local PRESET_FOLDER = "Ixry Shizuka/presets"
+local PRESET_FOLDER = "NOIR.CONFIG"
 local revertControls = {}
 local revertToggleStates = {}
 local syncRevertControls
@@ -288,22 +327,33 @@ local function clearESPCharacter(character)
         if item.Name == ESP_BOX_NAME then item:Destroy() end
     end
 end
+local function espPlayerRole(player)
+    local character = player and player.Character
+    local backpack = player and player:FindFirstChildOfClass("Backpack")
+    if (character and character:FindFirstChild("Knife")) or (backpack and backpack:FindFirstChild("Knife")) then return "murderer" end
+    if (character and character:FindFirstChild("Gun")) or (backpack and backpack:FindFirstChild("Gun")) then return "sheriff" end
+    return "innocent"
+end
+
 local function applyESPPlayer(player)
     if player == LocalPlayer then return end
     local character = player.Character
     if not character then return end
     clearESPCharacter(character)
-    if config.espOutline then
+    local role = espPlayerRole(player)
+    local outlineWanted = config.espOutline or (config.espOutlineMurderer and role == "murderer") or (config.espOutlineSheriff and role == "sheriff")
+    local boxWanted = config.espBox or (config.espBoxMurderer and role == "murderer") or (config.espBoxSheriff and role == "sheriff")
+    if outlineWanted then
         local highlight = Instance.new("Highlight")
         highlight.Name = ESP_OUTLINE_NAME
         highlight.Adornee = character
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.FillTransparency = 1
         highlight.OutlineTransparency = 0
-        highlight.OutlineColor = Color3.fromRGB(145, 85, 255)
+        highlight.OutlineColor = role == "murderer" and Color3.fromRGB(255,70,80) or role == "sheriff" and Color3.fromRGB(70,170,255) or Color3.fromRGB(145,85,255)
         highlight.Parent = character
     end
-    if config.espBox then
+    if boxWanted then
         local root = character:FindFirstChild("HumanoidRootPart")
         if root then
             local box = Instance.new("BillboardGui")
@@ -319,7 +369,7 @@ local function applyESPPlayer(player)
             frame.Size = UDim2.fromScale(1, 1)
             frame.Parent = box
             local line = Instance.new("UIStroke")
-            line.Color = Color3.fromRGB(90, 220, 255)
+            line.Color = role == "murderer" and Color3.fromRGB(255,70,80) or role == "sheriff" and Color3.fromRGB(70,170,255) or Color3.fromRGB(90,220,255)
             line.Thickness = 1.5
             line.Transparency = 0
             line.Parent = frame
@@ -339,6 +389,39 @@ local function bindESPPlayer(player)
 end
 for _, player in ipairs(Players:GetPlayers()) do bindESPPlayer(player) end
 Players.PlayerAdded:Connect(bindESPPlayer)
+
+local function objectKind(instance)
+    local name = string.lower(instance.Name)
+    if string.find(name, "coin", 1, true) then return "coin" end
+    if string.find(name, "trap", 1, true) then return "trap" end
+    if name == "gun" or string.find(name, "droppedgun", 1, true) then return "gun" end
+    if string.find(name, "knife", 1, true) and (string.find(name, "throw", 1, true) or not instance:FindFirstAncestorOfClass("Tool")) then return "knife" end
+end
+local function objectPart(instance)
+    if instance:IsA("BasePart") then return instance end
+    if instance:IsA("Model") then return instance.PrimaryPart or instance:FindFirstChildWhichIsA("BasePart", true) end
+end
+local function objectEnabled(kind, box)
+    if box then return kind=="coin" and config.boxCoins or kind=="trap" and config.boxTraps or kind=="gun" and config.boxDroppedGun or kind=="knife" and config.boxThrowingKnives end
+    return kind=="coin" and config.outlineCoins or kind=="trap" and config.outlineTraps or kind=="gun" and config.outlineDroppedGun or kind=="knife" and config.outlineThrowingKnives
+end
+local function refreshObjectESP()
+    for _, instance in ipairs(Workspace:GetDescendants()) do
+        if instance.Name == "NoirObjectOutline" or instance.Name == "NoirObjectBox" then instance:Destroy() end
+    end
+    for _, instance in ipairs(Workspace:GetDescendants()) do
+        local kind = objectKind(instance)
+        local part = kind and objectPart(instance)
+        if part and not Players:GetPlayerFromCharacter(instance:FindFirstAncestorOfClass("Model")) then
+            if objectEnabled(kind, false) then
+                local h=Instance.new("Highlight"); h.Name="NoirObjectOutline"; h.Adornee=instance; h.FillTransparency=1; h.OutlineTransparency=0; h.OutlineColor=kind=="gun" and Color3.fromRGB(70,170,255) or kind=="coin" and Color3.fromRGB(255,220,50) or Color3.fromRGB(100,255,150); h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop; h.Parent=instance
+            end
+            if objectEnabled(kind, true) then
+                local box=Instance.new("SelectionBox"); box.Name="NoirObjectBox"; box.Adornee=part; box.SurfaceTransparency=1; box.LineThickness=.04; box.Color3=kind=="gun" and Color3.fromRGB(70,170,255) or kind=="coin" and Color3.fromRGB(255,220,50) or Color3.fromRGB(100,255,150); box.Parent=part
+            end
+        end
+    end
+end
 
 local function setTarget(player)
     if not validTarget(player) then player = nil end
@@ -1006,7 +1089,10 @@ end
 
 local function ensurePresetFolder()
     if type(makefolder) ~= "function" then return end
-    pcall(makefolder, "Ixry Shizuka")
+    if type(isfolder) == "function" then
+        local ok, exists = pcall(isfolder, PRESET_FOLDER)
+        if ok and exists then return end
+    end
     pcall(makefolder, PRESET_FOLDER)
 end
 
@@ -1091,7 +1177,7 @@ presetNames = function()
     local names = {"default"}
     if type(listfiles) == "function" then
         ensurePresetFolder()
-        local folders = {PRESET_FOLDER, "Ixry Shizuka\presets", "Ixry Shizuka"}
+        local folders = {PRESET_FOLDER}
         for _, folder in ipairs(folders) do
             local ok, files = pcall(listfiles, folder)
             if ok and typeof(files) == "table" then
@@ -1116,9 +1202,28 @@ knifeSection:AddToggle("Knife Silent Aim", function(value) config.knifeEnabled =
 knifeSection:AddToggle("Knife Wall Check", function(value) config.knifeWallCheck = value == true end)
 knifeSection:AddToggle("Prioritize Sheriff", function(value) config.knifePrioritizeSheriff = value == true end)
 
-local visualSection = tab:AddSection("Visuals", "Player ESP")
-visualSection:AddToggle("Outline ESP", function(value) config.espOutline = value == true; refreshESP() end)
-visualSection:AddToggle("Box ESP", function(value) config.espBox = value == true; refreshESP() end)
+local visualSection = tab:AddSection("Visuals", "Outline and Box ESP")
+visualSection:AddLabel("OUTLINE • BY PLAYER")
+visualSection:AddToggle("Outline Everyone", function(value) config.espOutline = value == true; refreshESP() end)
+visualSection:AddToggle("Outline Murderer Only", function(value) config.espOutlineMurderer = value == true; refreshESP() end)
+visualSection:AddToggle("Outline Sheriff / Hero Only", function(value) config.espOutlineSheriff = value == true; refreshESP() end)
+visualSection:AddLabel("ESP BOX • BY PLAYER")
+visualSection:AddToggle("ESP Box Everyone", function(value) config.espBox = value == true; refreshESP() end)
+visualSection:AddToggle("ESP Box Murderer Only", function(value) config.espBoxMurderer = value == true; refreshESP() end)
+visualSection:AddToggle("ESP Box Sheriff / Hero Only", function(value) config.espBoxSheriff = value == true; refreshESP() end)
+
+
+local objectVisuals = tab:AddSection("Object ESP", "Dropped items and map objects")
+objectVisuals:AddLabel("OUTLINE • BY OBJECT")
+objectVisuals:AddToggle("Outline Dropped Gun", function(v) config.outlineDroppedGun=v==true; refreshObjectESP() end)
+objectVisuals:AddToggle("Outline Traps", function(v) config.outlineTraps=v==true; refreshObjectESP() end)
+objectVisuals:AddToggle("Outline Throwing Knives", function(v) config.outlineThrowingKnives=v==true; refreshObjectESP() end)
+objectVisuals:AddToggle("Outline Coins", function(v) config.outlineCoins=v==true; refreshObjectESP() end)
+objectVisuals:AddLabel("ESP BOX • BY OBJECT")
+objectVisuals:AddToggle("ESP Box Dropped Gun", function(v) config.boxDroppedGun=v==true; refreshObjectESP() end)
+objectVisuals:AddToggle("ESP Box Traps", function(v) config.boxTraps=v==true; refreshObjectESP() end)
+objectVisuals:AddToggle("ESP Box Throwing Knives", function(v) config.boxThrowingKnives=v==true; refreshObjectESP() end)
+objectVisuals:AddToggle("ESP Box Coins", function(v) config.boxCoins=v==true; refreshObjectESP() end)
 
 local shootSection = tab:AddSection("Shoot Murderer", "Mobile shoot button")
 shootSection:AddToggle("Show Shoot Murderer Button", setShootButtonVisible)
