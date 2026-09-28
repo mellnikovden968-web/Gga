@@ -317,6 +317,7 @@ local function validTarget(player)
     return player ~= LocalPlayer and character ~= nil and humanoid ~= nil and humanoid.Health > 0
 end
 
+local roleCache = {}
 local ESP_OUTLINE_NAME = "NoirESPOutline"
 local ESP_BOX_NAME = "NoirESPBox"
 local function clearESPCharacter(character)
@@ -324,16 +325,25 @@ local function clearESPCharacter(character)
     local outline = character:FindFirstChild(ESP_OUTLINE_NAME)
     if outline then outline:Destroy() end
     for _, item in ipairs(character:GetDescendants()) do
-        if item.Name == ESP_BOX_NAME then item:Destroy() end
+        if item.Name == ESP_BOX_NAME or item.Name == "NoirESPRole" then item:Destroy() end
     end
 end
 local function espPlayerRole(player)
+    local cached = player and roleCache[player.UserId]
+    if cached == "murderer" or cached == "sheriff" or cached == "hero" or cached == "innocent" then return cached end
     local character = player and player.Character
     local backpack = player and player:FindFirstChildOfClass("Backpack")
     if (character and character:FindFirstChild("Knife")) or (backpack and backpack:FindFirstChild("Knife")) then return "murderer" end
     if (character and character:FindFirstChild("Gun")) or (backpack and backpack:FindFirstChild("Gun")) then return "sheriff" end
     return "innocent"
 end
+local function roleColor(role)
+    if role == "murderer" then return Color3.fromRGB(255, 55, 65) end
+    if role == "sheriff" then return Color3.fromRGB(55, 145, 255) end
+    if role == "hero" then return Color3.fromRGB(255, 220, 45) end
+    return Color3.fromRGB(65, 235, 105)
+end
+
 
 local function applyESPPlayer(player)
     if player == LocalPlayer then return end
@@ -350,7 +360,7 @@ local function applyESPPlayer(player)
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.FillTransparency = 1
         highlight.OutlineTransparency = 0
-        highlight.OutlineColor = role == "murderer" and Color3.fromRGB(255,70,80) or role == "sheriff" and Color3.fromRGB(70,170,255) or Color3.fromRGB(145,85,255)
+        highlight.OutlineColor = roleColor(role)
         highlight.Parent = character
     end
     if boxWanted then
@@ -369,7 +379,7 @@ local function applyESPPlayer(player)
             frame.Size = UDim2.fromScale(1, 1)
             frame.Parent = box
             local line = Instance.new("UIStroke")
-            line.Color = role == "murderer" and Color3.fromRGB(255,70,80) or role == "sheriff" and Color3.fromRGB(70,170,255) or Color3.fromRGB(90,220,255)
+            line.Color = roleColor(role)
             line.Thickness = 1.5
             line.Transparency = 0
             line.Parent = frame
@@ -445,15 +455,22 @@ end
 
 local function consumeData(data)
     if typeof(data) ~= "table" then return false end
+    local foundMurderer
+    local rolesChanged = false
     for _, player in ipairs(Players:GetPlayers()) do
         local info = data[player.Name] or data[tostring(player.UserId)]
         local role = typeof(info) == "table" and (info.Role or info.role or info.CurrentRole) or info
-        if role == "Murderer" then
-            setTarget(player)
-            return true
-        end
+        local normalized = string.lower(tostring(role or "innocent"))
+        local resolved
+        if normalized == "murderer" then resolved = "murderer"; foundMurderer = player
+        elseif normalized == "sheriff" then resolved = "sheriff"
+        elseif normalized == "hero" then resolved = "hero"
+        else resolved = "innocent" end
+        if roleCache[player.UserId] ~= resolved then rolesChanged = true; roleCache[player.UserId] = resolved end
     end
-    return false
+    if foundMurderer then setTarget(foundMurderer) end
+    if rolesChanged then refreshESP() end
+    return foundMurderer ~= nil
 end
 
 local function getPlayerDataRemote()
@@ -1063,7 +1080,19 @@ if gameplay then
 end
 
 Players.PlayerRemoving:Connect(function(player)
+    roleCache[player.UserId] = nil
     if player == murderer then murderer = nil end
+end)
+
+task.spawn(function()
+    while running do
+        local remote = getPlayerDataRemote()
+        if remote then
+            local ok, data = pcall(function() return remote:InvokeServer() end)
+            if ok and typeof(data) == "table" then consumeData(data) end
+        end
+        task.wait(1)
+    end
 end)
 
 task.spawn(function()
@@ -1204,13 +1233,13 @@ knifeSection:AddToggle("Prioritize Sheriff", function(value) config.knifePriorit
 
 local visualSection = tab:AddSection("Visuals", "Outline and Box ESP")
 visualSection:AddLabel("OUTLINE • BY PLAYER")
-visualSection:AddToggle("Outline Everyone", function(value) config.espOutline = value == true; refreshESP() end)
-visualSection:AddToggle("Outline Murderer Only", function(value) config.espOutlineMurderer = value == true; refreshESP() end)
-visualSection:AddToggle("Outline Sheriff / Hero Only", function(value) config.espOutlineSheriff = value == true; refreshESP() end)
+visualSection:AddToggle("Outline Everyone", function(value) config.espOutline = value == true; task.spawn(refreshTarget); refreshESP() end)
+visualSection:AddToggle("Outline Murderer Only", function(value) config.espOutlineMurderer = value == true; task.spawn(refreshTarget); refreshESP() end)
+visualSection:AddToggle("Outline Sheriff / Hero Only", function(value) config.espOutlineSheriff = value == true; task.spawn(refreshTarget); refreshESP() end)
 visualSection:AddLabel("ESP BOX • BY PLAYER")
-visualSection:AddToggle("ESP Box Everyone", function(value) config.espBox = value == true; refreshESP() end)
-visualSection:AddToggle("ESP Box Murderer Only", function(value) config.espBoxMurderer = value == true; refreshESP() end)
-visualSection:AddToggle("ESP Box Sheriff / Hero Only", function(value) config.espBoxSheriff = value == true; refreshESP() end)
+visualSection:AddToggle("ESP Box Everyone", function(value) config.espBox = value == true; task.spawn(refreshTarget); refreshESP() end)
+visualSection:AddToggle("ESP Box Murderer Only", function(value) config.espBoxMurderer = value == true; task.spawn(refreshTarget); refreshESP() end)
+visualSection:AddToggle("ESP Box Sheriff / Hero Only", function(value) config.espBoxSheriff = value == true; task.spawn(refreshTarget); refreshESP() end)
 
 
 local objectVisuals = tab:AddSection("Object ESP", "Dropped items and map objects")
