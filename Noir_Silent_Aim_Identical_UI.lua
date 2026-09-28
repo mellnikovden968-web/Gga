@@ -10,12 +10,12 @@ local guiParent = CoreGui
 if type(gethui) == "function" then local ok,v=pcall(gethui); if ok and typeof(v)=="Instance" then guiParent=v end end
 pcall(function() local old=guiParent:FindFirstChild("NoirSilentAimUI"); if old then old:Destroy() end end)
 
-local C={base=Color3.fromRGB(8,8,15), surface=Color3.fromRGB(14,14,25), panel=Color3.fromRGB(20,20,34), border=Color3.fromRGB(66,52,110), accent=Color3.fromRGB(120,70,255), accent2=Color3.fromRGB(70,220,220), text=Color3.fromRGB(245,242,255), dim=Color3.fromRGB(157,153,180), off=Color3.fromRGB(38,38,55)}
+local C={base=Color3.fromRGB(5,5,6), surface=Color3.fromRGB(18,18,20), panel=Color3.fromRGB(28,28,31), border=Color3.fromRGB(145,145,152), accent=Color3.fromRGB(232,232,236), accent2=Color3.fromRGB(190,190,196), text=Color3.fromRGB(248,248,250), dim=Color3.fromRGB(168,168,174), off=Color3.fromRGB(48,48,53)}
 local function New(class,props)
  local x=Instance.new(class); for k,v in pairs(props or {}) do if k~="Parent" then x[k]=v end end; x.Parent=props and props.Parent; return x
 end
 local function corner(x,r) New("UICorner",{CornerRadius=UDim.new(0,r or 12),Parent=x}) end
-local function stroke(x,col,tr) New("UIStroke",{Color=col or C.border,Transparency=tr or .35,Thickness=1,Parent=x}) end
+local function stroke(x,col,tr) return New("UIStroke",{Color=col or C.border,Transparency=tr or .35,Thickness=1,Parent=x}) end
 local function text(parent,value,size,pos,dim)
  return New("TextLabel",{Parent=parent,BackgroundTransparency=1,Text=value,TextColor3=dim and C.dim or C.text,TextSize=size,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,Position=pos or UDim2.new(),Size=UDim2.new(1,0,0,size+8)})
 end
@@ -26,15 +26,16 @@ local function rescale()
  scale.Scale=math.min(v.X/1360,v.Y/760,0.80)
 end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
-local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.04,ClipsDescendants=true})
-corner(win,30); stroke(win,C.border,.08)
-New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(17,13,35)),ColorSequenceKeypoint.new(.55,C.base),ColorSequenceKeypoint.new(1,Color3.fromRGB(8,26,30))}),Rotation=18})
+local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.16,ClipsDescendants=true})
+corner(win,30); local winStroke=stroke(win,C.border,.08); winStroke.Thickness=2
+New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(25,25,28)),ColorSequenceKeypoint.new(.52,Color3.fromRGB(5,5,6)),ColorSequenceKeypoint.new(1,Color3.fromRGB(34,34,37))}),Rotation=18})
+task.spawn(function() while winStroke.Parent do TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(255,255,255),Transparency=.02}):Play(); task.wait(1.4); TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(75,75,82),Transparency=.4}):Play(); task.wait(1.4) end end)
 local sidebar=New("Frame",{Parent=win,Size=UDim2.fromOffset(250,690),BackgroundColor3=Color3.fromRGB(10,10,20),BackgroundTransparency=.13}); stroke(sidebar,C.border,.55)
-local logo=New("TextLabel",{Parent=sidebar,Position=UDim2.fromOffset(35,30),Size=UDim2.fromOffset(92,92),BackgroundColor3=Color3.fromRGB(16,12,34),Text="V",TextColor3=C.text,TextSize=62,Font=Enum.Font.GothamBold}); corner(logo,22); stroke(logo,C.accent,.05)
+local logo=New("TextLabel",{Parent=sidebar,Position=UDim2.fromOffset(35,30),Size=UDim2.fromOffset(92,92),BackgroundColor3=Color3.fromRGB(18,18,20),Text="V",TextColor3=C.text,TextSize=62,Font=Enum.Font.GothamBold}); corner(logo,22); stroke(logo,C.accent,.05)
 New("UIGradient",{Parent=logo,Color=ColorSequence.new(C.text,C.accent),Rotation=90})
 text(sidebar,"V E L V E T",20,UDim2.fromOffset(35,132)); text(sidebar,"U I  L I B R A R Y",10,UDim2.fromOffset(38,162),true)
 local search=New("TextBox",{Parent=sidebar,Position=UDim2.fromOffset(20,205),Size=UDim2.fromOffset(210,48),BackgroundColor3=C.panel,PlaceholderText="  Search features...",Text="",TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.Gotham,ClearTextOnFocus=false}); corner(search,12); stroke(search)
-local home=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,278),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(49,31,92),Text="⌂    Home                         5",TextColor3=C.text,TextSize=17,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(home,12); stroke(home,C.accent,.05)
+local home=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,278),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(72,72,78),Text="⌂    Home                         5",TextColor3=C.text,TextSize=17,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(home,12); stroke(home,C.accent,.05)
 local configsNav=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,346),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(20,20,34),Text="▣    Configs",TextColor3=C.dim,TextSize=17,Font=Enum.Font.Gotham,AutoButtonColor=false})
 corner(configsNav,12); stroke(configsNav,C.border,.55)
 local status=New("Frame",{Parent=sidebar,Position=UDim2.fromOffset(18,590),Size=UDim2.fromOffset(214,78),BackgroundColor3=C.panel}); corner(status,14); stroke(status)
@@ -45,7 +46,7 @@ text(header,"Noir Silent Aim",30,UDim2.fromOffset(116,23)); text(header,"Murder 
 local function topButton(txt,x,color)
  local b=New("TextButton",{Parent=header,Position=UDim2.new(1,x,0,25),Size=UDim2.fromOffset(43,43),BackgroundColor3=color or C.panel,Text=txt,TextColor3=C.text,TextSize=22,Font=Enum.Font.GothamBold}); corner(b,13); return b
 end
-local mini=topButton("−",-108,Color3.fromRGB(120,82,22)); local close=topButton("×",-58,Color3.fromRGB(125,35,48)); close.MouseButton1Click:Connect(function() gui:Destroy() end)
+local mini=topButton("−",-108,Color3.fromRGB(75,75,80)); local close=topButton("×",-58,Color3.fromRGB(62,62,68)); close.MouseButton1Click:Connect(function() gui:Destroy() end)
 
 local dragging, dragStart, startPos
 header.Active=true
@@ -108,26 +109,26 @@ local visualContent=content:Clone(); visualContent.Name="VisualContent"; visualC
 local visualCols={}
 for i=1,2 do visualCols[i]=New("Frame",{Parent=visualContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=visualCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
 local dashboard=New("Frame",{Parent=win,Position=content.Position,Size=content.Size,BackgroundTransparency=1})
-local profile=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,22),Size=UDim2.fromOffset(500,180),BackgroundColor3=C.panel,BackgroundTransparency=.08}); corner(profile,22); stroke(profile,C.border,.15)
+local profile=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,22),Size=UDim2.fromOffset(500,180),BackgroundColor3=C.panel,BackgroundTransparency=.24}); corner(profile,22); stroke(profile,C.border,.15)
 local avatar=New("ImageLabel",{Parent=profile,Position=UDim2.fromOffset(24,28),Size=UDim2.fromOffset(118,118),BackgroundColor3=C.surface}); corner(avatar,28); stroke(avatar,C.accent,.05)
 task.spawn(function() local ok,img=pcall(function() return Players:GetUserThumbnailAsync(LocalPlayer.UserId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size180x180) end); if ok then avatar.Image=img end end)
 text(profile,LocalPlayer.DisplayName,25,UDim2.fromOffset(166,38)); text(profile,"@"..LocalPlayer.Name,16,UDim2.fromOffset(167,78),true); text(profile,"Noir Client • Connected",15,UDim2.fromOffset(167,112))
-local fpsCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(545,22),Size=UDim2.fromOffset(310,180),BackgroundColor3=C.panel,BackgroundTransparency=.08}); corner(fpsCard,22); stroke(fpsCard,C.border,.15)
-text(fpsCard,"FPS",16,UDim2.fromOffset(24,25),true); local fpsText=text(fpsCard,"60",46,UDim2.fromOffset(24,62)); fpsText.TextColor3=Color3.fromRGB(80,235,125)
-local pingCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(880,22),Size=UDim2.new(1,-900,0,180),BackgroundColor3=C.panel,BackgroundTransparency=.08}); corner(pingCard,22); stroke(pingCard,C.border,.15)
-text(pingCard,"NETWORK LATENCY",16,UDim2.fromOffset(24,25),true); local pingText=text(pingCard,"-- ms",38,UDim2.fromOffset(24,66)); pingText.TextColor3=C.accent2
-local infoCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,225),Size=UDim2.new(1,-40,1,-245),BackgroundColor3=C.panel,BackgroundTransparency=.16}); corner(infoCard,24); stroke(infoCard,C.border,.18)
+local fpsCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(545,22),Size=UDim2.fromOffset(310,180),BackgroundColor3=C.panel,BackgroundTransparency=.24}); corner(fpsCard,22); stroke(fpsCard,C.border,.15)
+text(fpsCard,"FPS",16,UDim2.fromOffset(24,25),true); local fpsText=text(fpsCard,"60",46,UDim2.fromOffset(24,62)); fpsText.TextColor3=C.text
+local pingCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(880,22),Size=UDim2.new(1,-900,0,180),BackgroundColor3=C.panel,BackgroundTransparency=.24}); corner(pingCard,22); stroke(pingCard,C.border,.15)
+text(pingCard,"NETWORK LATENCY",16,UDim2.fromOffset(24,25),true); local pingText=text(pingCard,"-- ms",38,UDim2.fromOffset(24,66)); pingText.TextColor3=C.text
+local infoCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,225),Size=UDim2.new(1,-40,1,-245),BackgroundColor3=C.panel,BackgroundTransparency=.30}); corner(infoCard,24); stroke(infoCard,C.border,.18)
 text(infoCard,"NOIR SILENT AIM",28,UDim2.fromOffset(28,26)); text(infoCard,"Gun prediction • Knife prediction • Player and object ESP • Preset profiles",16,UDim2.fromOffset(29,68),true)
 local frameCounter,lastFps=0,os.clock(); RunService.RenderStepped:Connect(function() frameCounter+=1; local now=os.clock(); if now-lastFps>=1 then fpsText.Text=tostring(math.floor(frameCounter/(now-lastFps)+.5)); frameCounter=0; lastFps=now; local ok,v=pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end); pingText.Text=ok and (tostring(math.floor(v+.5)).." ms") or "-- ms" end end)
-local bottom=New("Frame",{Parent=win,AnchorPoint=Vector2.new(.5,1),Position=UDim2.new(.5,0,1,-18),Size=UDim2.fromOffset(650,70),BackgroundColor3=C.panel,BackgroundTransparency=.04}); corner(bottom,22); stroke(bottom,C.border,.1)
+local bottom=New("Frame",{Parent=win,AnchorPoint=Vector2.new(.5,1),Position=UDim2.new(.5,0,1,-18),Size=UDim2.fromOffset(650,70),BackgroundColor3=C.panel,BackgroundTransparency=.20}); corner(bottom,22); stroke(bottom,C.border,.1)
 local navButtons={}
-local navDefs={{"home","⌂  Home"},{"aim","⊙  Aim + Configs"},{"visual","◉  Visuals"}}
+local navDefs={{"home","⌂  HOME"},{"aim","◎  AIM"},{"visual","◈  VISUALS"}}
 for i,d in ipairs(navDefs) do local b=New("TextButton",{Parent=bottom,Position=UDim2.fromOffset(12+(i-1)*209,10),Size=UDim2.fromOffset(202,50),BackgroundColor3=C.surface,Text=d[2],TextColor3=C.dim,TextSize=16,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(b,15); navButtons[d[1]]=b end
 search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
 local activePage="home"
 local function selectPage(page)
  activePage=page; dashboard.Visible=page=="home"; content.Visible=page=="aim"; visualContent.Visible=page=="visual"; configContent.Visible=false
- for name,b in pairs(navButtons) do b.BackgroundColor3=name==page and Color3.fromRGB(58,35,110) or C.surface; b.TextColor3=name==page and C.text or C.dim end
+ for name,b in pairs(navButtons) do b.BackgroundColor3=name==page and Color3.fromRGB(78,78,84) or C.surface; b.TextColor3=name==page and C.text or C.dim end
 end
 for name,b in pairs(navButtons) do b.MouseButton1Click:Connect(function() selectPage(name) end) end
 selectPage("home")
@@ -172,7 +173,7 @@ function host.CreateTab()
   local page="aim"
   if isVisual then visualSectionCount+=1; col=visualCols[(visualSectionCount-1)%2+1]; page="visual"
   else sectionCount+=1; col=cols[(sectionCount-1)%2+1] end
-  local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.12,ClipsDescendants=true}); corner(panel,22); stroke(panel,C.border,.2)
+  local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.24,ClipsDescendants=true}); corner(panel,22); stroke(panel,C.border,.2)
   table.insert(sectionPanels,{panel=panel,page=page,name=string.lower(name.." "..(description or ""))})
   local bar=New("Frame",{Parent=panel,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(4,42),BackgroundColor3=C.accent}); corner(bar,4)
   text(panel,name,19,UDim2.fromOffset(24,14)); if description and description~="" then text(panel,description,12,UDim2.fromOffset(24,42),true) end
@@ -191,7 +192,7 @@ function host.CreateTab()
    pill.MouseButton1Click:Connect(function() set(not state) end); return function(v) set(v==nil and not state or v) end
   end
   function api:AddButton(label,callback)
-   local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(52,34,98),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
+   local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(68,68,74),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
   end
   function api:AddSlider(label,min,max,default,callback)
    local r=row(label,76); local value=text(r,tostring(default),14,UDim2.new(1,-72,0,10)); value.Size=UDim2.fromOffset(72,22); value.TextXAlignment=Enum.TextXAlignment.Right
