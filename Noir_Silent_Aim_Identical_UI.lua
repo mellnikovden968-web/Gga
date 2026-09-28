@@ -20,11 +20,11 @@ local gui=New("ScreenGui",{Name="NoirSilentAimUI",ResetOnSpawn=false,IgnoreGuiIn
 local scale=New("UIScale",{Parent=gui,Scale=1})
 local function rescale()
  local v=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
- scale.Scale=math.min(v.X/1360,v.Y/760,1)
+ scale.Scale=math.min(v.X/1360,v.Y/760,0.88)
 end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
 local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.04,ClipsDescendants=true})
-corner(win,24); stroke(win,C.border,.08)
+corner(win,30); stroke(win,C.border,.08)
 New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(17,13,35)),ColorSequenceKeypoint.new(.55,C.base),ColorSequenceKeypoint.new(1,Color3.fromRGB(8,26,30))}),Rotation=18})
 local sidebar=New("Frame",{Parent=win,Size=UDim2.fromOffset(250,690),BackgroundColor3=Color3.fromRGB(10,10,20),BackgroundTransparency=.13}); stroke(sidebar,C.border,.55)
 local logo=New("TextLabel",{Parent=sidebar,Position=UDim2.fromOffset(35,30),Size=UDim2.fromOffset(92,92),BackgroundColor3=Color3.fromRGB(16,12,34),Text="V",TextColor3=C.text,TextSize=62,Font=Enum.Font.GothamBold}); corner(logo,22); stroke(logo,C.accent,.05)
@@ -62,9 +62,31 @@ UIS.InputEnded:Connect(function(input)
 end)
 
 local restore=New("TextButton",{Parent=gui,AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,-22,.5,0),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="V",TextColor3=C.text,TextSize=30,Font=Enum.Font.GothamBold,Visible=false,AutoButtonColor=false})
-corner(restore,18); stroke(restore,C.accent,.05)
+corner(restore,20); stroke(restore,C.accent,.05)
+local restoreDragging=false
+local restoreMoved=false
+local restoreStart
+local restorePos
+restore.InputBegan:Connect(function(input)
+ if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then
+  restoreDragging=true; restoreMoved=false; restoreStart=input.Position; restorePos=restore.Position
+ end
+end)
+UIS.InputChanged:Connect(function(input)
+ if restoreDragging and (input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseMovement) then
+  local delta=input.Position-restoreStart
+  if delta.Magnitude>7 then restoreMoved=true end
+  local view=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
+  local x=math.clamp(restorePos.X.Offset*scale.Scale+delta.X,34,view.X-34)
+  local y=math.clamp(restorePos.Y.Scale*view.Y+restorePos.Y.Offset*scale.Scale+delta.Y,34,view.Y-34)
+  restore.Position=UDim2.fromOffset(x/scale.Scale,y/scale.Scale)
+ end
+end)
+UIS.InputEnded:Connect(function(input)
+ if restoreDragging and (input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1) then restoreDragging=false end
+end)
 mini.MouseButton1Click:Connect(function() win.Visible=false; restore.Visible=true end)
-restore.MouseButton1Click:Connect(function() restore.Visible=false; win.Visible=true end)
+restore.MouseButton1Click:Connect(function() if restoreMoved then restoreMoved=false return end; restore.Visible=false; win.Visible=true end)
 local content=New("ScrollingFrame",{Parent=win,Position=UDim2.fromOffset(275,110),Size=UDim2.new(1,-300,1,-130),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=7,ScrollBarImageColor3=C.accent,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollingDirection=Enum.ScrollingDirection.Y,ScrollingEnabled=true,Active=true,ElasticBehavior=Enum.ElasticBehavior.WhenScrollable,VerticalScrollBarInset=Enum.ScrollBarInset.Always})
 local cols={}
 for i=1,2 do cols[i]=New("Frame",{Parent=content,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=cols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
@@ -119,7 +141,7 @@ function host.CreateTab()
   local isConfig=name=="NOIR CONFIG"
   local col
   if isConfig then configSectionCount+=1; col=configCols[(configSectionCount-1)%2+1] else sectionCount+=1; col=cols[(sectionCount-1)%2+1] end
-  local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.12}); corner(panel,16); stroke(panel,C.border,.2)
+  local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.12}); corner(panel,20); stroke(panel,C.border,.2)
   table.insert(sectionPanels,{panel=panel,page=isConfig and "config" or "home",name=string.lower(name.." "..(description or ""))})
   local bar=New("Frame",{Parent=panel,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(4,42),BackgroundColor3=C.accent}); corner(bar,4)
   text(panel,name,19,UDim2.fromOffset(24,14)); if description and description~="" then text(panel,description,12,UDim2.fromOffset(24,42),true) end
@@ -538,10 +560,12 @@ local function knifeTargetPart()
 end
 
 local function knifeRemote(remote, args)
-    if not config.knifeEnabled or args.n < 2 then return false end
+    if not config.knifeEnabled or args.n < 1 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if remote.Name ~= "KnifeThrown" then return false end
-    if typeof(args[1]) ~= "CFrame" or typeof(args[2]) ~= "CFrame" then return false end
+    local oneArgument = typeof(args[1]) == "CFrame" and (args.n == 1 or typeof(args[2]) ~= "CFrame")
+    local twoArguments = typeof(args[1]) == "CFrame" and typeof(args[2]) == "CFrame"
+    if not oneArgument and not twoArguments then return false end
     local character = LocalPlayer.Character
     local knife = character and character:FindFirstChild("Knife")
     return knife ~= nil and remote:IsDescendantOf(knife)
@@ -584,8 +608,8 @@ local function calculateKnifeAim(part, origin)
         velocity.Z * horizontal
     )
     local distance = (part.Position - origin).Magnitude
-    local travelTime = math.clamp(distance / 125, 0, 0.55)
-    local time = math.clamp(leadTime() + travelTime, 0.03, 0.7)
+    local travelTime = math.clamp(distance / 200, 0, 0.4)
+    local time = math.clamp(leadTime() + travelTime, 0.02, 0.5)
     local offset = Vector3.new(
         part.Size.X * config.offsetX / 100,
         part.Size.Y * config.offsetY / 100,
@@ -613,12 +637,23 @@ local function redirect(remote, args)
     if not part then return end
     if useWallCheck and not targetVisible(part) then return end
 
+    local singleKnifeArgument = isKnife and (args.n == 1 or typeof(args[2]) ~= "CFrame")
     local origin = args[1].Position
-    local aim = isKnife and calculateKnifeAim(part, origin) or calculateAim(part)
-    if config.alignDirection and (aim - origin).Magnitude > 0.01 then
-        args[1] = CFrame.lookAt(origin, aim)
+    if singleKnifeArgument then
+        local character = LocalPlayer.Character
+        local knife = character and character:FindFirstChild("Knife")
+        local handle = knife and knife:FindFirstChild("Handle")
+        origin = handle and handle.Position or (Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.Position) or origin
     end
-    args[2] = CFrame.new(aim)
+    local aim = isKnife and calculateKnifeAim(part, origin) or calculateAim(part)
+    if singleKnifeArgument then
+        args[1] = CFrame.new(aim)
+    else
+        if config.alignDirection and (aim - origin).Magnitude > 0.01 then
+            args[1] = CFrame.lookAt(origin, aim)
+        end
+        args[2] = CFrame.new(aim)
+    end
     redirected = redirected + 1
 end
 
@@ -887,6 +922,9 @@ task.spawn(function()
         if config.enabled then
             if not validTarget(murderer) then setTarget(findByKnife()) end
             local part = targetPart()
+            if part then sampleMotion(part) end
+        elseif config.knifeEnabled then
+            local part = knifeTargetPart()
             if part then sampleMotion(part) end
         end
         task.wait(math.clamp(config.predictionIntervalMs / 1000, 0.016, 2))
