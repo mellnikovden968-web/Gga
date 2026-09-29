@@ -324,42 +324,44 @@ function host.CreateTab()
   New("UIPadding",{Parent=holder,PaddingBottom=UDim.new(0,12)})
   holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(refreshCanvas); refreshCanvas()
   local api={}
+  local storagePrefix=name.."::"
   local function row(label,h)
    local r=New("Frame",{Parent=holder,Size=UDim2.new(1,0,0,h or 62),BackgroundTransparency=1}); text(r,label,16,UDim2.fromOffset(0,10)); return r
   end
   function api:AddToggle(label,callback)
-   local state=NoirPersistence.data.toggles[label]==true; local r=row(label,52); local pill=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,8),Size=UDim2.fromOffset(64,34),BackgroundColor3=C.off,Text="",AutoButtonColor=false}); corner(pill,17); stroke(pill,C.border,.55)
+   local state=NoirPersistence.data.toggles[storagePrefix..label]==true; local r=row(label,52); local pill=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,8),Size=UDim2.fromOffset(64,34),BackgroundColor3=C.off,Text="",AutoButtonColor=false}); corner(pill,17); stroke(pill,C.border,.55)
    local dot=New("Frame",{Parent=pill,Position=UDim2.fromOffset(4,4),Size=UDim2.fromOffset(26,26),BackgroundColor3=Color3.fromRGB(145,145,180)}); corner(dot,13)
-   local function set(v)
+   local function set(v,persist)
     state=v==true
     TweenService:Create(pill,TweenInfo.new(.32,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{BackgroundColor3=state and C.accent or C.off}):Play()
     TweenService:Create(dot,TweenInfo.new(.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Position=state and UDim2.fromOffset(34,4) or UDim2.fromOffset(4,4),BackgroundColor3=state and Color3.new(1,1,1) or Color3.fromRGB(145,145,180),Size=UDim2.fromOffset(30,30)}):Play()
     task.delay(.20,function() if dot.Parent then TweenService:Create(dot,TweenInfo.new(.24,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(26,26)}):Play() end end)
-    callback(state); NoirPersistence.data.toggles[label]=state; NoirPersistence.Save()
+    callback(state)
+    if persist~=false then NoirPersistence.data.toggles[storagePrefix..label]=state; NoirPersistence.Save() end
    end
-   pill.MouseButton1Click:Connect(function() set(not state) end); set(state); return function(v) set(v==nil and not state or v) end
+   pill.MouseButton1Click:Connect(function() set(not state,true) end); set(state,false); return function(v) set(v==nil and not state or v,true) end
   end
   function api:AddButton(label,callback)
    local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(68,68,74),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
   end
   function api:AddSlider(label,min,max,default,callback)
-   default=tonumber(NoirPersistence.data.sliders[label]) or default
+   default=tonumber(NoirPersistence.data.sliders[storagePrefix..label]) or default
    local r=row(label,68); local value=New("TextBox",{Parent=r,Position=UDim2.new(1,-72,0,5),Size=UDim2.fromOffset(72,30),BackgroundColor3=C.surface,BackgroundTransparency=.12,Text=tostring(default),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Center,ClearTextOnFocus=false}); corner(value,9); stroke(value,C.border,.4)
    local track=New("Frame",{Parent=r,Position=UDim2.new(0,0,1,-18),Size=UDim2.new(1,0,0,5),BackgroundColor3=C.off}); corner(track,3)
    local fill=New("Frame",{Parent=track,Size=UDim2.fromScale((default-min)/(max-min),1),BackgroundColor3=C.accent}); corner(fill,3)
    local current=default
-   local function set(v) current=math.clamp(math.floor((tonumber(v) or current or default)+.5),min,max); fill.Size=UDim2.fromScale((current-min)/(max-min),1); value.Text=tostring(current); callback(current); NoirPersistence.data.sliders[label]=current; NoirPersistence.Save() end
-   set(default)
+   local function set(v,persist) current=math.clamp(math.floor((tonumber(v) or current or default)+.5),min,max); fill.Size=UDim2.fromScale((current-min)/(max-min),1); value.Text=tostring(current); callback(current); if persist~=false then NoirPersistence.data.sliders[storagePrefix..label]=current; NoirPersistence.Save() end end
+   set(default,false)
    value.FocusLost:Connect(function() set(value.Text) end)
    local drag=false; track.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true; set(min+(max-min)*math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)) end end); UIS.InputChanged:Connect(function(i) if drag and (i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseMovement) then set(min+(max-min)*math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)) end end); UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end end)
    return {SetValue=function(_,v)set(v)end}
   end
   function api:AddDropdown(label,values,callback)
-   local r=row(label,56); local idx=table.find(values,NoirPersistence.data.dropdowns[label]) or 1
+   local r=row(label,56); local idx=table.find(values,NoirPersistence.data.dropdowns[storagePrefix..label]) or 1
    local b=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),Size=UDim2.fromOffset(190,42),BackgroundColor3=C.surface,Text=tostring(values[1] or "None").."  ⌄",TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,ZIndex=5}); corner(b,10); stroke(b)
    local popup
    local function close() if popup then popup:Destroy(); popup=nil end end
-   local function set(v) local found=table.find(values,v); if found then idx=found end; b.Text=tostring(values[idx] or "None").."  ⌄"; if values[idx]~=nil then callback(values[idx]); NoirPersistence.data.dropdowns[label]=values[idx]; NoirPersistence.Save() end end
+   local function set(v) local found=table.find(values,v); if found then idx=found end; b.Text=tostring(values[idx] or "None").."  ⌄"; if values[idx]~=nil then callback(values[idx]); NoirPersistence.data.dropdowns[storagePrefix..label]=values[idx]; NoirPersistence.Save() end end
    local function open()
     close(); popup=New("ScrollingFrame",{Parent=gui,Position=UDim2.fromOffset(b.AbsolutePosition.X/scale.Scale,(b.AbsolutePosition.Y+b.AbsoluteSize.Y+4)/scale.Scale),Size=UDim2.fromOffset(b.AbsoluteSize.X/scale.Scale,math.min(#values*38,190)),CanvasSize=UDim2.fromOffset(0,#values*38),BackgroundColor3=C.surface,BorderSizePixel=0,ScrollBarThickness=4,ZIndex=50}); corner(popup,10); stroke(popup,C.accent,.2)
     local list=New("UIListLayout",{Parent=popup,SortOrder=Enum.SortOrder.LayoutOrder})
@@ -1447,13 +1449,27 @@ local function findDroppedGun()
     end
 end
 local function grabGun()
-    local root,gun=localRoot(),findDroppedGun()
-    if not root or not gun then notify("Dropped gun not found",2) return false end
+    local gun=findDroppedGun()
+    if not gun then notify("Dropped gun not found",2) return false end
     if utility.grabSafety and murderer==LocalPlayer then return false end
-    local old=root.CFrame
-    if type(firetouchinterest)=="function" then pcall(firetouchinterest,root,gun,0); task.wait(); pcall(firetouchinterest,root,gun,1)
-    else root.CFrame=gun.CFrame; task.wait(.18); root.CFrame=old end
-    return true
+    local pickupRemote
+    for _,remote in ipairs(ReplicatedStorage:GetDescendants()) do
+        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+            local n=string.lower(remote.Name)
+            if (string.find(n,"gun",1,true) and (string.find(n,"pickup",1,true) or string.find(n,"grab",1,true) or string.find(n,"get",1,true))) or n=="pickupgun" then
+                pickupRemote=remote; break
+            end
+        end
+    end
+    if not pickupRemote then
+        for _,remote in ipairs(gun.Parent:GetDescendants()) do if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then pickupRemote=remote; break end end
+    end
+    if not pickupRemote then notify("Gun pickup remote not found",3) return false end
+    local ok=pcall(function()
+        if pickupRemote:IsA("RemoteFunction") then pickupRemote:InvokeServer(gun) else pickupRemote:FireServer(gun) end
+    end)
+    if not ok then notify("Gun pickup remote failed",3) end
+    return ok
 end
 local function applyCharacterMods()
     local hum=localHumanoid(); if not hum then return end
