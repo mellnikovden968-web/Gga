@@ -36,6 +36,8 @@ local function rescale()
 end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
 local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.30,ClipsDescendants=true})
+local winScale=New("UIScale",{Parent=win,Scale=.82})
+TweenService:Create(winScale,TweenInfo.new(.48,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Scale=1}):Play()
 corner(win,30); local winStroke=stroke(win,C.border,.08); winStroke.Thickness=2
 New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(25,25,28)),ColorSequenceKeypoint.new(.52,Color3.fromRGB(5,5,6)),ColorSequenceKeypoint.new(1,Color3.fromRGB(34,34,37))}),Rotation=18})
 task.spawn(function() while winStroke.Parent do TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(255,255,255),Transparency=.02}):Play(); task.wait(1.4); TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(75,75,82),Transparency=.4}):Play(); task.wait(1.4) end end)
@@ -78,7 +80,7 @@ text(header,"Noir Hub",30,UDim2.fromOffset(116,23)); text(header,"Noir Creator",
 local function topButton(txt,x,color)
  local b=New("TextButton",{Parent=header,Position=UDim2.new(1,x,0,25),Size=UDim2.fromOffset(43,43),BackgroundColor3=color or C.panel,Text=txt,TextColor3=C.text,TextSize=22,Font=Enum.Font.GothamBold}); corner(b,13); return b
 end
-local mini=topButton("−",-108,Color3.fromRGB(75,75,80)); local close=topButton("×",-58,Color3.fromRGB(62,62,68)); close.MouseButton1Click:Connect(function() gui:Destroy() end)
+local mini=topButton("−",-108,Color3.fromRGB(75,75,80)); local close=topButton("×",-58,Color3.fromRGB(62,62,68)); close.MouseButton1Click:Connect(function() TweenService:Create(winScale,TweenInfo.new(.28,Enum.EasingStyle.Quart,Enum.EasingDirection.In),{Scale=.78}):Play(); TweenService:Create(win,TweenInfo.new(.28),{BackgroundTransparency=1}):Play(); task.delay(.29,function() if gui.Parent then gui:Destroy() end end) end)
 
 local dragging, dragStart, startPos
 header.Active=true
@@ -125,8 +127,8 @@ end)
 UIS.InputEnded:Connect(function(input)
  if restoreDragging and (input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1) then restoreDragging=false end
 end)
-mini.MouseButton1Click:Connect(function() win.Visible=false; restore.Visible=true end)
-restore.MouseButton1Click:Connect(function() if restoreMoved then restoreMoved=false return end; restore.Visible=false; win.Visible=true end)
+mini.MouseButton1Click:Connect(function() TweenService:Create(winScale,TweenInfo.new(.28,Enum.EasingStyle.Quart,Enum.EasingDirection.In),{Scale=.72}):Play(); task.delay(.28,function() if win.Parent then win.Visible=false; restore.Visible=true end end) end)
+restore.MouseButton1Click:Connect(function() if restoreMoved then restoreMoved=false return end; restore.Visible=false; win.Visible=true; winScale.Scale=.72; TweenService:Create(winScale,TweenInfo.new(.46,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Scale=1}):Play() end)
 local content=New("ScrollingFrame",{Parent=win,Position=UDim2.fromOffset(275,110),Size=UDim2.new(1,-300,1,-130),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=7,ScrollBarImageColor3=C.accent,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollingDirection=Enum.ScrollingDirection.Y,ScrollingEnabled=true,Active=true,ElasticBehavior=Enum.ElasticBehavior.WhenScrollable,VerticalScrollBarInset=Enum.ScrollBarInset.Always})
 local cols={}
 for i=1,2 do cols[i]=New("Frame",{Parent=content,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=cols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
@@ -186,8 +188,39 @@ end
 end
 search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
 local activePage="home"
-local function selectPage(page)
- activePage=page; dashboard.Visible=page=="home"; mainContent.Visible=page=="main"; content.Visible=page=="aim"; worldContent.Visible=page=="world"; visualContent.Visible=page=="visual"; configContent.Visible=false
+local selectPage
+do
+local pageObjects={home=dashboard,main=mainContent,aim=content,world=worldContent,visual=visualContent}
+local pageOrder={home=0,main=1,aim=2,world=3,visual=4}
+local pageTransitionId=0
+local function pageScaleFor(object)
+ local scaler=object:FindFirstChild("NoirPageScale")
+ if not scaler then scaler=New("UIScale",{Name="NoirPageScale",Scale=1,Parent=object}) end
+ return scaler
+end
+function selectPage(page)
+ if not pageObjects[page] then page="home" end
+ pageTransitionId+=1
+ local transitionId=pageTransitionId
+ local oldPage=activePage
+ local oldObject=pageObjects[oldPage]
+ local newObject=pageObjects[page]
+ local direction=(pageOrder[page] or 0)>=(pageOrder[oldPage] or 0) and 1 or -1
+ activePage=page
+ if oldObject and oldObject~=newObject and oldObject.Visible then
+  local oldScale=pageScaleFor(oldObject)
+  TweenService:Create(oldObject,TweenInfo.new(.18,Enum.EasingStyle.Quad,Enum.EasingDirection.In),{Position=content.Position+UDim2.fromOffset(-direction*28,0)}):Play()
+  TweenService:Create(oldScale,TweenInfo.new(.18,Enum.EasingStyle.Quad,Enum.EasingDirection.In),{Scale=.96}):Play()
+  task.delay(.18,function() if transitionId==pageTransitionId and oldObject~=pageObjects[activePage] then oldObject.Visible=false; oldObject.Position=content.Position; oldScale.Scale=1 end end)
+ end
+ for _,object in pairs(pageObjects) do if object~=newObject and object~=oldObject then object.Visible=false end end
+ if newObject then
+  local newScale=pageScaleFor(newObject)
+  newObject.Position=content.Position+UDim2.fromOffset(direction*40,0); newScale.Scale=.94; newObject.Visible=true
+  TweenService:Create(newObject,TweenInfo.new(.36,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=content.Position}):Play()
+  TweenService:Create(newScale,TweenInfo.new(.62,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Scale=1}):Play()
+ end
+ configContent.Visible=false
  for name,b in pairs(navButtons) do
   local active=name==page
   TweenService:Create(b,TweenInfo.new(.22,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{BackgroundColor3=active and Color3.fromRGB(72,72,79) or C.surface}):Play()
@@ -198,6 +231,7 @@ local function selectPage(page)
    TweenService:Create(data.ring,TweenInfo.new(.28,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=active and UDim2.fromOffset(46,46) or UDim2.fromOffset(40,40),BackgroundTransparency=active and .06 or .24}):Play()
   end
  end
+end
 end
 for name,b in pairs(navButtons) do b.MouseButton1Click:Connect(function() if activePage==name then selectPage("home") else selectPage(name) end end) end
 selectPage("home")
@@ -265,7 +299,13 @@ function host.CreateTab()
   function api:AddToggle(label,callback)
    local state=false; local r=row(label,52); local pill=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,8),Size=UDim2.fromOffset(64,34),BackgroundColor3=C.off,Text="",AutoButtonColor=false}); corner(pill,17); stroke(pill,C.border,.55)
    local dot=New("Frame",{Parent=pill,Position=UDim2.fromOffset(4,4),Size=UDim2.fromOffset(26,26),BackgroundColor3=Color3.fromRGB(145,145,180)}); corner(dot,13)
-   local function set(v) state=v==true; TweenService:Create(pill,TweenInfo.new(.18),{BackgroundColor3=state and C.accent or C.off}):Play(); TweenService:Create(dot,TweenInfo.new(.18),{Position=state and UDim2.fromOffset(34,4) or UDim2.fromOffset(4,4),BackgroundColor3=state and Color3.new(1,1,1) or Color3.fromRGB(145,145,180)}):Play(); callback(state) end
+   local function set(v)
+    state=v==true
+    TweenService:Create(pill,TweenInfo.new(.32,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{BackgroundColor3=state and C.accent or C.off}):Play()
+    TweenService:Create(dot,TweenInfo.new(.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Position=state and UDim2.fromOffset(34,4) or UDim2.fromOffset(4,4),BackgroundColor3=state and Color3.new(1,1,1) or Color3.fromRGB(145,145,180),Size=UDim2.fromOffset(30,30)}):Play()
+    task.delay(.20,function() if dot.Parent then TweenService:Create(dot,TweenInfo.new(.24,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(26,26)}):Play() end end)
+    callback(state)
+   end
    pill.MouseButton1Click:Connect(function() set(not state) end); return function(v) set(v==nil and not state or v) end
   end
   function api:AddButton(label,callback)
@@ -1089,7 +1129,7 @@ local function createShootButton()
 
     local normalSize = UDim2.new(0, 260, 0, 96)
     local pressedSize = UDim2.new(0, 276, 0, 102)
-    local pressTween = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local pressTween = TweenInfo.new(0.30, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 
     local dragging = false
     local moved = false
@@ -1108,15 +1148,15 @@ local function createShootButton()
             button.Text="T A R G E T   L O C K"
             traceA.Visible=true; traceB.Visible=true
             traceA.Position=UDim2.fromScale(0,.08); traceB.Position=UDim2.fromScale(1,.92)
-            TweenService:Create(traceA,TweenInfo.new(.38,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(1,.08)}):Play()
-            TweenService:Create(traceB,TweenInfo.new(.38,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(0,.92)}):Play()
+            TweenService:Create(traceA,TweenInfo.new(.68,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(1,.08)}):Play()
+            TweenService:Create(traceB,TweenInfo.new(.68,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(0,.92)}):Play()
             sound:Play()
             local absolute = button.AbsolutePosition
             ripple.Position = UDim2.new(0, input.Position.X - absolute.X, 0, input.Position.Y - absolute.Y)
             ripple.Size = UDim2.new(0, 0, 0, 0)
             ripple.BackgroundTransparency = 0.45
             ripple.Visible = true
-            TweenService:Create(ripple, TweenInfo.new(0.45, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+            TweenService:Create(ripple, TweenInfo.new(0.82, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
                 Size = UDim2.new(0, 300, 0, 300),
                 BackgroundTransparency = 1
             }):Play()
@@ -1135,7 +1175,7 @@ local function createShootButton()
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
-            TweenService:Create(button,TweenInfo.new(.42,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=normalSize,TextSize=17,BackgroundColor3=Color3.fromRGB(8,8,10),BackgroundTransparency=.28}):Play()
+            TweenService:Create(button,TweenInfo.new(.62,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=normalSize,TextSize=17,BackgroundColor3=Color3.fromRGB(8,8,10),BackgroundTransparency=.28}):Play()
             button.Text="Shoot Murder"
             traceA.Visible=false; traceB.Visible=false
         end
@@ -1618,6 +1658,8 @@ ultimateFlingSection:AddToggle("Auto Return After Fling",function(v) utility.fli
 local main = tab:AddSection("Silent Aim", "")
 main:AddToggle("Enabled", toggle)
 main:AddToggle("Wall Check", function(value) config.wallCheck = value == true end)
+main:AddToggle("Show Shoot Murder Button",setShootButtonVisible)
+main:AddToggle("Lock Shoot Murder Button",function(value) config.lockShootButton=value==true end)
 local knifeSection = tab:AddSection("Knife Silent Aim", "")
 knifeSection:AddToggle("Knife Silent Aim", function(value) config.knifeEnabled = value == true; if config.knifeEnabled then installHook() end end)
 knifeSection:AddToggle("Knife Wall Check", function(value) config.knifeWallCheck = value == true end)
