@@ -1442,7 +1442,7 @@ local utility = {
     walkEnabled=false, walkSpeed=16, jumpEnabled=false, jumpPower=50,
     autoGrab=false, grabSafety=true, gunAura=false, gunAuraRange=10,
     touchFling=false, touchPower=100, antiFling=false, flingAll=false,
-    autoFlingSheriff=false, autoFlingMurderer=false, selectedPlayer=nil, flingDuration=2, flingPower=1, flingAutoReturn=true,
+    autoFlingSheriff=false, autoFlingMurderer=false, selectedPlayer=nil, flingDuration=2, flingPower=1,
     notifyDropped=false, notifyPickup=false, roundTimer=false, roleNotify=false,
 }
 local function localHumanoid()
@@ -1511,7 +1511,7 @@ local function cleanupFling(root,humanoid,character)
     if root and root.Parent then root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero end
     if humanoid then pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated,true) end); pcall(function() Workspace.CurrentCamera.CameraSubject=humanoid end) end
     pcall(function() Workspace.FallenPartsDestroyHeight=flingDestroyHeight end)
-    if utility.flingAutoReturn and flingOldPosition and root and root.Parent then
+    if flingOldPosition and root and root.Parent then
         for _=1,12 do
             pcall(function() root.CFrame=flingOldPosition*CFrame.new(0,.5,0); if character.PrimaryPart then character:SetPrimaryPartCFrame(root.CFrame) end end)
             root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero
@@ -1677,9 +1677,9 @@ end
 local selectedPlayerControl
 selectedPlayerControl=ultimateFlingSection:AddDropdown("Select Player",playerNameList(),function(name) utility.selectedPlayer=name~="None" and name or nil end)
 ultimateFlingSection:AddButton("Refresh Player List",function() if selectedPlayerControl and selectedPlayerControl.Refresh then selectedPlayerControl:Refresh(playerNameList(),utility.selectedPlayer or "None") end end)
-ultimateFlingSection:AddButton("Fling Selected Player",function() local p=utility.selectedPlayer and Players:FindFirstChild(utility.selectedPlayer); if p then task.spawn(flingPlayer,p) else notify("Select a player",2) end end)
-ultimateFlingSection:AddButton("Fling Sheriff / Hero",function() local p=findSheriff(); if p then task.spawn(flingPlayer,p) else notify("Sheriff not found",2) end end)
-ultimateFlingSection:AddButton("Fling Murderer",function() local p=validTarget(murderer) and murderer or findByKnife(); if p then task.spawn(flingPlayer,p) else notify("Murderer not found",2) end end)
+ultimateFlingSection:AddButton("Fling Selected",function() local p=utility.selectedPlayer and Players:FindFirstChild(utility.selectedPlayer); if p then task.spawn(flingPlayer,p) else notify("Select a player",2) end end)
+ultimateFlingSection:AddButton("Fling Sheriff",function() local p=findSheriff(); if p then task.spawn(flingPlayer,p) else notify("Sheriff not found",2) end end)
+ultimateFlingSection:AddButton("Fling Murder",function() local p=validTarget(murderer) and murderer or findByKnife(); if p then task.spawn(flingPlayer,p) else notify("Murderer not found",2) end end)
 ultimateFlingSection:AddButton("Fling Nearest", function() task.spawn(flingPlayer,nearestPlayer()) end)
 ultimateFlingSection:AddToggle("Auto Fling Sheriff / Hero",function(v) utility.autoFlingSheriff=v end)
 ultimateFlingSection:AddToggle("Auto Fling Murderer",function(v) utility.autoFlingMurderer=v end)
@@ -1687,7 +1687,6 @@ ultimateFlingSection:AddToggle("Fling All", function(v) utility.flingAll=v end)
 ultimateFlingSection:AddToggle("Anti Fling", function(v) utility.antiFling=v end)
 ultimateFlingSection:AddSlider("Fling Duration",1,5,2,function(v) utility.flingDuration=v end)
 ultimateFlingSection:AddSlider("Fling Power",1,3,1,function(v) utility.flingPower=v end)
-ultimateFlingSection:AddToggle("Auto Return After Fling",function(v) utility.flingAutoReturn=v end)
 
 local main = tab:AddSection("Silent Aim", "")
 main:AddToggle("Enabled", toggle)
