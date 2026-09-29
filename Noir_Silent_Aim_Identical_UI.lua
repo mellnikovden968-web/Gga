@@ -35,22 +35,22 @@ local function rescale()
  scale.Scale=math.min(v.X/1360,v.Y/760,0.80)
 end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
-local fireLayer=New("Frame",{Parent=gui,Name="SpriteFireBorder",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1340,750),BackgroundTransparency=1,Visible=true})
-local FIRE_SHEET="rbxasset://textures/particles/fire_main.dds"
+local fireLayer=New("Frame",{Parent=gui,Name="SpriteFireBorder",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1296,706),BackgroundTransparency=1,Visible=true})
+local FIRE_SHEET="rbxassetid://135443935828026"
 do
 local fireSprites={}
 local function fireSprite(pos,size,rot,phase)
  local im=New("ImageLabel",{Parent=fireLayer,Position=pos,Size=size,BackgroundTransparency=1,Image=FIRE_SHEET,ImageColor3=Color3.fromRGB(3,3,5),ImageTransparency=.34,Rotation=rot or 0,ScaleType=Enum.ScaleType.Stretch,ZIndex=1})
- im.ImageRectSize=Vector2.new(0,0); table.insert(fireSprites,{image=im,phase=phase or 0}); return im
+ im.ImageRectSize=Vector2.new(256,256); table.insert(fireSprites,{image=im,phase=phase or 0}); return im
 end
-for i=0,11 do fireSprite(UDim2.new(0,i*112,0,-22),UDim2.fromOffset(122,38),0,i%16); fireSprite(UDim2.new(0,i*112,1,-31),UDim2.fromOffset(122,38),180,(i*3)%16) end
-for i=0,6 do fireSprite(UDim2.new(0,-23,0,i*106),UDim2.fromOffset(46,112),-90,(i*5)%16); fireSprite(UDim2.new(1,-23,0,i*106),UDim2.fromOffset(46,112),90,(i*7)%16) end
+for i=0,11 do fireSprite(UDim2.new(0,i*108,0,-10),UDim2.fromOffset(122,38),0,i%16); fireSprite(UDim2.new(0,i*108,1,-28),UDim2.fromOffset(122,38),180,(i*3)%16) end
+for i=0,6 do fireSprite(UDim2.new(0,-18,0,i*100),UDim2.fromOffset(46,112),-90,(i*5)%16); fireSprite(UDim2.new(1,-28,0,i*100),UDim2.fromOffset(46,112),90,(i*7)%16) end
 local fireClock,fireLast=0,-1
 RunService.RenderStepped:Connect(function(dt)
  fireClock+=dt
  local base=math.floor(fireClock*10)
  if base==fireLast then return end; fireLast=base
- for _,v in ipairs(fireSprites) do if v.image.Parent then v.image.ImageTransparency=.30+.13*math.abs(math.sin((base+v.phase)*.22)) end end
+ for _,v in ipairs(fireSprites) do if v.image.Parent then local f=(base+v.phase)%16; v.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
 end)
 end
 local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.30,ClipsDescendants=true})
@@ -172,7 +172,7 @@ for i,d in ipairs(navDefs) do
  local flames={}
  local flameData={{UDim2.new(.5,-15,.5,-34),0},{UDim2.new(.5,-15,.5,4),180},{UDim2.new(.5,-34,.5,-15),-90},{UDim2.new(.5,4,.5,-15),90}}
  for fi,fd in ipairs(flameData) do
-  local flame=New("ImageLabel",{Parent=b,Position=fd[1],Size=UDim2.fromOffset(17,17),BackgroundTransparency=1,Image=FIRE_SHEET,ImageRectSize=Vector2.new(0,0),ImageColor3=Color3.fromRGB(2,2,4),ImageTransparency=.66,Rotation=fd[2],ZIndex=3})
+  local flame=New("ImageLabel",{Parent=b,Position=fd[1],Size=UDim2.fromOffset(17,17),BackgroundTransparency=1,Image=FIRE_SHEET,ImageRectSize=Vector2.new(256,256),ImageColor3=Color3.fromRGB(2,2,4),ImageTransparency=.66,Rotation=fd[2],ZIndex=3})
   local item={image=flame,phase=(i*3+fi*4)%16}; table.insert(flames,item); table.insert(navFireSprites,item)
  end
  navButtons[d[1]]=b; navIcons[d[1]]={icon=icon,glow=glow,ring=ring,flames=flames}
@@ -191,7 +191,7 @@ RunService.RenderStepped:Connect(function(dt)
  navFireClock+=dt
  local baseFrame=math.floor(navFireClock*9)
  if baseFrame==navFireLast then return end; navFireLast=baseFrame
- for _,data in ipairs(navFireSprites) do if data.image.Parent then data.image.ImageTransparency=.58+.18*math.abs(math.sin((baseFrame+data.phase)*.25)) end end
+ for _,data in ipairs(navFireSprites) do if data.image.Parent then local f=(baseFrame+data.phase)%16; data.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
 end)
 end
 search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
@@ -1070,8 +1070,8 @@ local function createShootButton()
     local fireAura = Instance.new("Frame")
     fireAura.Name = "NoirSpriteFire"
     fireAura.BackgroundTransparency = 1
-    fireAura.Position = UDim2.new(0, -30, 0, -34)
-    fireAura.Size = UDim2.new(1, 60, 1, 68)
+    fireAura.Position = UDim2.new(0, -8, 0, -8)
+    fireAura.Size = UDim2.new(1, 16, 1, 16)
     fireAura.ZIndex = 3
     fireAura.Parent = button
     local shootFlames = {}
@@ -1081,7 +1081,7 @@ local function createShootButton()
         flame.Image=FIRE_SHEET
         flame.ImageColor3=Color3.fromRGB(2,2,4)
         flame.ImageTransparency=.36
-        flame.ImageRectSize=Vector2.new(0,0)
+        flame.ImageRectSize=Vector2.new(256,256)
         flame.Position=position
         flame.Size=size
         flame.Rotation=rotation
@@ -1091,12 +1091,12 @@ local function createShootButton()
         table.insert(shootFlames,{image=flame,phase=phase})
     end
     for i=0,5 do
-        addShootFlame(UDim2.new(i/6,-2,0,-15),UDim2.new(1/6,10,0,24),0,i*2)
-        addShootFlame(UDim2.new(i/6,-2,1,-47),UDim2.new(1/6,10,0,24),180,i*2+5)
+        addShootFlame(UDim2.new(i/6,-2,0,-6),UDim2.new(1/6,10,0,20),0,i*2)
+        addShootFlame(UDim2.new(i/6,-2,1,-14),UDim2.new(1/6,10,0,20),180,i*2+5)
     end
     for i=0,2 do
-        addShootFlame(UDim2.new(0,-23,i/3,-2),UDim2.new(0,24,1/3,8),-90,i*3+2)
-        addShootFlame(UDim2.new(1,-39,i/3,-2),UDim2.new(0,24,1/3,8),90,i*3+7)
+        addShootFlame(UDim2.new(0,-6,i/3,-2),UDim2.new(0,20,1/3,8),-90,i*3+2)
+        addShootFlame(UDim2.new(1,-14,i/3,-2),UDim2.new(0,20,1/3,8),90,i*3+7)
     end
     local shootFireClock,shootFireLast=0,-1
     local shootFireConnection
@@ -1106,7 +1106,8 @@ local function createShootButton()
         local baseFrame=math.floor(shootFireClock*10)
         if baseFrame==shootFireLast then return end; shootFireLast=baseFrame
         for _,data in ipairs(shootFlames) do
-            data.image.ImageTransparency=.30+.13*math.abs(math.sin((baseFrame+data.phase)*.24))
+            local frame=(baseFrame+data.phase)%16
+            data.image.ImageRectOffset=Vector2.new((frame%4)*256,math.floor(frame/4)*256)
         end
     end)
 
@@ -1425,7 +1426,7 @@ local utility = {
     walkEnabled=false, walkSpeed=16, jumpEnabled=false, jumpPower=50,
     autoGrab=false, grabSafety=true, gunAura=false, gunAuraRange=10,
     touchFling=false, touchPower=100, antiFling=false, flingAll=false,
-    autoFlingSheriff=false, autoFlingMurderer=false, selectedPlayer=nil,
+    autoFlingSheriff=false, autoFlingMurderer=false, selectedPlayer=nil, flingDuration=2, flingPower=1, flingAutoReturn=true,
     notifyDropped=false, notifyPickup=false, roundTimer=false, roleNotify=false,
 }
 local function localHumanoid()
@@ -1486,15 +1487,70 @@ local function nearestPlayer(maxDistance)
     return best
 end
 local flingBusy=false
+local flingBodyVelocity
+local flingOldPosition
+local flingDestroyHeight=Workspace.FallenPartsDestroyHeight
+local function cleanupFling(root,humanoid,character)
+    if flingBodyVelocity then pcall(function() flingBodyVelocity:Destroy() end); flingBodyVelocity=nil end
+    if root and root.Parent then root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero end
+    if humanoid then pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated,true) end); pcall(function() Workspace.CurrentCamera.CameraSubject=humanoid end) end
+    pcall(function() Workspace.FallenPartsDestroyHeight=flingDestroyHeight end)
+    if utility.flingAutoReturn and flingOldPosition and root and root.Parent then
+        for _=1,12 do
+            pcall(function() root.CFrame=flingOldPosition*CFrame.new(0,.5,0); if character.PrimaryPart then character:SetPrimaryPartCFrame(root.CFrame) end end)
+            root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero
+            if (root.Position-flingOldPosition.Position).Magnitude<20 then break end
+            RunService.Heartbeat:Wait()
+        end
+    end
+    flingBusy=false
+end
 local function flingPlayer(target)
-    if flingBusy or not target or target==LocalPlayer then return end
-    local root=localRoot(); local hum=localHumanoid(); local tr=target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-    if not root or not hum or not tr then return end
+    if flingBusy or not target or target==LocalPlayer or not validTarget(target) then return false end
+    local character=LocalPlayer.Character
+    local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+    local root=humanoid and humanoid.RootPart or localRoot()
+    local targetCharacter=target.Character
+    local targetHumanoid=targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
+    local targetRoot=targetHumanoid and targetHumanoid.RootPart or targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
+    local targetHead=targetCharacter and targetCharacter:FindFirstChild("Head")
+    local accessory=targetCharacter and targetCharacter:FindFirstChildOfClass("Accessory")
+    local handle=accessory and accessory:FindFirstChild("Handle")
+    local targetPart=targetRoot or targetHead or handle
+    if not character or not humanoid or not root or not targetPart then return false end
+    if targetHumanoid and targetHumanoid.Sit then notify(target.Name.." is sitting",2); return false end
     flingBusy=true
-    local old=root.CFrame; local bv=Instance.new("BodyAngularVelocity"); bv.AngularVelocity=Vector3.new(0,9e5,0); bv.MaxTorque=Vector3.new(0,math.huge,0); bv.P=math.huge; bv.Parent=root
+    flingOldPosition=root.CFrame
+    pcall(function() Workspace.CurrentCamera.CameraSubject=targetPart end)
+    pcall(function() Workspace.FallenPartsDestroyHeight=0/0 end)
+    pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated,false) end)
+    flingBodyVelocity=Instance.new("BodyVelocity")
+    flingBodyVelocity.Velocity=Vector3.zero
+    flingBodyVelocity.MaxForce=Vector3.new(9e9,9e9,9e9)
+    flingBodyVelocity.Parent=root
+    local power=math.clamp(utility.flingPower or 1,1,3)
+    local multiplier=power==1 and 1 or power==2 and 1.5 or 2
     local started=os.clock()
-    while os.clock()-started<1.35 and tr.Parent and hum.Health>0 do root.CFrame=tr.CFrame*CFrame.new(math.random(-2,2),0,math.random(-2,2)); root.AssemblyLinearVelocity=Vector3.new(9e4,9e4,9e4); RunService.Heartbeat:Wait() end
-    bv:Destroy(); root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero; root.CFrame=old; flingBusy=false
+    local duration=math.clamp(utility.flingDuration or 2,1,5)
+    local angle=0
+    while os.clock()-started<duration and targetPart.Parent and humanoid.Health>0 do
+        angle+=100
+        local speed=targetPart.AssemblyLinearVelocity.Magnitude
+        local move=targetHumanoid and targetHumanoid.MoveDirection or Vector3.zero
+        local offset=move*(speed<50 and speed/1.25 or 1)
+        local y=((math.floor((os.clock()-started)*24)%2)==0) and 1.5 or -1.5
+        local z=speed>=50 and (targetHumanoid and targetHumanoid.WalkSpeed or 16) or 0
+        local cf=CFrame.new(targetPart.Position)*CFrame.new(offset.X,y,offset.Z+z)*CFrame.Angles(math.rad(angle),0,0)
+        pcall(function()
+            root.CFrame=cf
+            if character.PrimaryPart then character:SetPrimaryPartCFrame(cf) end
+            root.AssemblyLinearVelocity=Vector3.new(9e7*multiplier,9e8*multiplier,9e7*multiplier)
+            root.AssemblyAngularVelocity=Vector3.new(9e8*multiplier,9e8*multiplier,9e8*multiplier)
+        end)
+        RunService.Heartbeat:Wait()
+    end
+    cleanupFling(root,humanoid,character)
+    return true
 end
 task.spawn(function()
     local hadGun=false
@@ -1613,6 +1669,9 @@ ultimateFlingSection:AddToggle("Auto Fling Sheriff / Hero",function(v) utility.a
 ultimateFlingSection:AddToggle("Auto Fling Murderer",function(v) utility.autoFlingMurderer=v end)
 ultimateFlingSection:AddToggle("Fling All", function(v) utility.flingAll=v end)
 ultimateFlingSection:AddToggle("Anti Fling", function(v) utility.antiFling=v end)
+ultimateFlingSection:AddSlider("Fling Duration",1,5,2,function(v) utility.flingDuration=v end)
+ultimateFlingSection:AddSlider("Fling Power",1,3,1,function(v) utility.flingPower=v end)
+ultimateFlingSection:AddToggle("Auto Return After Fling",function(v) utility.flingAutoReturn=v end)
 
 local main = tab:AddSection("Silent Aim", "")
 main:AddToggle("Enabled", toggle)
