@@ -321,6 +321,7 @@ local motionSamples = {}
 local previousEstimatedVelocity = Vector3.zero
 local estimatedAcceleration = Vector3.zero
 local lastAutoTune = 0
+local roundTimerEndsAt
 
 local function notify(text, time)
     if type(host.Notify) == "function" then
@@ -1079,12 +1080,13 @@ local gameplay = remotes and remotes:FindFirstChild("Gameplay")
 if gameplay then
     local roundEnd = gameplay:FindFirstChild("RoundEndFade")
     if roundEnd and roundEnd:IsA("RemoteEvent") then
-        roundEnd.OnClientEvent:Connect(function() murderer = nil end)
+        roundEnd.OnClientEvent:Connect(function() murderer = nil; roundTimerEndsAt = nil end)
     end
     for _, name in ipairs({"Fade", "PlayerDataChanged", "RoleSelect", "RoundStart"}) do
         local event = gameplay:FindFirstChild(name)
         if event and event:IsA("RemoteEvent") then
             event.OnClientEvent:Connect(function(...)
+                if name == "RoundStart" or name == "RoleSelect" then roundTimerEndsAt = os.clock() + 180 end
                 local found = false
                 for index = 1, select("#", ...) do
                     local value = select(index, ...)
@@ -1350,7 +1352,7 @@ local function setRoundTimerVisible(value)
             local pg=LocalPlayer:FindFirstChildOfClass("PlayerGui")
             if pg then
                 for _,v in ipairs(pg:GetDescendants()) do
-                    if v:IsA("TextLabel") and v.Visible and v~=roundTimerGui then
+                    if v:IsA("TextLabel") and v~=roundTimerGui then
                         local raw=tostring(v.Text or ""):gsub("<.->",""):gsub("^%s+",""):gsub("%s+$","")
                         local lowerName=string.lower(v.Name)
                         local score
@@ -1359,10 +1361,14 @@ local function setRoundTimerVisible(value)
                         elseif raw:match("^%d+%s*[sS]$") then score=90
                         elseif string.find(lowerName,"roundtimer",1,true) or string.find(lowerName,"gametimer",1,true) then score=80
                         elseif string.find(lowerName,"timer",1,true) and raw:match("%d") then score=60
-                        elseif raw:match("^%d+$") and tonumber(raw) and tonumber(raw)<=15 then score=30 end
+                        elseif not roundTimerEndsAt and raw:match("^%d+$") and tonumber(raw) and tonumber(raw)<=15 then score=30 end
                         if score and (not bestScore or score>bestScore) then found,bestScore=raw,score end
                     end
                 end
+            end
+            if not found and roundTimerEndsAt then
+                local left=math.max(0,math.floor(roundTimerEndsAt-os.clock()+.5))
+                if left>0 then found=string.format("%dm %02ds",math.floor(left/60),left%60) else roundTimerEndsAt=nil end
             end
             roundTimerGui.Text=found or "WAITING"
             task.wait(.2)
@@ -1397,7 +1403,7 @@ worldServer:AddToggle("Auto Notify on Dropped Gun", function(v) utility.notifyDr
 worldServer:AddToggle("Gun Pickup Notify", function(v) utility.notifyPickup=v end)
 local touchFlingSection = tab:AddSection("WORLD • TOUCH FLING", "Adapted from FlingGui")
 touchFlingSection:AddToggle("Touch Fling", function(v) utility.touchFling=v end)
-touchFlingSection:AddSlider("Touch Fling Power", 10, 300, 100, function(v) utility.touchPower=v end)
+touchFlingSection:AddSlider("Touch Fling Power", 10, 50000, 100, function(v) utility.touchPower=v end)
 local ultimateFlingSection = tab:AddSection("WORLD • ULTIMATE FLING", "Sheriff, Murderer and player targeting")
 local function playerNameList()
     local list={"None"}
