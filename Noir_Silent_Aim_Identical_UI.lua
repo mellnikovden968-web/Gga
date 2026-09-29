@@ -168,7 +168,7 @@ local configCols={}
 for i=1,2 do configCols[i]=New("Frame",{Parent=configContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=configCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
 sidebar.Visible=false
 header.Position=UDim2.fromOffset(0,0); header.Size=UDim2.new(1,0,0,105)
-content.Position=UDim2.fromOffset(24,112); content.Size=UDim2.new(1,-48,1,-210); content.Visible=false
+content.Position=UDim2.fromOffset(24,112); content.Size=UDim2.new(1,-48,1,-245); content.Visible=false
 configContent.Position=content.Position; configContent.Size=content.Size
 local visualContent=content:Clone(); visualContent.Name="VisualContent"; visualContent.Parent=win; visualContent.Visible=false; visualContent:ClearAllChildren()
 local visualCols={}
@@ -275,14 +275,14 @@ local sectionPanels={}
 local controls={}
 local function refreshCanvas()
  task.defer(function()
-  local h=math.max(cols[1].AbsoluteSize.Y,cols[2].AbsoluteSize.Y)+80
+  local h=math.max(cols[1].AbsoluteSize.Y,cols[2].AbsoluteSize.Y)+130
   content.CanvasSize=UDim2.fromOffset(0,h)
-  local ch=math.max(configCols[1].AbsoluteSize.Y,configCols[2].AbsoluteSize.Y)+80
+  local ch=math.max(configCols[1].AbsoluteSize.Y,configCols[2].AbsoluteSize.Y)+130
   configContent.CanvasSize=UDim2.fromOffset(0,ch)
-  local vh=math.max(visualCols[1].AbsoluteSize.Y,visualCols[2].AbsoluteSize.Y)+80
+  local vh=math.max(visualCols[1].AbsoluteSize.Y,visualCols[2].AbsoluteSize.Y)+130
   visualContent.CanvasSize=UDim2.fromOffset(0,vh)
-  mainContent.CanvasSize=UDim2.fromOffset(0,math.max(mainCols[1].AbsoluteSize.Y,mainCols[2].AbsoluteSize.Y)+80)
-  worldContent.CanvasSize=UDim2.fromOffset(0,math.max(worldCols[1].AbsoluteSize.Y,worldCols[2].AbsoluteSize.Y)+80)
+  mainContent.CanvasSize=UDim2.fromOffset(0,math.max(mainCols[1].AbsoluteSize.Y,mainCols[2].AbsoluteSize.Y)+130)
+  worldContent.CanvasSize=UDim2.fromOffset(0,math.max(worldCols[1].AbsoluteSize.Y,worldCols[2].AbsoluteSize.Y)+130)
  end)
 end
 search:GetPropertyChangedSignal("Text"):Connect(function()
@@ -1083,7 +1083,7 @@ local function createShootButton()
     button.Name = "ShootMurderer"
     button.AnchorPoint = Vector2.new(0.5, 0.5)
     button.Position = NoirPersistence.GetPosition("shoot",UDim2.new(0.5, 0, 0.5, 0))
-    button.Size = UDim2.new(0, 260, 0, 96)
+    button.Size = UDim2.new(0, 190, 0, 62)
     button.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
     button.BackgroundTransparency = 0.28
     button.BorderSizePixel = 0
@@ -1099,7 +1099,7 @@ local function createShootButton()
     shootButton = button
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 28)
+    corner.CornerRadius = UDim.new(0, 16)
     corner.Parent = button
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(255, 255, 255)
@@ -1141,27 +1141,14 @@ local function createShootButton()
     local tc2=Instance.new("UICorner"); tc2.CornerRadius=UDim.new(1,0); tc2.Parent=traceB
     traceA.Visible=false; traceB.Visible=false
 
-    local ripple = Instance.new("Frame")
-    ripple.Name = "@ripple"
-    ripple.BackgroundColor3 = Color3.fromRGB(235, 235, 240)
-    ripple.BackgroundTransparency = 1
-    ripple.AnchorPoint = Vector2.new(0.5, 0.5)
-    ripple.Size = UDim2.new(0, 0, 0, 0)
-    ripple.Visible = false
-    ripple.ZIndex = 4
-    ripple.Parent = button
-    local rippleCorner = Instance.new("UICorner")
-    rippleCorner.CornerRadius = UDim.new(1, 0)
-    rippleCorner.Parent = ripple
-
     local sound = Instance.new("Sound")
     sound.Name = "Sound"
     sound.SoundId = "rbxassetid://3868133279"
     sound.Volume = 0.5
     sound.Parent = button
 
-    local normalSize = UDim2.new(0, 260, 0, 96)
-    local pressedSize = UDim2.new(0, 276, 0, 102)
+    local normalSize = UDim2.new(0, 190, 0, 62)
+    local pressedSize = UDim2.new(0, 202, 0, 68)
     local pressTween = TweenInfo.new(0.30, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 
     local dragging = false
@@ -1184,15 +1171,6 @@ local function createShootButton()
             TweenService:Create(traceA,TweenInfo.new(.68,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(1,.08)}):Play()
             TweenService:Create(traceB,TweenInfo.new(.68,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(0,.92)}):Play()
             sound:Play()
-            local absolute = button.AbsolutePosition
-            ripple.Position = UDim2.new(0, input.Position.X - absolute.X, 0, input.Position.Y - absolute.Y)
-            ripple.Size = UDim2.new(0, 0, 0, 0)
-            ripple.BackgroundTransparency = 0.45
-            ripple.Visible = true
-            TweenService:Create(ripple, TweenInfo.new(0.82, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-                Size = UDim2.new(0, 300, 0, 300),
-                BackgroundTransparency = 1
-            }):Play()
         end
     end)
     button.InputChanged:Connect(function(input)
@@ -1656,18 +1634,6 @@ serverMods:AddButton("Show Murderer Chance", showMurdererChance)
 serverMods:AddButton("Refresh Roles", refreshTarget)
 serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
 
-local worldServer = tab:AddSection("WORLD • SERVER", "Gun information and pickup")
-worldServer:AddButton("Grab Gun", grabGun)
-worldServer:AddToggle("Auto Grab Gun", function(v) utility.autoGrab=v end)
-worldServer:AddToggle("Auto Grab Gun Safety Check", function(v) utility.grabSafety=v end)
-worldServer:AddToggle("Gun Aura", function(v) utility.gunAura=v end)
-worldServer:AddSlider("Gun Aura Range", 5, 40, 10, function(v) utility.gunAuraRange=v end)
-worldServer:AddToggle("Auto Notify on Dropped Gun", function(v) utility.notifyDropped=v end)
-worldServer:AddToggle("Gun Pickup Notify", function(v) utility.notifyPickup=v end)
-local touchFlingSection = tab:AddSection("WORLD • TOUCH FLING", "Adapted from FlingGui")
-touchFlingSection:AddToggle("Touch Fling", function(v) utility.touchFling=v end)
-touchFlingSection:AddSlider("Touch Fling Power", 10, 50000, 100, function(v) utility.touchPower=v end)
-local ultimateFlingSection = tab:AddSection("WORLD • ULTIMATE FLING", "Sheriff, Murderer and player targeting")
 local function playerNameList()
     local list={"None"}
     for _,p in ipairs(Players:GetPlayers()) do if p~=LocalPlayer then list[#list+1]=p.Name end end
@@ -1675,11 +1641,26 @@ local function playerNameList()
     return list
 end
 local selectedPlayerControl
-selectedPlayerControl=ultimateFlingSection:AddDropdown("Select Player",playerNameList(),function(name) utility.selectedPlayer=name~="None" and name or nil end)
-ultimateFlingSection:AddButton("Refresh Player List",function() if selectedPlayerControl and selectedPlayerControl.Refresh then selectedPlayerControl:Refresh(playerNameList(),utility.selectedPlayer or "None") end end)
-ultimateFlingSection:AddButton("Fling Selected",function() local p=utility.selectedPlayer and Players:FindFirstChild(utility.selectedPlayer); if p then task.spawn(flingPlayer,p) else notify("Select a player",2) end end)
-ultimateFlingSection:AddButton("Fling Sheriff",function() local p=findSheriff(); if p then task.spawn(flingPlayer,p) else notify("Sheriff not found",2) end end)
-ultimateFlingSection:AddButton("Fling Murder",function() local p=validTarget(murderer) and murderer or findByKnife(); if p then task.spawn(flingPlayer,p) else notify("Murderer not found",2) end end)
+local worldServer = tab:AddSection("WORLD • GUN", "Gun pickup and dropped gun controls")
+worldServer:AddButton("Grab Gun",grabGun)
+worldServer:AddToggle("Auto Grab Gun", function(v) utility.autoGrab=v end)
+worldServer:AddToggle("Auto Grab Gun Safety Check", function(v) utility.grabSafety=v end)
+worldServer:AddToggle("Gun Aura", function(v) utility.gunAura=v end)
+worldServer:AddSlider("Gun Aura Range", 5, 40, 10, function(v) utility.gunAuraRange=v end)
+worldServer:AddToggle("Auto Notify on Dropped Gun", function(v) utility.notifyDropped=v end)
+worldServer:AddToggle("Gun Pickup Notify", function(v) utility.notifyPickup=v end)
+
+worldServer = tab:AddSection("WORLD • FLING", "Sheriff, Murderer and selected player")
+worldServer:AddButton("Fling Sheriff",function() local p=findSheriff(); if p then task.spawn(flingPlayer,p) else notify("Sheriff not found",2) end end)
+worldServer:AddButton("Fling Murder",function() local p=validTarget(murderer) and murderer or findByKnife(); if p then task.spawn(flingPlayer,p) else notify("Murderer not found",2) end end)
+selectedPlayerControl=worldServer:AddDropdown("Select Player",playerNameList(),function(name) utility.selectedPlayer=name~="None" and name or nil end)
+worldServer:AddButton("Fling Selected",function() local p=utility.selectedPlayer and Players:FindFirstChild(utility.selectedPlayer); if p then task.spawn(flingPlayer,p) else notify("Select a player",2) end end)
+worldServer:AddButton("Refresh Player List",function() if selectedPlayerControl and selectedPlayerControl.Refresh then selectedPlayerControl:Refresh(playerNameList(),utility.selectedPlayer or "None") end end)
+
+local touchFlingSection = tab:AddSection("WORLD • TOUCH FLING", "Adapted from FlingGui")
+touchFlingSection:AddToggle("Touch Fling", function(v) utility.touchFling=v end)
+touchFlingSection:AddSlider("Touch Fling Power", 10, 50000, 100, function(v) utility.touchPower=v end)
+local ultimateFlingSection = tab:AddSection("WORLD • FLING SETTINGS", "Automatic fling and power settings")
 ultimateFlingSection:AddButton("Fling Nearest", function() task.spawn(flingPlayer,nearestPlayer()) end)
 ultimateFlingSection:AddToggle("Auto Fling Sheriff / Hero",function(v) utility.autoFlingSheriff=v end)
 ultimateFlingSection:AddToggle("Auto Fling Murderer",function(v) utility.autoFlingMurderer=v end)
