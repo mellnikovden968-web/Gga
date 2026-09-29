@@ -1,3 +1,4 @@
+local __NOIR_OK,__NOIR_ERR=xpcall(function()
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -1703,3 +1704,16 @@ end
 
 
 notify("Lite V3 ready; feature is OFF", 4)
+
+end,function(e)
+ local message=tostring(e)
+ if debug and type(debug.traceback)=="function" then
+  local ok,trace=pcall(debug.traceback,message,2)
+  if ok and trace then message=trace end
+ end
+ return message
+end)
+if not __NOIR_OK then
+ warn("[NOIR REAL ERROR] "..tostring(__NOIR_ERR))
+ pcall(function() game:GetService("StarterGui"):SetCore("SendNotification",{Title="NOIR ERROR",Text=tostring(__NOIR_ERR),Duration=12}) end)
+end
