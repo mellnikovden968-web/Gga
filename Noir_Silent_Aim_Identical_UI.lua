@@ -108,6 +108,12 @@ configContent.Position=content.Position; configContent.Size=content.Size
 local visualContent=content:Clone(); visualContent.Name="VisualContent"; visualContent.Parent=win; visualContent.Visible=false; visualContent:ClearAllChildren()
 local visualCols={}
 for i=1,2 do visualCols[i]=New("Frame",{Parent=visualContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=visualCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
+local mainContent=content:Clone(); mainContent.Name="MainContent"; mainContent.Parent=win; mainContent.Visible=false; mainContent:ClearAllChildren()
+local mainCols={}
+for i=1,2 do mainCols[i]=New("Frame",{Parent=mainContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=mainCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
+local worldContent=content:Clone(); worldContent.Name="WorldContent"; worldContent.Parent=win; worldContent.Visible=false; worldContent:ClearAllChildren()
+local worldCols={}
+for i=1,2 do worldCols[i]=New("Frame",{Parent=worldContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=worldCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
 local dashboard=New("Frame",{Parent=win,Position=content.Position,Size=content.Size,BackgroundTransparency=1})
 local profile=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,22),Size=UDim2.fromOffset(500,180),BackgroundColor3=C.panel,BackgroundTransparency=.24}); corner(profile,22); stroke(profile,C.border,.15)
 local avatar=New("ImageLabel",{Parent=profile,Position=UDim2.fromOffset(24,28),Size=UDim2.fromOffset(118,118),BackgroundColor3=C.surface}); corner(avatar,28); stroke(avatar,C.accent,.05)
@@ -122,17 +128,19 @@ text(infoCard,"NOIR SILENT AIM",28,UDim2.fromOffset(28,26)); text(infoCard,"Gun 
 local frameCounter,lastFps=0,os.clock(); RunService.RenderStepped:Connect(function() frameCounter+=1; local now=os.clock(); if now-lastFps>=1 then fpsText.Text=tostring(math.floor(frameCounter/(now-lastFps)+.5)); frameCounter=0; lastFps=now; local ok,v=pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end); pingText.Text=ok and (tostring(math.floor(v+.5)).." ms") or "-- ms" end end)
 local bottom=New("Frame",{Parent=win,AnchorPoint=Vector2.new(.5,1),Position=UDim2.new(.5,0,1,-18),Size=UDim2.fromOffset(650,70),BackgroundColor3=C.panel,BackgroundTransparency=.20}); corner(bottom,22); stroke(bottom,C.border,.1)
 local navButtons={}
-local navDefs={{"home","⌂  HOME"},{"aim","◎  AIM"},{"visual","◈  VISUALS"}}
-for i,d in ipairs(navDefs) do local b=New("TextButton",{Parent=bottom,Position=UDim2.fromOffset(12+(i-1)*209,10),Size=UDim2.fromOffset(202,50),BackgroundColor3=C.surface,Text=d[2],TextColor3=C.dim,TextSize=16,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(b,15); navButtons[d[1]]=b end
+local navDefs={{"main","⌂  MAIN"},{"aim","◎  COMBAT"},{"world","◇  WORLD"},{"visual","◈  VISUALS"}}
+for i,d in ipairs(navDefs) do local b=New("TextButton",{Parent=bottom,Position=UDim2.fromOffset(10+(i-1)*158,10),Size=UDim2.fromOffset(151,50),BackgroundColor3=C.surface,Text=d[2],TextColor3=C.dim,TextSize=16,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(b,15); navButtons[d[1]]=b end
 search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
 local activePage="home"
 local function selectPage(page)
- activePage=page; dashboard.Visible=page=="home"; content.Visible=page=="aim"; visualContent.Visible=page=="visual"; configContent.Visible=false
+ activePage=page; dashboard.Visible=page=="home"; mainContent.Visible=page=="main"; content.Visible=page=="aim"; worldContent.Visible=page=="world"; visualContent.Visible=page=="visual"; configContent.Visible=false
  for name,b in pairs(navButtons) do b.BackgroundColor3=name==page and Color3.fromRGB(78,78,84) or C.surface; b.TextColor3=name==page and C.text or C.dim end
 end
-for name,b in pairs(navButtons) do b.MouseButton1Click:Connect(function() selectPage(name) end) end
+for name,b in pairs(navButtons) do b.MouseButton1Click:Connect(function() if activePage==name then selectPage("home") else selectPage(name) end end) end
 selectPage("home")
 local sectionCount=0
+local mainSectionCount=0
+local worldSectionCount=0
 local visualSectionCount=0
 local configSectionCount=0
 local sectionPanels={}
@@ -145,11 +153,13 @@ local function refreshCanvas()
   configContent.CanvasSize=UDim2.fromOffset(0,ch)
   local vh=math.max(visualCols[1].AbsoluteSize.Y,visualCols[2].AbsoluteSize.Y)+80
   visualContent.CanvasSize=UDim2.fromOffset(0,vh)
+  mainContent.CanvasSize=UDim2.fromOffset(0,math.max(mainCols[1].AbsoluteSize.Y,mainCols[2].AbsoluteSize.Y)+80)
+  worldContent.CanvasSize=UDim2.fromOffset(0,math.max(worldCols[1].AbsoluteSize.Y,worldCols[2].AbsoluteSize.Y)+80)
  end)
 end
 search:GetPropertyChangedSignal("Text"):Connect(function()
  local q=string.lower(search.Text or "")
- local counts={aim=0,visual=0}
+ local counts={main=0,aim=0,world=0,visual=0}
  for _,entry in ipairs(sectionPanels) do
   local hay=entry.name
   for _,d in ipairs(entry.panel:GetDescendants()) do if d:IsA("TextLabel") or d:IsA("TextButton") then hay=hay.." "..string.lower(d.Text or "") end end
@@ -157,7 +167,7 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
   entry.panel.Visible=match
   if match then counts[entry.page]=(counts[entry.page] or 0)+1 end
  end
- if q~="" and activePage~="home" and (counts[activePage] or 0)==0 then for _,page in ipairs({"aim","visual"}) do if counts[page]>0 then selectPage(page) break end end end
+ if q~="" and activePage~="home" and (counts[activePage] or 0)==0 then for _,page in ipairs({"main","aim","world","visual"}) do if counts[page]>0 then selectPage(page) break end end end
  refreshCanvas()
 end)
 local host={}
@@ -169,14 +179,19 @@ function host.CreateTab()
  function tab:AddSection(name,description)
   local isConfig=name=="NOIR CONFIG"
   local isVisual=name=="Visuals" or name=="Object ESP"
+  local isMain=string.sub(name,1,5)=="MAIN "
+  local isWorld=string.sub(name,1,6)=="WORLD "
   local col
   local page="aim"
   if isVisual then visualSectionCount+=1; col=visualCols[(visualSectionCount-1)%2+1]; page="visual"
+  elseif isMain then mainSectionCount+=1; col=mainCols[(mainSectionCount-1)%2+1]; page="main"
+  elseif isWorld then worldSectionCount+=1; col=worldCols[(worldSectionCount-1)%2+1]; page="world"
   else sectionCount+=1; col=cols[(sectionCount-1)%2+1] end
   local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.24,ClipsDescendants=true}); corner(panel,22); stroke(panel,C.border,.2)
   table.insert(sectionPanels,{panel=panel,page=page,name=string.lower(name.." "..(description or ""))})
   local bar=New("Frame",{Parent=panel,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(4,42),BackgroundColor3=C.accent}); corner(bar,4)
-  text(panel,name,19,UDim2.fromOffset(24,14)); if description and description~="" then text(panel,description,12,UDim2.fromOffset(24,42),true) end
+  local shownName=name:gsub("^MAIN • ",""):gsub("^WORLD • ","")
+  text(panel,shownName,19,UDim2.fromOffset(24,14)); if description and description~="" then text(panel,description,12,UDim2.fromOffset(24,42),true) end
   local holder=New("Frame",{Parent=panel,Position=UDim2.fromOffset(20,description~="" and 72 or 55),Size=UDim2.new(1,-40,0,0),AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1})
   New("UIListLayout",{Parent=holder,Padding=UDim.new(0,5),SortOrder=Enum.SortOrder.LayoutOrder})
   New("UIPadding",{Parent=holder,PaddingBottom=UDim.new(0,18)})
@@ -1223,7 +1238,169 @@ presetNames = function()
     return names
 end
 
+local utility = {
+    walkEnabled=false, walkSpeed=16, jumpEnabled=false, jumpPower=50,
+    autoGrab=false, grabSafety=true, gunAura=false, gunAuraRange=10,
+    touchFling=false, touchPower=100, antiFling=false, flingAll=false,
+    autoFlingSheriff=false, autoFlingMurderer=false, selectedPlayer=nil,
+    notifyDropped=false, notifyPickup=false, roundTimer=false, roleNotify=false,
+}
+local function localHumanoid()
+    local c=LocalPlayer.Character
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+local function localRoot()
+    local c=LocalPlayer.Character
+    return c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso"))
+end
+local function findDroppedGun()
+    for _,v in ipairs(Workspace:GetDescendants()) do
+        if string.lower(v.Name)=="gun" and not Players:GetPlayerFromCharacter(v:FindFirstAncestorOfClass("Model")) then
+            if v:IsA("BasePart") then return v end
+            if v:IsA("Tool") or v:IsA("Model") then return v:FindFirstChildWhichIsA("BasePart",true) end
+        end
+    end
+end
+local function grabGun()
+    local root,gun=localRoot(),findDroppedGun()
+    if not root or not gun then notify("Dropped gun not found",2) return false end
+    if utility.grabSafety and murderer==LocalPlayer then return false end
+    local old=root.CFrame
+    if type(firetouchinterest)=="function" then pcall(firetouchinterest,root,gun,0); task.wait(); pcall(firetouchinterest,root,gun,1)
+    else root.CFrame=gun.CFrame; task.wait(.18); root.CFrame=old end
+    return true
+end
+local function applyCharacterMods()
+    local hum=localHumanoid(); if not hum then return end
+    if utility.walkEnabled then hum.WalkSpeed=utility.walkSpeed end
+    if utility.jumpEnabled then hum.UseJumpPower=true; hum.JumpPower=utility.jumpPower end
+end
+LocalPlayer.CharacterAdded:Connect(function() task.wait(1); applyCharacterMods() end)
+local function fpsBoost()
+    for _,v in ipairs(Workspace:GetDescendants()) do
+        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then v.Enabled=false
+        elseif v:IsA("Decal") or v:IsA("Texture") then v.Transparency=1 end
+    end
+    settings().Rendering.QualityLevel=Enum.QualityLevel.Level01
+end
+local function lessLag()
+    for _,v in ipairs(Workspace:GetDescendants()) do if v:IsA("BasePart") then v.Material=Enum.Material.SmoothPlastic; v.Reflectance=0 end end
+end
+local function removeBarriers()
+    for _,v in ipairs(Workspace:GetDescendants()) do local n=string.lower(v.Name); if v:IsA("BasePart") and (string.find(n,"barrier",1,true) or string.find(n,"invisiblewall",1,true)) then v.CanCollide=false; v.Transparency=1 end end
+end
+local function nearestPlayer(maxDistance)
+    local root=localRoot(); if not root then return end
+    local best,dist
+    for _,p in ipairs(Players:GetPlayers()) do if p~=LocalPlayer and validTarget(p) then local r=p.Character and p.Character:FindFirstChild("HumanoidRootPart"); if r then local d=(r.Position-root.Position).Magnitude; if d<=(maxDistance or math.huge) and (not dist or d<dist) then best,dist=p,d end end end end
+    return best
+end
+local flingBusy=false
+local function flingPlayer(target)
+    if flingBusy or not target or target==LocalPlayer then return end
+    local root=localRoot(); local hum=localHumanoid(); local tr=target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+    if not root or not hum or not tr then return end
+    flingBusy=true
+    local old=root.CFrame; local bv=Instance.new("BodyAngularVelocity"); bv.AngularVelocity=Vector3.new(0,9e5,0); bv.MaxTorque=Vector3.new(0,math.huge,0); bv.P=math.huge; bv.Parent=root
+    local started=os.clock()
+    while os.clock()-started<1.35 and tr.Parent and hum.Health>0 do root.CFrame=tr.CFrame*CFrame.new(math.random(-2,2),0,math.random(-2,2)); root.AssemblyLinearVelocity=Vector3.new(9e4,9e4,9e4); RunService.Heartbeat:Wait() end
+    bv:Destroy(); root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero; root.CFrame=old; flingBusy=false
+end
+task.spawn(function()
+    local hadGun=false
+    while running do
+        applyCharacterMods()
+        local gun=findDroppedGun()
+        if utility.autoGrab and gun then grabGun() end
+        if utility.gunAura and gun then local root=localRoot(); if root and (root.Position-gun.Position).Magnitude<=utility.gunAuraRange then grabGun() end end
+        if utility.notifyDropped and gun and not hadGun then notify("Gun dropped",3) end
+        if utility.notifyPickup and not gun and hadGun then notify("Gun picked up",3) end
+        hadGun=gun~=nil
+        if utility.touchFling then local root=localRoot(); if root then local old=root.AssemblyLinearVelocity; root.AssemblyLinearVelocity=old*utility.touchPower+Vector3.new(0,utility.touchPower,0); RunService.RenderStepped:Wait(); if root.Parent then root.AssemblyLinearVelocity=old end end end
+        if utility.antiFling then for _,p in ipairs(Players:GetPlayers()) do if p~=LocalPlayer and p.Character then for _,part in ipairs(p.Character:GetChildren()) do if part:IsA("BasePart") then part.CanCollide=false end end end end end
+        if utility.autoFlingSheriff and not flingBusy then local p=findSheriff(); if p then flingPlayer(p) end end
+        if utility.autoFlingMurderer and not flingBusy then local p=validTarget(murderer) and murderer or findByKnife(); if p then flingPlayer(p) end end
+        if utility.flingAll and not flingBusy then for _,p in ipairs(Players:GetPlayers()) do if not utility.flingAll then break end; if p~=LocalPlayer then flingPlayer(p) end end end
+        task.wait(.15)
+    end
+end)
+
 local tab = host.CreateTab("Noir slient aim", "/mellnikovden968-web/CFG_PM2/refs/heads/main/icon")
+local roundTimerGui
+local function setRoundTimerVisible(value)
+    utility.roundTimer=value
+    if not value then if roundTimerGui then roundTimerGui:Destroy(); roundTimerGui=nil end return end
+    if roundTimerGui then return end
+    roundTimerGui=Instance.new("TextLabel")
+    roundTimerGui.Name="NoirRoundTimer"
+    roundTimerGui.Parent=gui
+    roundTimerGui.AnchorPoint=Vector2.new(.5,0)
+    roundTimerGui.Position=UDim2.new(.5,0,0,18)
+    roundTimerGui.Size=UDim2.fromOffset(180,46)
+    roundTimerGui.BackgroundColor3=C.panel
+    roundTimerGui.BackgroundTransparency=.2
+    roundTimerGui.TextColor3=C.text
+    roundTimerGui.TextSize=20
+    roundTimerGui.Font=Enum.Font.GothamBold
+    corner(roundTimerGui,15); stroke(roundTimerGui,C.border,.15)
+    task.spawn(function()
+        while utility.roundTimer and roundTimerGui and roundTimerGui.Parent do
+            local found
+            local pg=LocalPlayer:FindFirstChildOfClass("PlayerGui")
+            if pg then for _,v in ipairs(pg:GetDescendants()) do if v:IsA("TextLabel") and v~=roundTimerGui and (string.find(string.lower(v.Name),"timer",1,true) or string.match(v.Text,"^%d+:%d+$")) then found=v.Text; break end end end
+            roundTimerGui.Text=found or "ROUND ACTIVE"
+            task.wait(.35)
+        end
+    end)
+end
+local function showMurdererChance()
+    local rem=ReplicatedStorage:FindFirstChild("Remotes"); local extras=rem and rem:FindFirstChild("Extras"); local chance=extras and extras:FindFirstChild("GetChance")
+    if chance and chance:IsA("RemoteFunction") then local ok,v=pcall(function() return chance:InvokeServer() end); notify(ok and ("Murderer chance: "..tostring(v).."%") or "Chance unavailable",4) end
+end
+
+local selfMods = tab:AddSection("MAIN • SELF MODS", "Universal player controls")
+selfMods:AddToggle("Enable WalkSpeed", function(v) utility.walkEnabled=v; applyCharacterMods() end)
+selfMods:AddSlider("WalkSpeed", 8, 100, 16, function(v) utility.walkSpeed=v; applyCharacterMods() end)
+selfMods:AddToggle("Enable JumpPower", function(v) utility.jumpEnabled=v; applyCharacterMods() end)
+selfMods:AddSlider("JumpPower", 25, 150, 50, function(v) utility.jumpPower=v; applyCharacterMods() end)
+local serverMods = tab:AddSection("MAIN • SERVER", "MM2 round information")
+serverMods:AddToggle("Show Round Timer", setRoundTimerVisible)
+serverMods:AddToggle("Instant Role Detection", function(v) utility.roleNotify=v; if v then task.spawn(refreshTarget) end end)
+serverMods:AddToggle("Auto Notify Roles", function(v) utility.roleNotify=v end)
+serverMods:AddButton("Show Murderer Chance", showMurdererChance)
+serverMods:AddButton("Refresh Roles", refreshTarget)
+serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
+
+local worldServer = tab:AddSection("WORLD • SERVER", "Gun information and pickup")
+worldServer:AddButton("Grab Gun", grabGun)
+worldServer:AddToggle("Auto Grab Gun", function(v) utility.autoGrab=v end)
+worldServer:AddToggle("Auto Grab Gun Safety Check", function(v) utility.grabSafety=v end)
+worldServer:AddToggle("Gun Aura", function(v) utility.gunAura=v end)
+worldServer:AddSlider("Gun Aura Range", 5, 40, 10, function(v) utility.gunAuraRange=v end)
+worldServer:AddToggle("Auto Notify on Dropped Gun", function(v) utility.notifyDropped=v end)
+worldServer:AddToggle("Gun Pickup Notify", function(v) utility.notifyPickup=v end)
+local touchFlingSection = tab:AddSection("WORLD • TOUCH FLING", "Adapted from FlingGui")
+touchFlingSection:AddToggle("Touch Fling", function(v) utility.touchFling=v end)
+touchFlingSection:AddSlider("Touch Fling Power", 10, 300, 100, function(v) utility.touchPower=v end)
+local ultimateFlingSection = tab:AddSection("WORLD • ULTIMATE FLING", "Sheriff, Murderer and player targeting")
+local function playerNameList()
+    local list={"None"}
+    for _,p in ipairs(Players:GetPlayers()) do if p~=LocalPlayer then list[#list+1]=p.Name end end
+    table.sort(list,function(a,b) return a=="None" or (b~="None" and string.lower(a)<string.lower(b)) end)
+    return list
+end
+local selectedPlayerControl
+selectedPlayerControl=ultimateFlingSection:AddDropdown("Select Player",playerNameList(),function(name) utility.selectedPlayer=name~="None" and name or nil end)
+ultimateFlingSection:AddButton("Refresh Player List",function() if selectedPlayerControl and selectedPlayerControl.Refresh then selectedPlayerControl:Refresh(playerNameList(),utility.selectedPlayer or "None") end end)
+ultimateFlingSection:AddButton("Fling Selected Player",function() local p=utility.selectedPlayer and Players:FindFirstChild(utility.selectedPlayer); if p then task.spawn(flingPlayer,p) else notify("Select a player",2) end end)
+ultimateFlingSection:AddButton("Fling Sheriff / Hero",function() local p=findSheriff(); if p then task.spawn(flingPlayer,p) else notify("Sheriff not found",2) end end)
+ultimateFlingSection:AddButton("Fling Murderer",function() local p=validTarget(murderer) and murderer or findByKnife(); if p then task.spawn(flingPlayer,p) else notify("Murderer not found",2) end end)
+ultimateFlingSection:AddButton("Fling Nearest", function() task.spawn(flingPlayer,nearestPlayer()) end)
+ultimateFlingSection:AddToggle("Auto Fling Sheriff / Hero",function(v) utility.autoFlingSheriff=v end)
+ultimateFlingSection:AddToggle("Auto Fling Murderer",function(v) utility.autoFlingMurderer=v end)
+ultimateFlingSection:AddToggle("Fling All", function(v) utility.flingAll=v end)
+ultimateFlingSection:AddToggle("Anti Fling", function(v) utility.antiFling=v end)
+
 local main = tab:AddSection("Silent Aim", "")
 main:AddToggle("Enabled", toggle)
 main:AddToggle("Wall Check", function(value) config.wallCheck = value == true end)
