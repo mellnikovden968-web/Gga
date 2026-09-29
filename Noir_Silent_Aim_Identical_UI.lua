@@ -36,21 +36,21 @@ local function rescale()
 end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
 local fireLayer=New("Frame",{Parent=gui,Name="SpriteFireBorder",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1340,750),BackgroundTransparency=1,Visible=true})
-local FIRE_SHEET="rbxassetid://16860267787"
+local FIRE_SHEET="rbxasset://textures/particles/fire_main.dds"
 do
 local fireSprites={}
 local function fireSprite(pos,size,rot,phase)
- local im=New("ImageLabel",{Parent=fireLayer,Position=pos,Size=size,BackgroundTransparency=1,Image=FIRE_SHEET,ImageColor3=Color3.fromRGB(52,52,58),ImageTransparency=.46,Rotation=rot or 0,ScaleType=Enum.ScaleType.Stretch,ZIndex=1})
- im.ImageRectSize=Vector2.new(256,256); table.insert(fireSprites,{image=im,phase=phase or 0}); return im
+ local im=New("ImageLabel",{Parent=fireLayer,Position=pos,Size=size,BackgroundTransparency=1,Image=FIRE_SHEET,ImageColor3=Color3.fromRGB(3,3,5),ImageTransparency=.34,Rotation=rot or 0,ScaleType=Enum.ScaleType.Stretch,ZIndex=1})
+ im.ImageRectSize=Vector2.new(0,0); table.insert(fireSprites,{image=im,phase=phase or 0}); return im
 end
-for i=0,11 do fireSprite(UDim2.new(0,i*112,0,-22),UDim2.fromOffset(122,53),0,i%16); fireSprite(UDim2.new(0,i*112,1,-31),UDim2.fromOffset(122,53),180,(i*3)%16) end
-for i=0,5 do fireSprite(UDim2.new(0,-31,0,i*116),UDim2.fromOffset(62,105),-90,(i*5)%16); fireSprite(UDim2.new(1,-31,0,i*116),UDim2.fromOffset(62,105),90,(i*7)%16) end
+for i=0,11 do fireSprite(UDim2.new(0,i*112,0,-22),UDim2.fromOffset(122,38),0,i%16); fireSprite(UDim2.new(0,i*112,1,-31),UDim2.fromOffset(122,38),180,(i*3)%16) end
+for i=0,6 do fireSprite(UDim2.new(0,-23,0,i*106),UDim2.fromOffset(46,112),-90,(i*5)%16); fireSprite(UDim2.new(1,-23,0,i*106),UDim2.fromOffset(46,112),90,(i*7)%16) end
 local fireClock,fireLast=0,-1
 RunService.RenderStepped:Connect(function(dt)
  fireClock+=dt
  local base=math.floor(fireClock*10)
  if base==fireLast then return end; fireLast=base
- for _,v in ipairs(fireSprites) do if v.image.Parent then local f=(base+v.phase)%16; v.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
+ for _,v in ipairs(fireSprites) do if v.image.Parent then v.image.ImageTransparency=.30+.13*math.abs(math.sin((base+v.phase)*.22)) end end
 end)
 end
 local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.30,ClipsDescendants=true})
@@ -172,14 +172,14 @@ for i,d in ipairs(navDefs) do
  local flames={}
  local flameData={{UDim2.new(.5,-15,.5,-34),0},{UDim2.new(.5,-15,.5,4),180},{UDim2.new(.5,-34,.5,-15),-90},{UDim2.new(.5,4,.5,-15),90}}
  for fi,fd in ipairs(flameData) do
-  local flame=New("ImageLabel",{Parent=b,Position=fd[1],Size=UDim2.fromOffset(17,17),BackgroundTransparency=1,Image=FIRE_SHEET,ImageRectSize=Vector2.new(256,256),ImageColor3=Color3.fromRGB(48,48,54),ImageTransparency=.74,Rotation=fd[2],ZIndex=3})
+  local flame=New("ImageLabel",{Parent=b,Position=fd[1],Size=UDim2.fromOffset(17,17),BackgroundTransparency=1,Image=FIRE_SHEET,ImageRectSize=Vector2.new(0,0),ImageColor3=Color3.fromRGB(2,2,4),ImageTransparency=.66,Rotation=fd[2],ZIndex=3})
   local item={image=flame,phase=(i*3+fi*4)%16}; table.insert(flames,item); table.insert(navFireSprites,item)
  end
  navButtons[d[1]]=b; navIcons[d[1]]={icon=icon,glow=glow,ring=ring,flames=flames}
  b.MouseButton1Down:Connect(function()
   TweenService:Create(ring,TweenInfo.new(.13,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(33,33),Rotation=18}):Play()
   TweenService:Create(icon,TweenInfo.new(.13,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(23,23),Rotation=-10}):Play()
-  for _,f in ipairs(flames) do TweenService:Create(f.image,TweenInfo.new(.12),{ImageColor3=Color3.fromRGB(185,185,194),ImageTransparency=0,Size=UDim2.fromOffset(22,22)}):Play() end
+  for _,f in ipairs(flames) do TweenService:Create(f.image,TweenInfo.new(.12),{ImageColor3=Color3.fromRGB(18,18,22),ImageTransparency=.18,Size=UDim2.fromOffset(22,22)}):Play() end
  end)
  b.MouseButton1Up:Connect(function()
   TweenService:Create(ring,TweenInfo.new(.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(40,40),Rotation=0}):Play()
@@ -191,7 +191,7 @@ RunService.RenderStepped:Connect(function(dt)
  navFireClock+=dt
  local baseFrame=math.floor(navFireClock*9)
  if baseFrame==navFireLast then return end; navFireLast=baseFrame
- for _,data in ipairs(navFireSprites) do if data.image.Parent then local f=(baseFrame+data.phase)%16; data.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
+ for _,data in ipairs(navFireSprites) do if data.image.Parent then data.image.ImageTransparency=.58+.18*math.abs(math.sin((baseFrame+data.phase)*.25)) end end
 end)
 end
 search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
@@ -206,7 +206,7 @@ local function selectPage(page)
    TweenService:Create(data.icon,TweenInfo.new(.22,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{ImageColor3=active and C.text or C.dim,Size=active and UDim2.fromOffset(31,31) or UDim2.fromOffset(27,27),Rotation=active and 0 or -2}):Play()
    TweenService:Create(data.glow,TweenInfo.new(.22),{ImageTransparency=active and .42 or .86,Size=active and UDim2.fromOffset(44,44) or UDim2.fromOffset(35,35)}):Play()
    TweenService:Create(data.ring,TweenInfo.new(.28,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=active and UDim2.fromOffset(46,46) or UDim2.fromOffset(40,40),BackgroundTransparency=active and .06 or .24}):Play()
-   for _,f in ipairs(data.flames) do TweenService:Create(f.image,TweenInfo.new(.28),{ImageTransparency=active and .38 or .78,ImageColor3=active and Color3.fromRGB(115,115,124) or Color3.fromRGB(48,48,54),Size=active and UDim2.fromOffset(21,21) or UDim2.fromOffset(17,17)}):Play() end
+   for _,f in ipairs(data.flames) do TweenService:Create(f.image,TweenInfo.new(.28),{ImageTransparency=active and .38 or .78,ImageColor3=active and Color3.fromRGB(8,8,11) or Color3.fromRGB(2,2,4),Size=active and UDim2.fromOffset(21,21) or UDim2.fromOffset(17,17)}):Play() end
   end
  end
 end
@@ -500,12 +500,13 @@ local function objectKind(instance)
     local name = string.lower(instance.Name)
     if string.find(name, "coin", 1, true) then return "coin" end
     if string.find(name, "trap", 1, true) then return "trap" end
-    if name == "gun" or string.find(name, "droppedgun", 1, true) then return "gun" end
+    if name == "gundrop" or name == "gun" or string.find(name, "droppedgun", 1, true) or string.find(name, "gun_drop", 1, true) then return "gun" end
     if string.find(name, "knife", 1, true) and (string.find(name, "throw", 1, true) or not instance:FindFirstAncestorOfClass("Tool")) then return "knife" end
 end
 local function objectPart(instance)
     if instance:IsA("BasePart") then return instance end
     if instance:IsA("Model") then return instance.PrimaryPart or instance:FindFirstChildWhichIsA("BasePart", true) end
+    if instance:IsA("Tool") then return instance:FindFirstChildWhichIsA("BasePart", true) end
 end
 local function objectEnabled(kind, box)
     if box then return kind=="coin" and config.boxCoins or kind=="trap" and config.boxTraps or kind=="gun" and config.boxDroppedGun or kind=="knife" and config.boxThrowingKnives end
@@ -528,6 +529,14 @@ local function refreshObjectESP()
         end
     end
 end
+
+Workspace.DescendantAdded:Connect(function(instance)
+    local n=string.lower(instance.Name)
+    if n=="gundrop" or n=="gun" or string.find(n,"droppedgun",1,true) then task.defer(refreshObjectESP) end
+end)
+Workspace.DescendantRemoving:Connect(function(instance)
+    if string.lower(instance.Name)=="gundrop" then task.defer(refreshObjectESP) end
+end)
 
 local function setTarget(player)
     if not validTarget(player) then player = nil end
@@ -1070,9 +1079,9 @@ local function createShootButton()
         local flame=Instance.new("ImageLabel")
         flame.BackgroundTransparency=1
         flame.Image=FIRE_SHEET
-        flame.ImageColor3=Color3.fromRGB(45,45,51)
-        flame.ImageTransparency=.48
-        flame.ImageRectSize=Vector2.new(256,256)
+        flame.ImageColor3=Color3.fromRGB(2,2,4)
+        flame.ImageTransparency=.36
+        flame.ImageRectSize=Vector2.new(0,0)
         flame.Position=position
         flame.Size=size
         flame.Rotation=rotation
@@ -1082,12 +1091,12 @@ local function createShootButton()
         table.insert(shootFlames,{image=flame,phase=phase})
     end
     for i=0,5 do
-        addShootFlame(UDim2.new(i/6,-2,0,-15),UDim2.new(1/6,10,0,31),0,i*2)
-        addShootFlame(UDim2.new(i/6,-2,1,-47),UDim2.new(1/6,10,0,31),180,i*2+5)
+        addShootFlame(UDim2.new(i/6,-2,0,-15),UDim2.new(1/6,10,0,24),0,i*2)
+        addShootFlame(UDim2.new(i/6,-2,1,-47),UDim2.new(1/6,10,0,24),180,i*2+5)
     end
     for i=0,2 do
-        addShootFlame(UDim2.new(0,-23,i/3,-2),UDim2.new(0,31,1/3,8),-90,i*3+2)
-        addShootFlame(UDim2.new(1,-39,i/3,-2),UDim2.new(0,31,1/3,8),90,i*3+7)
+        addShootFlame(UDim2.new(0,-23,i/3,-2),UDim2.new(0,24,1/3,8),-90,i*3+2)
+        addShootFlame(UDim2.new(1,-39,i/3,-2),UDim2.new(0,24,1/3,8),90,i*3+7)
     end
     local shootFireClock,shootFireLast=0,-1
     local shootFireConnection
@@ -1097,8 +1106,7 @@ local function createShootButton()
         local baseFrame=math.floor(shootFireClock*10)
         if baseFrame==shootFireLast then return end; shootFireLast=baseFrame
         for _,data in ipairs(shootFlames) do
-            local frame=(baseFrame+data.phase)%16
-            data.image.ImageRectOffset=Vector2.new((frame%4)*256,math.floor(frame/4)*256)
+            data.image.ImageTransparency=.30+.13*math.abs(math.sin((baseFrame+data.phase)*.24))
         end
     end)
 
@@ -1157,7 +1165,7 @@ local function createShootButton()
             traceA.Position=UDim2.fromScale(0,.08); traceB.Position=UDim2.fromScale(1,.92)
             TweenService:Create(traceA,TweenInfo.new(.38,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(1,.08)}):Play()
             TweenService:Create(traceB,TweenInfo.new(.38,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(0,.92)}):Play()
-            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.16),{ImageColor3=Color3.fromRGB(145,145,154),ImageTransparency=0}):Play() end
+            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.16),{ImageColor3=Color3.fromRGB(15,15,19),ImageTransparency=.12}):Play() end
             sound:Play()
             local absolute = button.AbsolutePosition
             ripple.Position = UDim2.new(0, input.Position.X - absolute.X, 0, input.Position.Y - absolute.Y)
@@ -1186,7 +1194,7 @@ local function createShootButton()
             TweenService:Create(button,TweenInfo.new(.42,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=normalSize,TextSize=17,BackgroundColor3=Color3.fromRGB(8,8,10),BackgroundTransparency=.28}):Play()
             button.Text="Shoot Murder"
             traceA.Visible=false; traceB.Visible=false
-            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.45),{ImageColor3=Color3.fromRGB(45,45,51),ImageTransparency=.48}):Play() end
+            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.45),{ImageColor3=Color3.fromRGB(2,2,4),ImageTransparency=.36}):Play() end
         end
     end)
     button.Activated:Connect(function()
@@ -1429,8 +1437,15 @@ local function localRoot()
     return c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso"))
 end
 local function findDroppedGun()
+    local direct=Workspace:FindFirstChild("GunDrop",true)
+    if direct then
+        if direct:IsA("BasePart") then return direct end
+        local part=direct:FindFirstChildWhichIsA("BasePart",true)
+        if part then return part end
+    end
     for _,v in ipairs(Workspace:GetDescendants()) do
-        if string.lower(v.Name)=="gun" and not Players:GetPlayerFromCharacter(v:FindFirstAncestorOfClass("Model")) then
+        local n=string.lower(v.Name)
+        if (n=="gundrop" or n=="gun" or string.find(n,"droppedgun",1,true)) and not Players:GetPlayerFromCharacter(v:FindFirstAncestorOfClass("Model")) then
             if v:IsA("BasePart") then return v end
             if v:IsA("Tool") or v:IsA("Model") then return v:FindFirstChildWhichIsA("BasePart",true) end
         end
