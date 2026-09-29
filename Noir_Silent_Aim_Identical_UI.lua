@@ -10,7 +10,7 @@ local guiParent = CoreGui
 if type(gethui) == "function" then local ok,v=pcall(gethui); if ok and typeof(v)=="Instance" then guiParent=v end end
 pcall(function() local old=guiParent:FindFirstChild("NoirSilentAimUI"); if old then old:Destroy() end end)
 
-local NoirPersistence={data={toggles={},sliders={},dropdowns={},textboxes={},positions={}},token=0,path="NOIR.CONFIG/autosave.json"}
+local NoirPersistence={data={toggles={},sliders={},dropdowns={},textboxes={},positions={}},token=0,path="NOIR.CONFIG/autosave.json",safeLegacy={Enabled=true,["Wall Check"]=true,["Show Shoot Murder Button"]=true,["Lock Shoot Murder Button"]=true,["Knife Silent Aim"]=true,["Knife Wall Check"]=true,["Prioritize Sheriff"]=true,["Enable WalkSpeed"]=true,["Enable JumpPower"]=true,["Show Round Timer"]=true,["Instant Role Detection"]=true,["Auto Notify Roles"]=true,["Auto Grab Gun"]=true,["Auto Grab Gun Safety Check"]=true,["Gun Aura"]=true,["Auto Notify on Dropped Gun"]=true,["Gun Pickup Notify"]=true,["Touch Fling"]=true,["Auto Fling Sheriff / Hero"]=true,["Auto Fling Murderer"]=true,["Fling All"]=true,["Anti Fling"]=true}}
 do
  if type(readfile)=="function" then
   pcall(function()
@@ -66,9 +66,8 @@ local function rescale()
  scale.Scale=math.min(v.X/1450,v.Y/850,0.68)
 end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
-local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=NoirPersistence.GetPosition("window",UDim2.fromScale(.5,.5)),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.30,ClipsDescendants=true})
-local winScale=New("UIScale",{Parent=win,Scale=.82})
-TweenService:Create(winScale,TweenInfo.new(.48,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Scale=1}):Play()
+local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=NoirPersistence.GetPosition("window",UDim2.fromScale(.5,.5)),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.30,ClipsDescendants=true,Visible=false})
+local winScale=New("UIScale",{Parent=win,Scale=.68})
 corner(win,30); local winStroke=stroke(win,C.border,.08); winStroke.Thickness=2
 New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(25,25,28)),ColorSequenceKeypoint.new(.52,Color3.fromRGB(5,5,6)),ColorSequenceKeypoint.new(1,Color3.fromRGB(34,34,37))}),Rotation=18})
 task.spawn(function() while winStroke.Parent do TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(255,255,255),Transparency=.02}):Play(); task.wait(1.4); TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(75,75,82),Transparency=.4}):Play(); task.wait(1.4) end end)
@@ -168,7 +167,7 @@ local configCols={}
 for i=1,2 do configCols[i]=New("Frame",{Parent=configContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=configCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
 sidebar.Visible=false
 header.Position=UDim2.fromOffset(0,0); header.Size=UDim2.new(1,0,0,105)
-content.Position=UDim2.fromOffset(24,112); content.Size=UDim2.new(1,-48,1,-245); content.Visible=false
+content.Position=UDim2.fromOffset(24,112); content.Size=UDim2.new(1,-80,1,-275); content.Visible=false
 configContent.Position=content.Position; configContent.Size=content.Size
 local visualContent=content:Clone(); visualContent.Name="VisualContent"; visualContent.Parent=win; visualContent.Visible=false; visualContent:ClearAllChildren()
 local visualCols={}
@@ -275,13 +274,13 @@ local sectionPanels={}
 local controls={}
 local function refreshCanvas()
  task.defer(function()
-  local h=math.max(cols[1].AbsoluteSize.Y,cols[2].AbsoluteSize.Y)+130
+  local h=math.max(cols[1].AbsoluteSize.Y,cols[2].AbsoluteSize.Y)+165
   content.CanvasSize=UDim2.fromOffset(0,h)
-  local ch=math.max(configCols[1].AbsoluteSize.Y,configCols[2].AbsoluteSize.Y)+130
+  local ch=math.max(configCols[1].AbsoluteSize.Y,configCols[2].AbsoluteSize.Y)+165
   configContent.CanvasSize=UDim2.fromOffset(0,ch)
-  local vh=math.max(visualCols[1].AbsoluteSize.Y,visualCols[2].AbsoluteSize.Y)+130
+  local vh=math.max(visualCols[1].AbsoluteSize.Y,visualCols[2].AbsoluteSize.Y)+165
   visualContent.CanvasSize=UDim2.fromOffset(0,vh)
-  mainContent.CanvasSize=UDim2.fromOffset(0,math.max(mainCols[1].AbsoluteSize.Y,mainCols[2].AbsoluteSize.Y)+130)
+  mainContent.CanvasSize=UDim2.fromOffset(0,math.max(mainCols[1].AbsoluteSize.Y,mainCols[2].AbsoluteSize.Y)+165)
   worldContent.CanvasSize=UDim2.fromOffset(0,math.max(worldCols[1].AbsoluteSize.Y,worldCols[2].AbsoluteSize.Y)+130)
  end)
 end
@@ -329,7 +328,9 @@ function host.CreateTab()
    local r=New("Frame",{Parent=holder,Size=UDim2.new(1,0,0,h or 62),BackgroundTransparency=1}); text(r,label,16,UDim2.fromOffset(0,10)); return r
   end
   function api:AddToggle(label,callback)
-   local state=NoirPersistence.data.toggles[storagePrefix..label]==true; local r=row(label,52); local pill=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,8),Size=UDim2.fromOffset(64,34),BackgroundColor3=C.off,Text="",AutoButtonColor=false}); corner(pill,17); stroke(pill,C.border,.55)
+   local savedToggle=NoirPersistence.data.toggles[storagePrefix..label]
+   if savedToggle==nil and NoirPersistence.safeLegacy[label] then savedToggle=NoirPersistence.data.toggles[label]; if savedToggle~=nil then NoirPersistence.data.toggles[storagePrefix..label]=savedToggle; NoirPersistence.Save() end end
+   local state=savedToggle==true; local r=row(label,52); local pill=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,8),Size=UDim2.fromOffset(64,34),BackgroundColor3=C.off,Text="",AutoButtonColor=false}); corner(pill,17); stroke(pill,C.border,.55)
    local dot=New("Frame",{Parent=pill,Position=UDim2.fromOffset(4,4),Size=UDim2.fromOffset(26,26),BackgroundColor3=Color3.fromRGB(145,145,180)}); corner(dot,13)
    local function set(v,persist)
     state=v==true
@@ -345,7 +346,9 @@ function host.CreateTab()
    local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(68,68,74),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
   end
   function api:AddSlider(label,min,max,default,callback)
-   default=tonumber(NoirPersistence.data.sliders[storagePrefix..label]) or default
+   local savedSlider=NoirPersistence.data.sliders[storagePrefix..label]
+   if savedSlider==nil then savedSlider=NoirPersistence.data.sliders[label]; if savedSlider~=nil then NoirPersistence.data.sliders[storagePrefix..label]=savedSlider; NoirPersistence.Save() end end
+   default=tonumber(savedSlider) or default
    local r=row(label,68); local value=New("TextBox",{Parent=r,Position=UDim2.new(1,-72,0,5),Size=UDim2.fromOffset(72,30),BackgroundColor3=C.surface,BackgroundTransparency=.12,Text=tostring(default),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Center,ClearTextOnFocus=false}); corner(value,9); stroke(value,C.border,.4)
    local track=New("Frame",{Parent=r,Position=UDim2.new(0,0,1,-18),Size=UDim2.new(1,0,0,5),BackgroundColor3=C.off}); corner(track,3)
    local fill=New("Frame",{Parent=track,Size=UDim2.fromScale((default-min)/(max-min),1),BackgroundColor3=C.accent}); corner(fill,3)
@@ -1785,4 +1788,16 @@ end
 
 
 
+task.defer(function()
+    RunService.RenderStepped:Wait()
+    if not win.Parent then return end
+    local targetPosition=win.Position
+    win.Position=targetPosition+UDim2.fromOffset(0,32)
+    win.BackgroundTransparency=1
+    win.Rotation=-1.2
+    winScale.Scale=.68
+    win.Visible=true
+    TweenService:Create(win,TweenInfo.new(.56,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=targetPosition,BackgroundTransparency=.30,Rotation=0}):Play()
+    TweenService:Create(winScale,TweenInfo.new(.62,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Scale=1}):Play()
+end)
 notify("Lite V3 ready; feature is OFF", 4)
