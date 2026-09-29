@@ -39,18 +39,19 @@ local fireLayer=New("Frame",{Parent=gui,Name="SpriteFireBorder",AnchorPoint=Vect
 local FIRE_SHEET="rbxassetid://16860267787"
 local fireSprites={}
 local function fireSprite(pos,size,rot,phase)
- local im=New("ImageLabel",{Parent=fireLayer,Position=pos,Size=size,BackgroundTransparency=1,Image=FIRE_SHEET,ImageColor3=Color3.fromRGB(52,52,58),ImageTransparency=.06,Rotation=rot or 0,ScaleType=Enum.ScaleType.Stretch,ZIndex=1})
+ local im=New("ImageLabel",{Parent=fireLayer,Position=pos,Size=size,BackgroundTransparency=1,Image=FIRE_SHEET,ImageColor3=Color3.fromRGB(52,52,58),ImageTransparency=.46,Rotation=rot or 0,ScaleType=Enum.ScaleType.Stretch,ZIndex=1})
  im.ImageRectSize=Vector2.new(256,256); table.insert(fireSprites,{image=im,phase=phase or 0}); return im
 end
-for i=0,11 do fireSprite(UDim2.new(0,i*112,-0.03,-8),UDim2.fromOffset(122,105),0,i%16); fireSprite(UDim2.new(0,i*112,1,-97),UDim2.fromOffset(122,105),180,(i*3)%16) end
-for i=0,5 do fireSprite(UDim2.new(-.02,-42,0,i*116),UDim2.fromOffset(122,105),-90,(i*5)%16); fireSprite(UDim2.new(1,-80,0,i*116),UDim2.fromOffset(122,105),90,(i*7)%16) end
-local fireClock=0
+for i=0,11 do fireSprite(UDim2.new(0,i*112,0,-22),UDim2.fromOffset(122,53),0,i%16); fireSprite(UDim2.new(0,i*112,1,-31),UDim2.fromOffset(122,53),180,(i*3)%16) end
+for i=0,5 do fireSprite(UDim2.new(0,-31,0,i*116),UDim2.fromOffset(62,105),-90,(i*5)%16); fireSprite(UDim2.new(1,-31,0,i*116),UDim2.fromOffset(62,105),90,(i*7)%16) end
+local fireClock,fireLast=0,-1
 RunService.RenderStepped:Connect(function(dt)
  fireClock+=dt
- local base=math.floor(fireClock*16)
+ local base=math.floor(fireClock*10)
+ if base==fireLast then return end; fireLast=base
  for _,v in ipairs(fireSprites) do if v.image.Parent then local f=(base+v.phase)%16; v.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
 end)
-local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.16,ClipsDescendants=true})
+local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.30,ClipsDescendants=true})
 corner(win,30); local winStroke=stroke(win,C.border,.08); winStroke.Thickness=2
 New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(25,25,28)),ColorSequenceKeypoint.new(.52,Color3.fromRGB(5,5,6)),ColorSequenceKeypoint.new(1,Color3.fromRGB(34,34,37))}),Rotation=18})
 task.spawn(function() while winStroke.Parent do TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(255,255,255),Transparency=.02}):Play(); task.wait(1.4); TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(75,75,82),Transparency=.4}):Play(); task.wait(1.4) end end)
@@ -139,18 +140,18 @@ local worldContent=content:Clone(); worldContent.Name="WorldContent"; worldConte
 local worldCols={}
 for i=1,2 do worldCols[i]=New("Frame",{Parent=worldContent,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=worldCols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
 local dashboard=New("Frame",{Parent=win,Position=content.Position,Size=content.Size,BackgroundTransparency=1})
-local profile=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,22),Size=UDim2.fromOffset(500,180),BackgroundColor3=C.panel,BackgroundTransparency=.24}); corner(profile,22); stroke(profile,C.border,.15)
+local profile=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,22),Size=UDim2.fromOffset(500,180),BackgroundColor3=C.panel,BackgroundTransparency=.36}); corner(profile,22); stroke(profile,C.border,.15)
 local avatar=New("ImageLabel",{Parent=profile,Position=UDim2.fromOffset(24,28),Size=UDim2.fromOffset(118,118),BackgroundColor3=C.surface}); corner(avatar,28); stroke(avatar,C.accent,.05)
 task.spawn(function() local ok,img=pcall(function() return Players:GetUserThumbnailAsync(LocalPlayer.UserId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size180x180) end); if ok then avatar.Image=img end end)
 text(profile,LocalPlayer.DisplayName,25,UDim2.fromOffset(166,38)); text(profile,"@"..LocalPlayer.Name,16,UDim2.fromOffset(167,78),true); text(profile,"Noir Client • Connected",15,UDim2.fromOffset(167,112))
-local fpsCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(545,22),Size=UDim2.fromOffset(310,180),BackgroundColor3=C.panel,BackgroundTransparency=.24}); corner(fpsCard,22); stroke(fpsCard,C.border,.15)
+local fpsCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(545,22),Size=UDim2.fromOffset(310,180),BackgroundColor3=C.panel,BackgroundTransparency=.36}); corner(fpsCard,22); stroke(fpsCard,C.border,.15)
 text(fpsCard,"FPS",16,UDim2.fromOffset(24,25),true); local fpsText=text(fpsCard,"60",46,UDim2.fromOffset(24,62)); fpsText.TextColor3=C.text
-local pingCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(880,22),Size=UDim2.new(1,-900,0,180),BackgroundColor3=C.panel,BackgroundTransparency=.24}); corner(pingCard,22); stroke(pingCard,C.border,.15)
+local pingCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(880,22),Size=UDim2.new(1,-900,0,180),BackgroundColor3=C.panel,BackgroundTransparency=.36}); corner(pingCard,22); stroke(pingCard,C.border,.15)
 text(pingCard,"NETWORK LATENCY",16,UDim2.fromOffset(24,25),true); local pingText=text(pingCard,"-- ms",38,UDim2.fromOffset(24,66)); pingText.TextColor3=C.text
-local infoCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,225),Size=UDim2.new(1,-40,1,-245),BackgroundColor3=C.panel,BackgroundTransparency=.30}); corner(infoCard,24); stroke(infoCard,C.border,.18)
+local infoCard=New("Frame",{Parent=dashboard,Position=UDim2.fromOffset(20,225),Size=UDim2.new(1,-40,1,-245),BackgroundColor3=C.panel,BackgroundTransparency=.40}); corner(infoCard,24); stroke(infoCard,C.border,.18)
 text(infoCard,"NOIR SILENT AIM",28,UDim2.fromOffset(28,26)); text(infoCard,"Gun prediction • Knife prediction • Player and object ESP • Preset profiles",16,UDim2.fromOffset(29,68),true)
 local frameCounter,lastFps=0,os.clock(); RunService.RenderStepped:Connect(function() frameCounter+=1; local now=os.clock(); if now-lastFps>=1 then fpsText.Text=tostring(math.floor(frameCounter/(now-lastFps)+.5)); frameCounter=0; lastFps=now; local ok,v=pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end); pingText.Text=ok and (tostring(math.floor(v+.5)).." ms") or "-- ms" end end)
-local bottom=New("Frame",{Parent=win,AnchorPoint=Vector2.new(.5,1),Position=UDim2.new(.5,0,1,-18),Size=UDim2.fromOffset(650,70),BackgroundColor3=C.panel,BackgroundTransparency=.20}); corner(bottom,22); stroke(bottom,C.border,.1)
+local bottom=New("Frame",{Parent=win,AnchorPoint=Vector2.new(.5,1),Position=UDim2.new(.5,0,1,-18),Size=UDim2.fromOffset(650,70),BackgroundColor3=C.panel,BackgroundTransparency=.34}); corner(bottom,22); stroke(bottom,C.border,.1)
 local navButtons={}
 local navIcons={}
 local navFireSprites={}
@@ -168,24 +169,25 @@ for i,d in ipairs(navDefs) do
  local flames={}
  local flameData={{UDim2.new(.5,-15,.5,-34),0},{UDim2.new(.5,-15,.5,4),180},{UDim2.new(.5,-34,.5,-15),-90},{UDim2.new(.5,4,.5,-15),90}}
  for fi,fd in ipairs(flameData) do
-  local flame=New("ImageLabel",{Parent=b,Position=fd[1],Size=UDim2.fromOffset(30,30),BackgroundTransparency=1,Image=FIRE_SHEET,ImageRectSize=Vector2.new(256,256),ImageColor3=Color3.fromRGB(48,48,54),ImageTransparency=.56,Rotation=fd[2],ZIndex=3})
+  local flame=New("ImageLabel",{Parent=b,Position=fd[1],Size=UDim2.fromOffset(17,17),BackgroundTransparency=1,Image=FIRE_SHEET,ImageRectSize=Vector2.new(256,256),ImageColor3=Color3.fromRGB(48,48,54),ImageTransparency=.74,Rotation=fd[2],ZIndex=3})
   local item={image=flame,phase=(i*3+fi*4)%16}; table.insert(flames,item); table.insert(navFireSprites,item)
  end
  navButtons[d[1]]=b; navIcons[d[1]]={icon=icon,glow=glow,ring=ring,flames=flames}
  b.MouseButton1Down:Connect(function()
   TweenService:Create(ring,TweenInfo.new(.13,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(33,33),Rotation=18}):Play()
   TweenService:Create(icon,TweenInfo.new(.13,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(23,23),Rotation=-10}):Play()
-  for _,f in ipairs(flames) do TweenService:Create(f.image,TweenInfo.new(.12),{ImageColor3=Color3.fromRGB(185,185,194),ImageTransparency=0,Size=UDim2.fromOffset(37,37)}):Play() end
+  for _,f in ipairs(flames) do TweenService:Create(f.image,TweenInfo.new(.12),{ImageColor3=Color3.fromRGB(185,185,194),ImageTransparency=0,Size=UDim2.fromOffset(22,22)}):Play() end
  end)
  b.MouseButton1Up:Connect(function()
   TweenService:Create(ring,TweenInfo.new(.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(40,40),Rotation=0}):Play()
   TweenService:Create(icon,TweenInfo.new(.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(27,27),Rotation=0}):Play()
  end)
 end
-local navFireClock=0
+local navFireClock,navFireLast=0,-1
 RunService.RenderStepped:Connect(function(dt)
  navFireClock+=dt
- local baseFrame=math.floor(navFireClock*15)
+ local baseFrame=math.floor(navFireClock*9)
+ if baseFrame==navFireLast then return end; navFireLast=baseFrame
  for _,data in ipairs(navFireSprites) do if data.image.Parent then local f=(baseFrame+data.phase)%16; data.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
 end)
 search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
@@ -200,7 +202,7 @@ local function selectPage(page)
    TweenService:Create(data.icon,TweenInfo.new(.22,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{ImageColor3=active and C.text or C.dim,Size=active and UDim2.fromOffset(31,31) or UDim2.fromOffset(27,27),Rotation=active and 0 or -2}):Play()
    TweenService:Create(data.glow,TweenInfo.new(.22),{ImageTransparency=active and .42 or .86,Size=active and UDim2.fromOffset(44,44) or UDim2.fromOffset(35,35)}):Play()
    TweenService:Create(data.ring,TweenInfo.new(.28,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=active and UDim2.fromOffset(46,46) or UDim2.fromOffset(40,40),BackgroundTransparency=active and .06 or .24}):Play()
-   for _,f in ipairs(data.flames) do TweenService:Create(f.image,TweenInfo.new(.28),{ImageTransparency=active and .05 or .62,ImageColor3=active and Color3.fromRGB(115,115,124) or Color3.fromRGB(48,48,54),Size=active and UDim2.fromOffset(35,35) or UDim2.fromOffset(30,30)}):Play() end
+   for _,f in ipairs(data.flames) do TweenService:Create(f.image,TweenInfo.new(.28),{ImageTransparency=active and .38 or .78,ImageColor3=active and Color3.fromRGB(115,115,124) or Color3.fromRGB(48,48,54),Size=active and UDim2.fromOffset(21,21) or UDim2.fromOffset(17,17)}):Play() end
   end
  end
 end
@@ -255,7 +257,7 @@ function host.CreateTab()
   elseif isMain then mainSectionCount+=1; col=mainCols[(mainSectionCount-1)%2+1]; page="main"
   elseif isWorld then worldSectionCount+=1; col=worldCols[(worldSectionCount-1)%2+1]; page="world"
   else sectionCount+=1; col=cols[(sectionCount-1)%2+1] end
-  local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.24,ClipsDescendants=true}); corner(panel,22); stroke(panel,C.border,.2)
+  local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.36,ClipsDescendants=true}); corner(panel,22); stroke(panel,C.border,.2)
   table.insert(sectionPanels,{panel=panel,page=page,name=string.lower(name.." "..(description or ""))})
   local bar=New("Frame",{Parent=panel,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(4,42),BackgroundColor3=C.accent}); corner(bar,4)
   local shownName=name:gsub("^MAIN • ",""):gsub("^WORLD • ","")
@@ -1009,7 +1011,7 @@ local function createShootButton()
     button.Position = UDim2.new(0.5, 0, 0.5, 0)
     button.Size = UDim2.new(0, 260, 0, 96)
     button.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-    button.BackgroundTransparency = 0.08
+    button.BackgroundTransparency = 0.28
     button.BorderSizePixel = 0
     button.Text = "Shoot Murder"
     button.TextColor3 = Color3.fromRGB(245, 245, 248)
@@ -1065,7 +1067,7 @@ local function createShootButton()
         flame.BackgroundTransparency=1
         flame.Image=FIRE_SHEET
         flame.ImageColor3=Color3.fromRGB(45,45,51)
-        flame.ImageTransparency=.08
+        flame.ImageTransparency=.48
         flame.ImageRectSize=Vector2.new(256,256)
         flame.Position=position
         flame.Size=size
@@ -1076,19 +1078,20 @@ local function createShootButton()
         table.insert(shootFlames,{image=flame,phase=phase})
     end
     for i=0,5 do
-        addShootFlame(UDim2.new(i/6,-2,0,-15),UDim2.new(1/6,10,0,62),0,i*2)
-        addShootFlame(UDim2.new(i/6,-2,1,-47),UDim2.new(1/6,10,0,62),180,i*2+5)
+        addShootFlame(UDim2.new(i/6,-2,0,-15),UDim2.new(1/6,10,0,31),0,i*2)
+        addShootFlame(UDim2.new(i/6,-2,1,-47),UDim2.new(1/6,10,0,31),180,i*2+5)
     end
     for i=0,2 do
-        addShootFlame(UDim2.new(0,-23,i/3,-2),UDim2.new(0,62,1/3,8),-90,i*3+2)
-        addShootFlame(UDim2.new(1,-39,i/3,-2),UDim2.new(0,62,1/3,8),90,i*3+7)
+        addShootFlame(UDim2.new(0,-23,i/3,-2),UDim2.new(0,31,1/3,8),-90,i*3+2)
+        addShootFlame(UDim2.new(1,-39,i/3,-2),UDim2.new(0,31,1/3,8),90,i*3+7)
     end
-    local shootFireClock=0
+    local shootFireClock,shootFireLast=0,-1
     local shootFireConnection
     shootFireConnection=RunService.RenderStepped:Connect(function(dt)
         if not button.Parent then shootFireConnection:Disconnect() return end
         shootFireClock+=dt
-        local baseFrame=math.floor(shootFireClock*18)
+        local baseFrame=math.floor(shootFireClock*10)
+        if baseFrame==shootFireLast then return end; shootFireLast=baseFrame
         for _,data in ipairs(shootFlames) do
             local frame=(baseFrame+data.phase)%16
             data.image.ImageRectOffset=Vector2.new((frame%4)*256,math.floor(frame/4)*256)
@@ -1176,10 +1179,10 @@ local function createShootButton()
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
-            TweenService:Create(button,TweenInfo.new(.42,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=normalSize,TextSize=17,BackgroundColor3=Color3.fromRGB(8,8,10)}):Play()
+            TweenService:Create(button,TweenInfo.new(.42,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=normalSize,TextSize=17,BackgroundColor3=Color3.fromRGB(8,8,10),BackgroundTransparency=.28}):Play()
             button.Text="Shoot Murder"
             traceA.Visible=false; traceB.Visible=false
-            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.45),{ImageColor3=Color3.fromRGB(45,45,51),ImageTransparency=.08}):Play() end
+            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.45),{ImageColor3=Color3.fromRGB(45,45,51),ImageTransparency=.48}):Play() end
         end
     end)
     button.Activated:Connect(function()
