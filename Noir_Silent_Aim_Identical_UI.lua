@@ -210,11 +210,12 @@ function host.CreateTab()
    local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(68,68,74),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
   end
   function api:AddSlider(label,min,max,default,callback)
-   local r=row(label,76); local value=text(r,tostring(default),14,UDim2.new(1,-72,0,10)); value.Size=UDim2.fromOffset(72,22); value.TextXAlignment=Enum.TextXAlignment.Right
+   local r=row(label,76); local value=New("TextBox",{Parent=r,Position=UDim2.new(1,-72,0,5),Size=UDim2.fromOffset(72,30),BackgroundColor3=C.surface,BackgroundTransparency=.12,Text=tostring(default),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Center,ClearTextOnFocus=false}); corner(value,9); stroke(value,C.border,.4)
    local track=New("Frame",{Parent=r,Position=UDim2.new(0,0,1,-18),Size=UDim2.new(1,0,0,5),BackgroundColor3=C.off}); corner(track,3)
    local fill=New("Frame",{Parent=track,Size=UDim2.fromScale((default-min)/(max-min),1),BackgroundColor3=C.accent}); corner(fill,3)
    local current=default
-   local function set(v) current=math.clamp(math.floor((tonumber(v) or default)+.5),min,max); fill.Size=UDim2.fromScale((current-min)/(max-min),1); value.Text=tostring(current); callback(current) end
+   local function set(v) current=math.clamp(math.floor((tonumber(v) or current or default)+.5),min,max); fill.Size=UDim2.fromScale((current-min)/(max-min),1); value.Text=tostring(current); callback(current) end
+   value.FocusLost:Connect(function() set(value.Text) end)
    local drag=false; track.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true; set(min+(max-min)*math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)) end end); UIS.InputChanged:Connect(function(i) if drag and (i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseMovement) then set(min+(max-min)*math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)) end end); UIS.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.Touch or i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end end)
    return {SetValue=function(_,v)set(v)end}
   end
@@ -1345,11 +1346,26 @@ local function setRoundTimerVisible(value)
     corner(roundTimerGui,15); stroke(roundTimerGui,C.border,.15)
     task.spawn(function()
         while utility.roundTimer and roundTimerGui and roundTimerGui.Parent do
-            local found
+            local found, bestScore
             local pg=LocalPlayer:FindFirstChildOfClass("PlayerGui")
-            if pg then for _,v in ipairs(pg:GetDescendants()) do if v:IsA("TextLabel") and v~=roundTimerGui and (string.find(string.lower(v.Name),"timer",1,true) or string.match(v.Text,"^%d+:%d+$")) then found=v.Text; break end end end
-            roundTimerGui.Text=found or "ROUND ACTIVE"
-            task.wait(.35)
+            if pg then
+                for _,v in ipairs(pg:GetDescendants()) do
+                    if v:IsA("TextLabel") and v.Visible and v~=roundTimerGui then
+                        local raw=tostring(v.Text or ""):gsub("<.->",""):gsub("^%s+",""):gsub("%s+$","")
+                        local lowerName=string.lower(v.Name)
+                        local score
+                        if raw:match("^%d+%s*[mM]%s*%d+%s*[sS]$") then score=100
+                        elseif raw:match("^%d+:%d%d$") then score=95
+                        elseif raw:match("^%d+%s*[sS]$") then score=90
+                        elseif string.find(lowerName,"roundtimer",1,true) or string.find(lowerName,"gametimer",1,true) then score=80
+                        elseif string.find(lowerName,"timer",1,true) and raw:match("%d") then score=60
+                        elseif raw:match("^%d+$") and tonumber(raw) and tonumber(raw)<=15 then score=30 end
+                        if score and (not bestScore or score>bestScore) then found,bestScore=raw,score end
+                    end
+                end
+            end
+            roundTimerGui.Text=found or "WAITING"
+            task.wait(.2)
         end
     end)
 end
