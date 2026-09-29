@@ -218,7 +218,7 @@ function host.CreateTab()
  local tab={}
  function tab:AddSection(name,description)
   local isConfig=name=="NOIR CONFIG"
-  local isVisual=name=="Visuals" or name=="Object ESP" or string.sub(name,1,9)=="VISUAL • "
+  local isVisual=name=="Visuals" or name=="Object ESP" or string.find(name,"VISUAL",1,true)==1
   local isMain=string.sub(name,1,5)=="MAIN "
   local isWorld=string.sub(name,1,6)=="WORLD "
   local col
@@ -229,7 +229,6 @@ function host.CreateTab()
   else sectionCount+=1; col=cols[(sectionCount-1)%2+1] end
   local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.36,ClipsDescendants=true}); corner(panel,22); stroke(panel,C.border,.2)
   table.insert(sectionPanels,{panel=panel,page=page,name=string.lower(name.." "..(description or ""))})
-  local bar=New("Frame",{Parent=panel,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(4,42),BackgroundColor3=C.accent}); corner(bar,4)
   local shownName=name:gsub("^MAIN • ",""):gsub("^WORLD • ",""):gsub("^VISUAL • ","")
   text(panel,shownName,19,UDim2.fromOffset(24,14)); if description and description~="" then text(panel,description,12,UDim2.fromOffset(24,42),true) end
   local holder=New("Frame",{Parent=panel,Position=UDim2.fromOffset(20,description~="" and 72 or 55),Size=UDim2.new(1,-40,0,0),AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1})
