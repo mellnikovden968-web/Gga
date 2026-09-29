@@ -26,7 +26,7 @@ RunService.RenderStepped:Connect(function(dt)
  for i=#gradientStrokes,1,-1 do local g=gradientStrokes[i]; if g.Parent then g.Rotation=(g.Rotation+dt*42)%360 else table.remove(gradientStrokes,i) end end
 end)
 local function text(parent,value,size,pos,dim)
- return New("TextLabel",{Parent=parent,BackgroundTransparency=1,Text=value,TextColor3=dim and C.dim or C.text,TextSize=size,Font=Enum.Font.BuilderSansMedium,TextXAlignment=Enum.TextXAlignment.Left,Position=pos or UDim2.new(),Size=UDim2.new(1,0,0,size+8)})
+ return New("TextLabel",{Parent=parent,BackgroundTransparency=1,Text=value,TextColor3=dim and C.dim or C.text,TextSize=size,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,Position=pos or UDim2.new(),Size=UDim2.new(1,0,0,size+8)})
 end
 local gui=New("ScreenGui",{Name="NoirSilentAimUI",ResetOnSpawn=false,IgnoreGuiInset=true,ZIndexBehavior=Enum.ZIndexBehavior.Sibling,Parent=guiParent})
 local scale=New("UIScale",{Parent=gui,Scale=1})
@@ -56,20 +56,20 @@ corner(win,30); local winStroke=stroke(win,C.border,.08); winStroke.Thickness=2
 New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(25,25,28)),ColorSequenceKeypoint.new(.52,Color3.fromRGB(5,5,6)),ColorSequenceKeypoint.new(1,Color3.fromRGB(34,34,37))}),Rotation=18})
 task.spawn(function() while winStroke.Parent do TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(255,255,255),Transparency=.02}):Play(); task.wait(1.4); TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(75,75,82),Transparency=.4}):Play(); task.wait(1.4) end end)
 local sidebar=New("Frame",{Parent=win,Size=UDim2.fromOffset(250,690),BackgroundColor3=Color3.fromRGB(10,10,20),BackgroundTransparency=.13}); stroke(sidebar,C.border,.55)
-local logo=New("TextLabel",{Parent=sidebar,Position=UDim2.fromOffset(35,30),Size=UDim2.fromOffset(92,92),BackgroundColor3=Color3.fromRGB(18,18,20),Text="V",TextColor3=C.text,TextSize=62,Font=Enum.Font.BuilderSansBold}); corner(logo,22); stroke(logo,C.accent,.05)
+local logo=New("TextLabel",{Parent=sidebar,Position=UDim2.fromOffset(35,30),Size=UDim2.fromOffset(92,92),BackgroundColor3=Color3.fromRGB(18,18,20),Text="V",TextColor3=C.text,TextSize=62,Font=Enum.Font.GothamBold}); corner(logo,22); stroke(logo,C.accent,.05)
 New("UIGradient",{Parent=logo,Color=ColorSequence.new(C.text,C.accent),Rotation=90})
 text(sidebar,"V E L V E T",20,UDim2.fromOffset(35,132)); text(sidebar,"U I  L I B R A R Y",10,UDim2.fromOffset(38,162),true)
-local search=New("TextBox",{Parent=sidebar,Position=UDim2.fromOffset(20,205),Size=UDim2.fromOffset(210,48),BackgroundColor3=C.panel,PlaceholderText="  Search features...",Text="",TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.BuilderSansMedium,ClearTextOnFocus=false}); corner(search,12); stroke(search)
-local home=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,278),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(72,72,78),Text="⌂    Home                         5",TextColor3=C.text,TextSize=17,Font=Enum.Font.BuilderSansMedium,AutoButtonColor=false}); corner(home,12); stroke(home,C.accent,.05)
-local configsNav=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,346),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(20,20,34),Text="▣    Configs",TextColor3=C.dim,TextSize=17,Font=Enum.Font.BuilderSansMedium,AutoButtonColor=false})
+local search=New("TextBox",{Parent=sidebar,Position=UDim2.fromOffset(20,205),Size=UDim2.fromOffset(210,48),BackgroundColor3=C.panel,PlaceholderText="  Search features...",Text="",TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.Gotham,ClearTextOnFocus=false}); corner(search,12); stroke(search)
+local home=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,278),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(72,72,78),Text="⌂    Home                         5",TextColor3=C.text,TextSize=17,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(home,12); stroke(home,C.accent,.05)
+local configsNav=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,346),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(20,20,34),Text="▣    Configs",TextColor3=C.dim,TextSize=17,Font=Enum.Font.Gotham,AutoButtonColor=false})
 corner(configsNav,12); stroke(configsNav,C.border,.55)
 local status=New("Frame",{Parent=sidebar,Position=UDim2.fromOffset(18,590),Size=UDim2.fromOffset(214,78),BackgroundColor3=C.panel}); corner(status,14); stroke(status)
 text(status,"●  Connected",13,UDim2.fromOffset(16,10)); text(status,"Noir Client",16,UDim2.fromOffset(16,35));
 local header=New("Frame",{Parent=win,Position=UDim2.fromOffset(250,0),Size=UDim2.new(1,-250,0,110),BackgroundTransparency=1})
-local icon=New("TextLabel",{Parent=header,Position=UDim2.fromOffset(36,24),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="⊙",TextColor3=C.accent,TextSize=38,Font=Enum.Font.BuilderSansBold}); corner(icon,16); stroke(icon,C.accent,.25)
+local icon=New("TextLabel",{Parent=header,Position=UDim2.fromOffset(36,24),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="⊙",TextColor3=C.accent,TextSize=38,Font=Enum.Font.GothamBold}); corner(icon,16); stroke(icon,C.accent,.25)
 text(header,"Noir Silent Aim",30,UDim2.fromOffset(116,23)); text(header,"Murder Mystery 2",16,UDim2.fromOffset(117,61),true)
 local function topButton(txt,x,color)
- local b=New("TextButton",{Parent=header,Position=UDim2.new(1,x,0,25),Size=UDim2.fromOffset(43,43),BackgroundColor3=color or C.panel,Text=txt,TextColor3=C.text,TextSize=22,Font=Enum.Font.BuilderSansBold}); corner(b,13); return b
+ local b=New("TextButton",{Parent=header,Position=UDim2.new(1,x,0,25),Size=UDim2.fromOffset(43,43),BackgroundColor3=color or C.panel,Text=txt,TextColor3=C.text,TextSize=22,Font=Enum.Font.GothamBold}); corner(b,13); return b
 end
 local mini=topButton("−",-108,Color3.fromRGB(75,75,80)); local close=topButton("×",-58,Color3.fromRGB(62,62,68)); close.MouseButton1Click:Connect(function() gui:Destroy() end)
 
@@ -94,7 +94,7 @@ UIS.InputEnded:Connect(function(input)
  if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
 end)
 
-local restore=New("TextButton",{Parent=gui,AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,-22,.5,0),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="V",TextColor3=C.text,TextSize=30,Font=Enum.Font.BuilderSansBold,Visible=false,AutoButtonColor=false})
+local restore=New("TextButton",{Parent=gui,AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,-22,.5,0),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="V",TextColor3=C.text,TextSize=30,Font=Enum.Font.GothamBold,Visible=false,AutoButtonColor=false})
 corner(restore,20); stroke(restore,C.accent,.05)
 local restoreDragging=false
 local restoreMoved=false
@@ -242,7 +242,7 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 local host={}
 function host.Notify(title,duration)
- local toast=New("TextLabel",{Parent=gui,AnchorPoint=Vector2.new(1,1),Position=UDim2.new(1,-22,1,-22),Size=UDim2.fromOffset(330,58),BackgroundColor3=C.panel,Text="  "..tostring(title),TextColor3=C.text,TextSize=15,Font=Enum.Font.BuilderSansMedium,TextXAlignment=Enum.TextXAlignment.Left}); corner(toast,13); stroke(toast,C.accent,.15); task.delay(duration or 3,function() if toast.Parent then toast:Destroy() end end)
+ local toast=New("TextLabel",{Parent=gui,AnchorPoint=Vector2.new(1,1),Position=UDim2.new(1,-22,1,-22),Size=UDim2.fromOffset(330,58),BackgroundColor3=C.panel,Text="  "..tostring(title),TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left}); corner(toast,13); stroke(toast,C.accent,.15); task.delay(duration or 3,function() if toast.Parent then toast:Destroy() end end)
 end
 function host.CreateTab()
  local tab={}
@@ -277,10 +277,10 @@ function host.CreateTab()
    pill.MouseButton1Click:Connect(function() set(not state) end); return function(v) set(v==nil and not state or v) end
   end
   function api:AddButton(label,callback)
-   local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(68,68,74),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.BuilderSansMedium}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
+   local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(68,68,74),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
   end
   function api:AddSlider(label,min,max,default,callback)
-   local r=row(label,76); local value=New("TextBox",{Parent=r,Position=UDim2.new(1,-72,0,5),Size=UDim2.fromOffset(72,30),BackgroundColor3=C.surface,BackgroundTransparency=.12,Text=tostring(default),TextColor3=C.text,TextSize=14,Font=Enum.Font.BuilderSansMedium,TextXAlignment=Enum.TextXAlignment.Center,ClearTextOnFocus=false}); corner(value,9); stroke(value,C.border,.4)
+   local r=row(label,76); local value=New("TextBox",{Parent=r,Position=UDim2.new(1,-72,0,5),Size=UDim2.fromOffset(72,30),BackgroundColor3=C.surface,BackgroundTransparency=.12,Text=tostring(default),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Center,ClearTextOnFocus=false}); corner(value,9); stroke(value,C.border,.4)
    local track=New("Frame",{Parent=r,Position=UDim2.new(0,0,1,-18),Size=UDim2.new(1,0,0,5),BackgroundColor3=C.off}); corner(track,3)
    local fill=New("Frame",{Parent=track,Size=UDim2.fromScale((default-min)/(max-min),1),BackgroundColor3=C.accent}); corner(fill,3)
    local current=default
@@ -291,14 +291,14 @@ function host.CreateTab()
   end
   function api:AddDropdown(label,values,callback)
    local r=row(label,64); local idx=1
-   local b=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),Size=UDim2.fromOffset(190,42),BackgroundColor3=C.surface,Text=tostring(values[1] or "None").."  ⌄",TextColor3=C.text,TextSize=14,Font=Enum.Font.BuilderSansMedium,ZIndex=5}); corner(b,10); stroke(b)
+   local b=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),Size=UDim2.fromOffset(190,42),BackgroundColor3=C.surface,Text=tostring(values[1] or "None").."  ⌄",TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,ZIndex=5}); corner(b,10); stroke(b)
    local popup
    local function close() if popup then popup:Destroy(); popup=nil end end
    local function set(v) local found=table.find(values,v); if found then idx=found end; b.Text=tostring(values[idx] or "None").."  ⌄"; if values[idx]~=nil then callback(values[idx]) end end
    local function open()
     close(); popup=New("ScrollingFrame",{Parent=gui,Position=UDim2.fromOffset(b.AbsolutePosition.X/scale.Scale,(b.AbsolutePosition.Y+b.AbsoluteSize.Y+4)/scale.Scale),Size=UDim2.fromOffset(b.AbsoluteSize.X/scale.Scale,math.min(#values*38,190)),CanvasSize=UDim2.fromOffset(0,#values*38),BackgroundColor3=C.surface,BorderSizePixel=0,ScrollBarThickness=4,ZIndex=50}); corner(popup,10); stroke(popup,C.accent,.2)
     local list=New("UIListLayout",{Parent=popup,SortOrder=Enum.SortOrder.LayoutOrder})
-    for _,v in ipairs(values) do local item=New("TextButton",{Parent=popup,Size=UDim2.new(1,0,0,38),BackgroundTransparency=1,Text=tostring(v),TextColor3=C.text,TextSize=14,Font=Enum.Font.BuilderSansMedium,ZIndex=51}); item.MouseButton1Click:Connect(function() set(v); close() end) end
+    for _,v in ipairs(values) do local item=New("TextButton",{Parent=popup,Size=UDim2.new(1,0,0,38),BackgroundTransparency=1,Text=tostring(v),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,ZIndex=51}); item.MouseButton1Click:Connect(function() set(v); close() end) end
    end
    b.MouseButton1Click:Connect(function() if popup then close() else open() end end)
    local ctl={}
@@ -307,7 +307,7 @@ function host.CreateTab()
    return ctl
   end
   function api:AddTextBox(label,callback)
-   local r=row(label,72); local box=New("TextBox",{Parent=r,Position=UDim2.fromOffset(0,30),Size=UDim2.new(1,0,0,38),BackgroundColor3=C.surface,Text="",PlaceholderText=label,TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.BuilderSansMedium,ClearTextOnFocus=false}); corner(box,9); stroke(box); box.FocusLost:Connect(function()callback(box.Text)end); return {SetValue=function(_,v)box.Text=tostring(v)end}
+   local r=row(label,72); local box=New("TextBox",{Parent=r,Position=UDim2.fromOffset(0,30),Size=UDim2.new(1,0,0,38),BackgroundColor3=C.surface,Text="",PlaceholderText=label,TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.Gotham,ClearTextOnFocus=false}); corner(box,9); stroke(box); box.FocusLost:Connect(function()callback(box.Text)end); return {SetValue=function(_,v)box.Text=tostring(v)end}
   end
   function api:AddLabel(label) local r=row(label,44); return r end
   return api
@@ -1017,7 +1017,7 @@ local function createShootButton()
     button.TextColor3 = Color3.fromRGB(245, 245, 248)
     button.TextSize = 17
     button.TextWrapped = true
-    button.Font = Enum.Font.BuilderSansMedium
+    button.Font = Enum.Font.Gotham
     button.ClipsDescendants = false
     button.AutoButtonColor = false
     button.ZIndex = 5
@@ -1512,7 +1512,7 @@ local function setRoundTimerVisible(value)
     roundTimerGui.BackgroundTransparency=.2
     roundTimerGui.TextColor3=C.text
     roundTimerGui.TextSize=20
-    roundTimerGui.Font=Enum.Font.BuilderSansBold
+    roundTimerGui.Font=Enum.Font.GothamBold
     corner(roundTimerGui,15); stroke(roundTimerGui,C.border,.15)
     task.spawn(function()
         while utility.roundTimer and roundTimerGui and roundTimerGui.Parent do
