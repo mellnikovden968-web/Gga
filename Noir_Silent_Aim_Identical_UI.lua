@@ -322,6 +322,10 @@ local previousEstimatedVelocity = Vector3.zero
 local estimatedAcceleration = Vector3.zero
 local lastAutoTune = 0
 local roundTimerEndsAt
+local roundPendingStart
+local instantRoleDetection = false
+local autoNotifyRoles = false
+local announcedRoles = {}
 
 local function notify(text, time)
     if type(host.Notify) == "function" then
@@ -484,17 +488,25 @@ local function consumeData(data)
         elseif normalized == "sheriff" then resolved = "sheriff"
         elseif normalized == "hero" then resolved = "hero"
         else resolved = "innocent" end
-        if roleCache[player.UserId] ~= resolved then rolesChanged = true; roleCache[player.UserId] = resolved end
+        if roleCache[player.UserId] ~= resolved then
+            rolesChanged = true
+            roleCache[player.UserId] = resolved
+            if autoNotifyRoles and resolved ~= "innocent" and announcedRoles[player.UserId] ~= resolved then
+                announcedRoles[player.UserId] = resolved
+                notify(player.Name .. " is " .. string.upper(resolved), 5)
+            end
+        end
     end
-    if foundMurderer then setTarget(foundMurderer) end
+    if foundMurderer then
+        setTarget(foundMurderer)
+        if not roundTimerEndsAt and not roundPendingStart then roundPendingStart = os.clock() + 10 end
+    end
     if rolesChanged then refreshESP() end
     return foundMurderer ~= nil
 end
 
 local function getPlayerDataRemote()
-    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-    local extras = remotes and remotes:FindFirstChild("Extras")
-    local remote = extras and extras:FindFirstChild("GetPlayerData")
+    local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
     return remote and remote:IsA("RemoteFunction") and remote or nil
 end
 
@@ -1080,13 +1092,13 @@ local gameplay = remotes and remotes:FindFirstChild("Gameplay")
 if gameplay then
     local roundEnd = gameplay:FindFirstChild("RoundEndFade")
     if roundEnd and roundEnd:IsA("RemoteEvent") then
-        roundEnd.OnClientEvent:Connect(function() murderer = nil; roundTimerEndsAt = nil end)
+        roundEnd.OnClientEvent:Connect(function() murderer = nil; roundTimerEndsAt = nil; roundPendingStart = nil; table.clear(announcedRoles) end)
     end
     for _, name in ipairs({"Fade", "PlayerDataChanged", "RoleSelect", "RoundStart"}) do
         local event = gameplay:FindFirstChild(name)
         if event and event:IsA("RemoteEvent") then
             event.OnClientEvent:Connect(function(...)
-                if name == "RoundStart" or name == "RoleSelect" then roundTimerEndsAt = os.clock() + 180 end
+                if name == "RoundStart" then roundTimerEndsAt = os.clock() + 180; roundPendingStart = nil end
                 local found = false
                 for index = 1, select("#", ...) do
                     local value = select(index, ...)
@@ -1096,6 +1108,18 @@ if gameplay then
             end)
         end
     end
+end
+
+local function connectRoleEvent(remote)
+    if remote and remote:IsA("RemoteEvent") then
+        remote.OnClientEvent:Connect(function(...)
+            for i=1,select("#",...) do local value=select(i,...); if typeof(value)=="table" and consumeData(value) then break end end
+            if remote.Name=="RoleSelect" and not roundPendingStart and not roundTimerEndsAt then roundPendingStart=os.clock()+10 end
+        end)
+    end
+end
+for _,eventName in ipairs({"Fade","UpdatePlayerData","RoleSelect","PlayerDataChanged"}) do
+    connectRoleEvent(ReplicatedStorage:FindFirstChild(eventName,true))
 end
 
 Players.PlayerRemoving:Connect(function(player)
@@ -1110,7 +1134,7 @@ task.spawn(function()
             local ok, data = pcall(function() return remote:InvokeServer() end)
             if ok and typeof(data) == "table" then consumeData(data) end
         end
-        task.wait(1)
+        task.wait(instantRoleDetection and 0.15 or 1)
     end
 end)
 
@@ -1366,7 +1390,11 @@ local function setRoundTimerVisible(value)
                     end
                 end
             end
-            if not found and roundTimerEndsAt then
+            if roundPendingStart then
+                local pre=math.ceil(roundPendingStart-os.clock())
+                if pre>0 then found=tostring(pre) else roundPendingStart=nil; roundTimerEndsAt=os.clock()+180 end
+            end
+            if roundTimerEndsAt then
                 local left=math.max(0,math.floor(roundTimerEndsAt-os.clock()+.5))
                 if left>0 then found=string.format("%dm %02ds",math.floor(left/60),left%60) else roundTimerEndsAt=nil end
             end
@@ -1387,8 +1415,8 @@ selfMods:AddToggle("Enable JumpPower", function(v) utility.jumpEnabled=v; applyC
 selfMods:AddSlider("JumpPower", 25, 150, 50, function(v) utility.jumpPower=v; applyCharacterMods() end)
 local serverMods = tab:AddSection("MAIN • SERVER", "MM2 round information")
 serverMods:AddToggle("Show Round Timer", setRoundTimerVisible)
-serverMods:AddToggle("Instant Role Detection", function(v) utility.roleNotify=v; if v then task.spawn(refreshTarget) end end)
-serverMods:AddToggle("Auto Notify Roles", function(v) utility.roleNotify=v end)
+serverMods:AddToggle("Instant Role Detection", function(v) instantRoleDetection=v; if v then task.spawn(refreshTarget) end end)
+serverMods:AddToggle("Auto Notify Roles", function(v) autoNotifyRoles=v; if not v then table.clear(announcedRoles) else task.spawn(refreshTarget) end end)
 serverMods:AddButton("Show Murderer Chance", showMurdererChance)
 serverMods:AddButton("Refresh Roles", refreshTarget)
 serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
