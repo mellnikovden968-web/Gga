@@ -1,4 +1,3 @@
-local __NOIR_OK,__NOIR_ERR=xpcall(function()
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -38,6 +37,7 @@ end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
 local fireLayer=New("Frame",{Parent=gui,Name="SpriteFireBorder",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1340,750),BackgroundTransparency=1,Visible=true})
 local FIRE_SHEET="rbxassetid://16860267787"
+do
 local fireSprites={}
 local function fireSprite(pos,size,rot,phase)
  local im=New("ImageLabel",{Parent=fireLayer,Position=pos,Size=size,BackgroundTransparency=1,Image=FIRE_SHEET,ImageColor3=Color3.fromRGB(52,52,58),ImageTransparency=.46,Rotation=rot or 0,ScaleType=Enum.ScaleType.Stretch,ZIndex=1})
@@ -52,6 +52,7 @@ RunService.RenderStepped:Connect(function(dt)
  if base==fireLast then return end; fireLast=base
  for _,v in ipairs(fireSprites) do if v.image.Parent then local f=(base+v.phase)%16; v.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
 end)
+end
 local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.30,ClipsDescendants=true})
 corner(win,30); local winStroke=stroke(win,C.border,.08); winStroke.Thickness=2
 New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(25,25,28)),ColorSequenceKeypoint.new(.52,Color3.fromRGB(5,5,6)),ColorSequenceKeypoint.new(1,Color3.fromRGB(34,34,37))}),Rotation=18})
@@ -155,6 +156,7 @@ local frameCounter,lastFps=0,os.clock(); RunService.RenderStepped:Connect(functi
 local bottom=New("Frame",{Parent=win,AnchorPoint=Vector2.new(.5,1),Position=UDim2.new(.5,0,1,-18),Size=UDim2.fromOffset(650,70),BackgroundColor3=C.panel,BackgroundTransparency=.34}); corner(bottom,22); stroke(bottom,C.border,.1)
 local navButtons={}
 local navIcons={}
+do
 local navFireSprites={}
 local navDefs={
  {"main",16898613509,Vector2.new(820,147),"Home"},
@@ -191,6 +193,7 @@ RunService.RenderStepped:Connect(function(dt)
  if baseFrame==navFireLast then return end; navFireLast=baseFrame
  for _,data in ipairs(navFireSprites) do if data.image.Parent then local f=(baseFrame+data.phase)%16; data.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
 end)
+end
 search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
 local activePage="home"
 local function selectPage(page)
@@ -1704,16 +1707,3 @@ end
 
 
 notify("Lite V3 ready; feature is OFF", 4)
-
-end,function(e)
- local message=tostring(e)
- if debug and type(debug.traceback)=="function" then
-  local ok,trace=pcall(debug.traceback,message,2)
-  if ok and trace then message=trace end
- end
- return message
-end)
-if not __NOIR_OK then
- warn("[NOIR REAL ERROR] "..tostring(__NOIR_ERR))
- pcall(function() game:GetService("StarterGui"):SetCore("SendNotification",{Title="NOIR ERROR",Text=tostring(__NOIR_ERR),Duration=12}) end)
-end
