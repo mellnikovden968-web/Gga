@@ -15,9 +15,18 @@ local function New(class,props)
  local x=Instance.new(class); for k,v in pairs(props or {}) do if k~="Parent" then x[k]=v end end; x.Parent=props and props.Parent; return x
 end
 local function corner(x,r) New("UICorner",{CornerRadius=UDim.new(0,r or 12),Parent=x}) end
-local function stroke(x,col,tr) return New("UIStroke",{Color=col or C.border,Transparency=tr or .35,Thickness=1,Parent=x}) end
+local gradientStrokes={}
+local function stroke(x,col,tr)
+ local s=New("UIStroke",{Color=col or C.border,Transparency=tr or .35,Thickness=1,Parent=x})
+ local g=New("UIGradient",{Parent=s,Rotation=0,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(42,42,48)),ColorSequenceKeypoint.new(.18,Color3.fromRGB(245,245,248)),ColorSequenceKeypoint.new(.38,Color3.fromRGB(82,82,90)),ColorSequenceKeypoint.new(.58,Color3.fromRGB(255,255,255)),ColorSequenceKeypoint.new(.8,Color3.fromRGB(62,62,70)),ColorSequenceKeypoint.new(1,Color3.fromRGB(210,210,216))})})
+ table.insert(gradientStrokes,g)
+ return s
+end
+RunService.RenderStepped:Connect(function(dt)
+ for i=#gradientStrokes,1,-1 do local g=gradientStrokes[i]; if g.Parent then g.Rotation=(g.Rotation+dt*42)%360 else table.remove(gradientStrokes,i) end end
+end)
 local function text(parent,value,size,pos,dim)
- return New("TextLabel",{Parent=parent,BackgroundTransparency=1,Text=value,TextColor3=dim and C.dim or C.text,TextSize=size,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,Position=pos or UDim2.new(),Size=UDim2.new(1,0,0,size+8)})
+ return New("TextLabel",{Parent=parent,BackgroundTransparency=1,Text=value,TextColor3=dim and C.dim or C.text,TextSize=size,Font=Enum.Font.BuilderSansMedium,TextXAlignment=Enum.TextXAlignment.Left,Position=pos or UDim2.new(),Size=UDim2.new(1,0,0,size+8)})
 end
 local gui=New("ScreenGui",{Name="NoirSilentAimUI",ResetOnSpawn=false,IgnoreGuiInset=true,ZIndexBehavior=Enum.ZIndexBehavior.Sibling,Parent=guiParent})
 local scale=New("UIScale",{Parent=gui,Scale=1})
@@ -26,25 +35,40 @@ local function rescale()
  scale.Scale=math.min(v.X/1360,v.Y/760,0.80)
 end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
+local fireLayer=New("Frame",{Parent=gui,Name="SpriteFireBorder",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1340,750),BackgroundTransparency=1,Visible=true})
+local FIRE_SHEET="rbxassetid://16860267787"
+local fireSprites={}
+local function fireSprite(pos,size,rot,phase)
+ local im=New("ImageLabel",{Parent=fireLayer,Position=pos,Size=size,BackgroundTransparency=1,Image=FIRE_SHEET,ImageColor3=Color3.fromRGB(52,52,58),ImageTransparency=.06,Rotation=rot or 0,ScaleType=Enum.ScaleType.Stretch,ZIndex=1})
+ im.ImageRectSize=Vector2.new(256,256); table.insert(fireSprites,{image=im,phase=phase or 0}); return im
+end
+for i=0,11 do fireSprite(UDim2.new(0,i*112,-0.03,-8),UDim2.fromOffset(122,105),0,i%16); fireSprite(UDim2.new(0,i*112,1,-97),UDim2.fromOffset(122,105),180,(i*3)%16) end
+for i=0,5 do fireSprite(UDim2.new(-.02,-42,0,i*116),UDim2.fromOffset(122,105),-90,(i*5)%16); fireSprite(UDim2.new(1,-80,0,i*116),UDim2.fromOffset(122,105),90,(i*7)%16) end
+local fireClock=0
+RunService.RenderStepped:Connect(function(dt)
+ fireClock+=dt
+ local base=math.floor(fireClock*16)
+ for _,v in ipairs(fireSprites) do if v.image.Parent then local f=(base+v.phase)%16; v.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
+end)
 local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.16,ClipsDescendants=true})
 corner(win,30); local winStroke=stroke(win,C.border,.08); winStroke.Thickness=2
 New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(25,25,28)),ColorSequenceKeypoint.new(.52,Color3.fromRGB(5,5,6)),ColorSequenceKeypoint.new(1,Color3.fromRGB(34,34,37))}),Rotation=18})
 task.spawn(function() while winStroke.Parent do TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(255,255,255),Transparency=.02}):Play(); task.wait(1.4); TweenService:Create(winStroke,TweenInfo.new(1.4,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{Color=Color3.fromRGB(75,75,82),Transparency=.4}):Play(); task.wait(1.4) end end)
 local sidebar=New("Frame",{Parent=win,Size=UDim2.fromOffset(250,690),BackgroundColor3=Color3.fromRGB(10,10,20),BackgroundTransparency=.13}); stroke(sidebar,C.border,.55)
-local logo=New("TextLabel",{Parent=sidebar,Position=UDim2.fromOffset(35,30),Size=UDim2.fromOffset(92,92),BackgroundColor3=Color3.fromRGB(18,18,20),Text="V",TextColor3=C.text,TextSize=62,Font=Enum.Font.GothamBold}); corner(logo,22); stroke(logo,C.accent,.05)
+local logo=New("TextLabel",{Parent=sidebar,Position=UDim2.fromOffset(35,30),Size=UDim2.fromOffset(92,92),BackgroundColor3=Color3.fromRGB(18,18,20),Text="V",TextColor3=C.text,TextSize=62,Font=Enum.Font.BuilderSansBold}); corner(logo,22); stroke(logo,C.accent,.05)
 New("UIGradient",{Parent=logo,Color=ColorSequence.new(C.text,C.accent),Rotation=90})
 text(sidebar,"V E L V E T",20,UDim2.fromOffset(35,132)); text(sidebar,"U I  L I B R A R Y",10,UDim2.fromOffset(38,162),true)
-local search=New("TextBox",{Parent=sidebar,Position=UDim2.fromOffset(20,205),Size=UDim2.fromOffset(210,48),BackgroundColor3=C.panel,PlaceholderText="  Search features...",Text="",TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.Gotham,ClearTextOnFocus=false}); corner(search,12); stroke(search)
-local home=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,278),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(72,72,78),Text="⌂    Home                         5",TextColor3=C.text,TextSize=17,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(home,12); stroke(home,C.accent,.05)
-local configsNav=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,346),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(20,20,34),Text="▣    Configs",TextColor3=C.dim,TextSize=17,Font=Enum.Font.Gotham,AutoButtonColor=false})
+local search=New("TextBox",{Parent=sidebar,Position=UDim2.fromOffset(20,205),Size=UDim2.fromOffset(210,48),BackgroundColor3=C.panel,PlaceholderText="  Search features...",Text="",TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.BuilderSansMedium,ClearTextOnFocus=false}); corner(search,12); stroke(search)
+local home=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,278),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(72,72,78),Text="⌂    Home                         5",TextColor3=C.text,TextSize=17,Font=Enum.Font.BuilderSansMedium,AutoButtonColor=false}); corner(home,12); stroke(home,C.accent,.05)
+local configsNav=New("TextButton",{Parent=sidebar,Position=UDim2.fromOffset(18,346),Size=UDim2.fromOffset(214,58),BackgroundColor3=Color3.fromRGB(20,20,34),Text="▣    Configs",TextColor3=C.dim,TextSize=17,Font=Enum.Font.BuilderSansMedium,AutoButtonColor=false})
 corner(configsNav,12); stroke(configsNav,C.border,.55)
 local status=New("Frame",{Parent=sidebar,Position=UDim2.fromOffset(18,590),Size=UDim2.fromOffset(214,78),BackgroundColor3=C.panel}); corner(status,14); stroke(status)
 text(status,"●  Connected",13,UDim2.fromOffset(16,10)); text(status,"Noir Client",16,UDim2.fromOffset(16,35));
 local header=New("Frame",{Parent=win,Position=UDim2.fromOffset(250,0),Size=UDim2.new(1,-250,0,110),BackgroundTransparency=1})
-local icon=New("TextLabel",{Parent=header,Position=UDim2.fromOffset(36,24),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="⊙",TextColor3=C.accent,TextSize=38,Font=Enum.Font.GothamBold}); corner(icon,16); stroke(icon,C.accent,.25)
+local icon=New("TextLabel",{Parent=header,Position=UDim2.fromOffset(36,24),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="⊙",TextColor3=C.accent,TextSize=38,Font=Enum.Font.BuilderSansBold}); corner(icon,16); stroke(icon,C.accent,.25)
 text(header,"Noir Silent Aim",30,UDim2.fromOffset(116,23)); text(header,"Murder Mystery 2",16,UDim2.fromOffset(117,61),true)
 local function topButton(txt,x,color)
- local b=New("TextButton",{Parent=header,Position=UDim2.new(1,x,0,25),Size=UDim2.fromOffset(43,43),BackgroundColor3=color or C.panel,Text=txt,TextColor3=C.text,TextSize=22,Font=Enum.Font.GothamBold}); corner(b,13); return b
+ local b=New("TextButton",{Parent=header,Position=UDim2.new(1,x,0,25),Size=UDim2.fromOffset(43,43),BackgroundColor3=color or C.panel,Text=txt,TextColor3=C.text,TextSize=22,Font=Enum.Font.BuilderSansBold}); corner(b,13); return b
 end
 local mini=topButton("−",-108,Color3.fromRGB(75,75,80)); local close=topButton("×",-58,Color3.fromRGB(62,62,68)); close.MouseButton1Click:Connect(function() gui:Destroy() end)
 
@@ -62,14 +86,14 @@ UIS.InputChanged:Connect(function(input)
   local half=win.AbsoluteSize/2
   local desired=Vector2.new(startPos.X.Scale*view.X+startPos.X.Offset*scale.Scale+delta.X,startPos.Y.Scale*view.Y+startPos.Y.Offset*scale.Scale+delta.Y)
   desired=Vector2.new(math.clamp(desired.X,half.X,view.X-half.X),math.clamp(desired.Y,half.Y,view.Y-half.Y))
-  win.Position=UDim2.fromOffset(desired.X/scale.Scale,desired.Y/scale.Scale)
+  win.Position=UDim2.fromOffset(desired.X/scale.Scale,desired.Y/scale.Scale); fireLayer.Position=win.Position
  end
 end)
 UIS.InputEnded:Connect(function(input)
  if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
 end)
 
-local restore=New("TextButton",{Parent=gui,AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,-22,.5,0),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="V",TextColor3=C.text,TextSize=30,Font=Enum.Font.GothamBold,Visible=false,AutoButtonColor=false})
+local restore=New("TextButton",{Parent=gui,AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,-22,.5,0),Size=UDim2.fromOffset(62,62),BackgroundColor3=C.panel,Text="V",TextColor3=C.text,TextSize=30,Font=Enum.Font.BuilderSansBold,Visible=false,AutoButtonColor=false})
 corner(restore,20); stroke(restore,C.accent,.05)
 local restoreDragging=false
 local restoreMoved=false
@@ -93,8 +117,8 @@ end)
 UIS.InputEnded:Connect(function(input)
  if restoreDragging and (input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1) then restoreDragging=false end
 end)
-mini.MouseButton1Click:Connect(function() win.Visible=false; restore.Visible=true end)
-restore.MouseButton1Click:Connect(function() if restoreMoved then restoreMoved=false return end; restore.Visible=false; win.Visible=true end)
+mini.MouseButton1Click:Connect(function() win.Visible=false; fireLayer.Visible=false; restore.Visible=true end)
+restore.MouseButton1Click:Connect(function() if restoreMoved then restoreMoved=false return end; restore.Visible=false; win.Visible=true; fireLayer.Visible=true end)
 local content=New("ScrollingFrame",{Parent=win,Position=UDim2.fromOffset(275,110),Size=UDim2.new(1,-300,1,-130),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=7,ScrollBarImageColor3=C.accent,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollingDirection=Enum.ScrollingDirection.Y,ScrollingEnabled=true,Active=true,ElasticBehavior=Enum.ElasticBehavior.WhenScrollable,VerticalScrollBarInset=Enum.ScrollBarInset.Always})
 local cols={}
 for i=1,2 do cols[i]=New("Frame",{Parent=content,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=cols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
@@ -128,13 +152,57 @@ text(infoCard,"NOIR SILENT AIM",28,UDim2.fromOffset(28,26)); text(infoCard,"Gun 
 local frameCounter,lastFps=0,os.clock(); RunService.RenderStepped:Connect(function() frameCounter+=1; local now=os.clock(); if now-lastFps>=1 then fpsText.Text=tostring(math.floor(frameCounter/(now-lastFps)+.5)); frameCounter=0; lastFps=now; local ok,v=pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end); pingText.Text=ok and (tostring(math.floor(v+.5)).." ms") or "-- ms" end end)
 local bottom=New("Frame",{Parent=win,AnchorPoint=Vector2.new(.5,1),Position=UDim2.new(.5,0,1,-18),Size=UDim2.fromOffset(650,70),BackgroundColor3=C.panel,BackgroundTransparency=.20}); corner(bottom,22); stroke(bottom,C.border,.1)
 local navButtons={}
-local navDefs={{"main","⌂  MAIN"},{"aim","◎  COMBAT"},{"world","◇  WORLD"},{"visual","◈  VISUALS"}}
-for i,d in ipairs(navDefs) do local b=New("TextButton",{Parent=bottom,Position=UDim2.fromOffset(10+(i-1)*158,10),Size=UDim2.fromOffset(151,50),BackgroundColor3=C.surface,Text=d[2],TextColor3=C.dim,TextSize=16,Font=Enum.Font.Gotham,AutoButtonColor=false}); corner(b,15); navButtons[d[1]]=b end
+local navIcons={}
+local navFireSprites={}
+local navDefs={
+ {"main",16898613509,Vector2.new(820,147),"Home"},
+ {"aim",16898613777,Vector2.new(967,759),"Combat"},
+ {"world",16898613509,Vector2.new(771,563),"World"},
+ {"visual",16898613353,Vector2.new(771,563),"Visuals"}
+}
+for i,d in ipairs(navDefs) do
+ local b=New("TextButton",{Parent=bottom,Position=UDim2.fromOffset(10+(i-1)*158,10),Size=UDim2.fromOffset(151,50),BackgroundColor3=C.surface,Text="",AutoButtonColor=false,Name=d[4]}); corner(b,15); stroke(b,C.border,.68)
+ local ring=New("Frame",{Parent=b,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(40,40),BackgroundColor3=Color3.fromRGB(8,8,10),BackgroundTransparency=.24,ZIndex=2}); corner(ring,20); local ringStroke=stroke(ring,C.border,.28); ringStroke.Thickness=1.5
+ local glow=New("ImageLabel",{Parent=b,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(35,35),BackgroundTransparency=1,Image="rbxassetid://"..d[2],ImageRectSize=Vector2.new(48,48),ImageRectOffset=d[3],ImageColor3=Color3.fromRGB(205,205,212),ImageTransparency=.78,ZIndex=3})
+ local icon=New("ImageLabel",{Parent=b,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(27,27),BackgroundTransparency=1,Image="rbxassetid://"..d[2],ImageRectSize=Vector2.new(48,48),ImageRectOffset=d[3],ImageColor3=C.dim,ZIndex=4})
+ local flames={}
+ local flameData={{UDim2.new(.5,-15,.5,-34),0},{UDim2.new(.5,-15,.5,4),180},{UDim2.new(.5,-34,.5,-15),-90},{UDim2.new(.5,4,.5,-15),90}}
+ for fi,fd in ipairs(flameData) do
+  local flame=New("ImageLabel",{Parent=b,Position=fd[1],Size=UDim2.fromOffset(30,30),BackgroundTransparency=1,Image=FIRE_SHEET,ImageRectSize=Vector2.new(256,256),ImageColor3=Color3.fromRGB(48,48,54),ImageTransparency=.56,Rotation=fd[2],ZIndex=3})
+  local item={image=flame,phase=(i*3+fi*4)%16}; table.insert(flames,item); table.insert(navFireSprites,item)
+ end
+ navButtons[d[1]]=b; navIcons[d[1]]={icon=icon,glow=glow,ring=ring,flames=flames}
+ b.MouseButton1Down:Connect(function()
+  TweenService:Create(ring,TweenInfo.new(.13,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(33,33),Rotation=18}):Play()
+  TweenService:Create(icon,TweenInfo.new(.13,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(23,23),Rotation=-10}):Play()
+  for _,f in ipairs(flames) do TweenService:Create(f.image,TweenInfo.new(.12),{ImageColor3=Color3.fromRGB(185,185,194),ImageTransparency=0,Size=UDim2.fromOffset(37,37)}):Play() end
+ end)
+ b.MouseButton1Up:Connect(function()
+  TweenService:Create(ring,TweenInfo.new(.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(40,40),Rotation=0}):Play()
+  TweenService:Create(icon,TweenInfo.new(.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(27,27),Rotation=0}):Play()
+ end)
+end
+local navFireClock=0
+RunService.RenderStepped:Connect(function(dt)
+ navFireClock+=dt
+ local baseFrame=math.floor(navFireClock*15)
+ for _,data in ipairs(navFireSprites) do if data.image.Parent then local f=(baseFrame+data.phase)%16; data.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
+end)
 search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
 local activePage="home"
 local function selectPage(page)
  activePage=page; dashboard.Visible=page=="home"; mainContent.Visible=page=="main"; content.Visible=page=="aim"; worldContent.Visible=page=="world"; visualContent.Visible=page=="visual"; configContent.Visible=false
- for name,b in pairs(navButtons) do b.BackgroundColor3=name==page and Color3.fromRGB(78,78,84) or C.surface; b.TextColor3=name==page and C.text or C.dim end
+ for name,b in pairs(navButtons) do
+  local active=name==page
+  TweenService:Create(b,TweenInfo.new(.22,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{BackgroundColor3=active and Color3.fromRGB(72,72,79) or C.surface}):Play()
+  local data=navIcons[name]
+  if data then
+   TweenService:Create(data.icon,TweenInfo.new(.22,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{ImageColor3=active and C.text or C.dim,Size=active and UDim2.fromOffset(31,31) or UDim2.fromOffset(27,27),Rotation=active and 0 or -2}):Play()
+   TweenService:Create(data.glow,TweenInfo.new(.22),{ImageTransparency=active and .42 or .86,Size=active and UDim2.fromOffset(44,44) or UDim2.fromOffset(35,35)}):Play()
+   TweenService:Create(data.ring,TweenInfo.new(.28,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=active and UDim2.fromOffset(46,46) or UDim2.fromOffset(40,40),BackgroundTransparency=active and .06 or .24}):Play()
+   for _,f in ipairs(data.flames) do TweenService:Create(f.image,TweenInfo.new(.28),{ImageTransparency=active and .05 or .62,ImageColor3=active and Color3.fromRGB(115,115,124) or Color3.fromRGB(48,48,54),Size=active and UDim2.fromOffset(35,35) or UDim2.fromOffset(30,30)}):Play() end
+  end
+ end
 end
 for name,b in pairs(navButtons) do b.MouseButton1Click:Connect(function() if activePage==name then selectPage("home") else selectPage(name) end end) end
 selectPage("home")
@@ -172,7 +240,7 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 local host={}
 function host.Notify(title,duration)
- local toast=New("TextLabel",{Parent=gui,AnchorPoint=Vector2.new(1,1),Position=UDim2.new(1,-22,1,-22),Size=UDim2.fromOffset(330,58),BackgroundColor3=C.panel,Text="  "..tostring(title),TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left}); corner(toast,13); stroke(toast,C.accent,.15); task.delay(duration or 3,function() if toast.Parent then toast:Destroy() end end)
+ local toast=New("TextLabel",{Parent=gui,AnchorPoint=Vector2.new(1,1),Position=UDim2.new(1,-22,1,-22),Size=UDim2.fromOffset(330,58),BackgroundColor3=C.panel,Text="  "..tostring(title),TextColor3=C.text,TextSize=15,Font=Enum.Font.BuilderSansMedium,TextXAlignment=Enum.TextXAlignment.Left}); corner(toast,13); stroke(toast,C.accent,.15); task.delay(duration or 3,function() if toast.Parent then toast:Destroy() end end)
 end
 function host.CreateTab()
  local tab={}
@@ -207,10 +275,10 @@ function host.CreateTab()
    pill.MouseButton1Click:Connect(function() set(not state) end); return function(v) set(v==nil and not state or v) end
   end
   function api:AddButton(label,callback)
-   local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(68,68,74),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
+   local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(68,68,74),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.BuilderSansMedium}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
   end
   function api:AddSlider(label,min,max,default,callback)
-   local r=row(label,76); local value=New("TextBox",{Parent=r,Position=UDim2.new(1,-72,0,5),Size=UDim2.fromOffset(72,30),BackgroundColor3=C.surface,BackgroundTransparency=.12,Text=tostring(default),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Center,ClearTextOnFocus=false}); corner(value,9); stroke(value,C.border,.4)
+   local r=row(label,76); local value=New("TextBox",{Parent=r,Position=UDim2.new(1,-72,0,5),Size=UDim2.fromOffset(72,30),BackgroundColor3=C.surface,BackgroundTransparency=.12,Text=tostring(default),TextColor3=C.text,TextSize=14,Font=Enum.Font.BuilderSansMedium,TextXAlignment=Enum.TextXAlignment.Center,ClearTextOnFocus=false}); corner(value,9); stroke(value,C.border,.4)
    local track=New("Frame",{Parent=r,Position=UDim2.new(0,0,1,-18),Size=UDim2.new(1,0,0,5),BackgroundColor3=C.off}); corner(track,3)
    local fill=New("Frame",{Parent=track,Size=UDim2.fromScale((default-min)/(max-min),1),BackgroundColor3=C.accent}); corner(fill,3)
    local current=default
@@ -221,14 +289,14 @@ function host.CreateTab()
   end
   function api:AddDropdown(label,values,callback)
    local r=row(label,64); local idx=1
-   local b=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),Size=UDim2.fromOffset(190,42),BackgroundColor3=C.surface,Text=tostring(values[1] or "None").."  ⌄",TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,ZIndex=5}); corner(b,10); stroke(b)
+   local b=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),Size=UDim2.fromOffset(190,42),BackgroundColor3=C.surface,Text=tostring(values[1] or "None").."  ⌄",TextColor3=C.text,TextSize=14,Font=Enum.Font.BuilderSansMedium,ZIndex=5}); corner(b,10); stroke(b)
    local popup
    local function close() if popup then popup:Destroy(); popup=nil end end
    local function set(v) local found=table.find(values,v); if found then idx=found end; b.Text=tostring(values[idx] or "None").."  ⌄"; if values[idx]~=nil then callback(values[idx]) end end
    local function open()
     close(); popup=New("ScrollingFrame",{Parent=gui,Position=UDim2.fromOffset(b.AbsolutePosition.X/scale.Scale,(b.AbsolutePosition.Y+b.AbsoluteSize.Y+4)/scale.Scale),Size=UDim2.fromOffset(b.AbsoluteSize.X/scale.Scale,math.min(#values*38,190)),CanvasSize=UDim2.fromOffset(0,#values*38),BackgroundColor3=C.surface,BorderSizePixel=0,ScrollBarThickness=4,ZIndex=50}); corner(popup,10); stroke(popup,C.accent,.2)
     local list=New("UIListLayout",{Parent=popup,SortOrder=Enum.SortOrder.LayoutOrder})
-    for _,v in ipairs(values) do local item=New("TextButton",{Parent=popup,Size=UDim2.new(1,0,0,38),BackgroundTransparency=1,Text=tostring(v),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,ZIndex=51}); item.MouseButton1Click:Connect(function() set(v); close() end) end
+    for _,v in ipairs(values) do local item=New("TextButton",{Parent=popup,Size=UDim2.new(1,0,0,38),BackgroundTransparency=1,Text=tostring(v),TextColor3=C.text,TextSize=14,Font=Enum.Font.BuilderSansMedium,ZIndex=51}); item.MouseButton1Click:Connect(function() set(v); close() end) end
    end
    b.MouseButton1Click:Connect(function() if popup then close() else open() end end)
    local ctl={}
@@ -237,7 +305,7 @@ function host.CreateTab()
    return ctl
   end
   function api:AddTextBox(label,callback)
-   local r=row(label,72); local box=New("TextBox",{Parent=r,Position=UDim2.fromOffset(0,30),Size=UDim2.new(1,0,0,38),BackgroundColor3=C.surface,Text="",PlaceholderText=label,TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.Gotham,ClearTextOnFocus=false}); corner(box,9); stroke(box); box.FocusLost:Connect(function()callback(box.Text)end); return {SetValue=function(_,v)box.Text=tostring(v)end}
+   local r=row(label,72); local box=New("TextBox",{Parent=r,Position=UDim2.fromOffset(0,30),Size=UDim2.new(1,0,0,38),BackgroundColor3=C.surface,Text="",PlaceholderText=label,TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.BuilderSansMedium,ClearTextOnFocus=false}); corner(box,9); stroke(box); box.FocusLost:Connect(function()callback(box.Text)end); return {SetValue=function(_,v)box.Text=tostring(v)end}
   end
   function api:AddLabel(label) local r=row(label,44); return r end
   return api
@@ -939,46 +1007,110 @@ local function createShootButton()
     button.Name = "ShootMurderer"
     button.AnchorPoint = Vector2.new(0.5, 0.5)
     button.Position = UDim2.new(0.5, 0, 0.5, 0)
-    button.Size = UDim2.new(0, 200, 0, 75)
-    button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    button.BackgroundTransparency = 0.9
+    button.Size = UDim2.new(0, 260, 0, 96)
+    button.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+    button.BackgroundTransparency = 0.08
     button.BorderSizePixel = 0
-    button.Text = "Shoot Murderer"
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.TextSize = 24
+    button.Text = "Shoot Murder"
+    button.TextColor3 = Color3.fromRGB(245, 245, 248)
+    button.TextSize = 17
     button.TextWrapped = true
-    button.Font = Enum.Font.Jura
-    button.ClipsDescendants = true
+    button.Font = Enum.Font.BuilderSansMedium
+    button.ClipsDescendants = false
     button.AutoButtonColor = false
     button.ZIndex = 5
     button.Parent = shootGui
     shootButton = button
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 5)
+    corner.CornerRadius = UDim.new(0, 28)
     corner.Parent = button
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(255, 255, 255)
-    stroke.Thickness = 1.5
+    stroke.Thickness = 2
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = button
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 20, 20)),
-        ColorSequenceKeypoint.new(0.75, Color3.fromRGB(20, 20, 140)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 40, 120))
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)),
+        ColorSequenceKeypoint.new(0.22, Color3.fromRGB(250, 250, 252)),
+        ColorSequenceKeypoint.new(0.48, Color3.fromRGB(70, 70, 78)),
+        ColorSequenceKeypoint.new(0.72, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52))
     })
     gradient.Parent = stroke
-    task.spawn(function()
-        while button.Parent do
-            gradient.Rotation = (gradient.Rotation + 1) % 360
-            RunService.RenderStepped:Wait()
+    table.insert(gradientStrokes,gradient)
+
+    local innerStroke = Instance.new("UIStroke")
+    innerStroke.Color = Color3.fromRGB(105, 105, 112)
+    innerStroke.Transparency = 0.5
+    innerStroke.Thickness = 1
+    innerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    innerStroke.Parent = button
+    local innerGradient = gradient:Clone()
+    innerGradient.Rotation = 180
+    innerGradient.Parent = innerStroke
+    table.insert(gradientStrokes,innerGradient)
+
+    local fireAura = Instance.new("Frame")
+    fireAura.Name = "NoirSpriteFire"
+    fireAura.BackgroundTransparency = 1
+    fireAura.Position = UDim2.new(0, -30, 0, -34)
+    fireAura.Size = UDim2.new(1, 60, 1, 68)
+    fireAura.ZIndex = 3
+    fireAura.Parent = button
+    local shootFlames = {}
+    local function addShootFlame(position,size,rotation,phase)
+        local flame=Instance.new("ImageLabel")
+        flame.BackgroundTransparency=1
+        flame.Image=FIRE_SHEET
+        flame.ImageColor3=Color3.fromRGB(45,45,51)
+        flame.ImageTransparency=.08
+        flame.ImageRectSize=Vector2.new(256,256)
+        flame.Position=position
+        flame.Size=size
+        flame.Rotation=rotation
+        flame.ScaleType=Enum.ScaleType.Stretch
+        flame.ZIndex=3
+        flame.Parent=fireAura
+        table.insert(shootFlames,{image=flame,phase=phase})
+    end
+    for i=0,5 do
+        addShootFlame(UDim2.new(i/6,-2,0,-15),UDim2.new(1/6,10,0,62),0,i*2)
+        addShootFlame(UDim2.new(i/6,-2,1,-47),UDim2.new(1/6,10,0,62),180,i*2+5)
+    end
+    for i=0,2 do
+        addShootFlame(UDim2.new(0,-23,i/3,-2),UDim2.new(0,62,1/3,8),-90,i*3+2)
+        addShootFlame(UDim2.new(1,-39,i/3,-2),UDim2.new(0,62,1/3,8),90,i*3+7)
+    end
+    local shootFireClock=0
+    local shootFireConnection
+    shootFireConnection=RunService.RenderStepped:Connect(function(dt)
+        if not button.Parent then shootFireConnection:Disconnect() return end
+        shootFireClock+=dt
+        local baseFrame=math.floor(shootFireClock*18)
+        for _,data in ipairs(shootFlames) do
+            local frame=(baseFrame+data.phase)%16
+            data.image.ImageRectOffset=Vector2.new((frame%4)*256,math.floor(frame/4)*256)
         end
     end)
 
+    local traceA=Instance.new("Frame")
+    traceA.AnchorPoint=Vector2.new(.5,.5)
+    traceA.Position=UDim2.fromScale(0,.08)
+    traceA.Size=UDim2.fromOffset(8,8)
+    traceA.BackgroundColor3=Color3.new(1,1,1)
+    traceA.BorderSizePixel=0
+    traceA.ZIndex=10
+    traceA.Parent=button
+    local traceB=traceA:Clone(); traceB.Position=UDim2.fromScale(1,.92); traceB.Parent=button
+    local tc1=Instance.new("UICorner"); tc1.CornerRadius=UDim.new(1,0); tc1.Parent=traceA
+    local tc2=Instance.new("UICorner"); tc2.CornerRadius=UDim.new(1,0); tc2.Parent=traceB
+    traceA.Visible=false; traceB.Visible=false
+
     local ripple = Instance.new("Frame")
     ripple.Name = "@ripple"
-    ripple.BackgroundColor3 = Color3.fromRGB(0, 155, 255)
+    ripple.BackgroundColor3 = Color3.fromRGB(235, 235, 240)
     ripple.BackgroundTransparency = 1
     ripple.AnchorPoint = Vector2.new(0.5, 0.5)
     ripple.Size = UDim2.new(0, 0, 0, 0)
@@ -995,8 +1127,8 @@ local function createShootButton()
     sound.Volume = 0.5
     sound.Parent = button
 
-    local normalSize = UDim2.new(0, 200, 0, 75)
-    local pressedSize = UDim2.new(0, 220, 0, 82)
+    local normalSize = UDim2.new(0, 260, 0, 96)
+    local pressedSize = UDim2.new(0, 276, 0, 102)
     local pressTween = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
     local dragging = false
@@ -1012,7 +1144,13 @@ local function createShootButton()
             dragStart = input.Position
             startPosition = button.Position
 
-            TweenService:Create(button, pressTween, {Size = pressedSize, TextSize = 26}):Play()
+            TweenService:Create(button, pressTween, {Size = pressedSize, TextSize = 18, BackgroundColor3=Color3.fromRGB(27,27,31)}):Play()
+            button.Text="T A R G E T   L O C K"
+            traceA.Visible=true; traceB.Visible=true
+            traceA.Position=UDim2.fromScale(0,.08); traceB.Position=UDim2.fromScale(1,.92)
+            TweenService:Create(traceA,TweenInfo.new(.38,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(1,.08)}):Play()
+            TweenService:Create(traceB,TweenInfo.new(.38,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(0,.92)}):Play()
+            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.16),{ImageColor3=Color3.fromRGB(145,145,154),ImageTransparency=0}):Play() end
             sound:Play()
             local absolute = button.AbsolutePosition
             ripple.Position = UDim2.new(0, input.Position.X - absolute.X, 0, input.Position.Y - absolute.Y)
@@ -1038,7 +1176,10 @@ local function createShootButton()
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
-            TweenService:Create(button, pressTween, {Size = normalSize, TextSize = 24}):Play()
+            TweenService:Create(button,TweenInfo.new(.42,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=normalSize,TextSize=17,BackgroundColor3=Color3.fromRGB(8,8,10)}):Play()
+            button.Text="Shoot Murder"
+            traceA.Visible=false; traceB.Visible=false
+            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.45),{ImageColor3=Color3.fromRGB(45,45,51),ImageTransparency=.08}):Play() end
         end
     end)
     button.Activated:Connect(function()
@@ -1368,7 +1509,7 @@ local function setRoundTimerVisible(value)
     roundTimerGui.BackgroundTransparency=.2
     roundTimerGui.TextColor3=C.text
     roundTimerGui.TextSize=20
-    roundTimerGui.Font=Enum.Font.GothamBold
+    roundTimerGui.Font=Enum.Font.BuilderSansBold
     corner(roundTimerGui,15); stroke(roundTimerGui,C.border,.15)
     task.spawn(function()
         while utility.roundTimer and roundTimerGui and roundTimerGui.Parent do
