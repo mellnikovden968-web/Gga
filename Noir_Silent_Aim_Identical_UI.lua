@@ -32,27 +32,9 @@ local gui=New("ScreenGui",{Name="NoirSilentAimUI",ResetOnSpawn=false,IgnoreGuiIn
 local scale=New("UIScale",{Parent=gui,Scale=1})
 local function rescale()
  local v=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
- scale.Scale=math.min(v.X/1360,v.Y/760,0.80)
+ scale.Scale=math.min(v.X/1450,v.Y/850,0.68)
 end
 rescale(); if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
-local fireLayer=New("Frame",{Parent=gui,Name="SpriteFireBorder",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1296,706),BackgroundTransparency=1,Visible=true})
-local FIRE_SHEET="rbxassetid://135443935828026"
-do
-local fireSprites={}
-local function fireSprite(pos,size,rot,phase)
- local im=New("ImageLabel",{Parent=fireLayer,Position=pos,Size=size,BackgroundTransparency=1,Image=FIRE_SHEET,ImageColor3=Color3.fromRGB(3,3,5),ImageTransparency=.34,Rotation=rot or 0,ScaleType=Enum.ScaleType.Stretch,ZIndex=1})
- im.ImageRectSize=Vector2.new(256,256); table.insert(fireSprites,{image=im,phase=phase or 0}); return im
-end
-for i=0,11 do fireSprite(UDim2.new(0,i*108,0,-10),UDim2.fromOffset(122,38),0,i%16); fireSprite(UDim2.new(0,i*108,1,-28),UDim2.fromOffset(122,38),180,(i*3)%16) end
-for i=0,6 do fireSprite(UDim2.new(0,-18,0,i*100),UDim2.fromOffset(46,112),-90,(i*5)%16); fireSprite(UDim2.new(1,-28,0,i*100),UDim2.fromOffset(46,112),90,(i*7)%16) end
-local fireClock,fireLast=0,-1
-RunService.RenderStepped:Connect(function(dt)
- fireClock+=dt
- local base=math.floor(fireClock*10)
- if base==fireLast then return end; fireLast=base
- for _,v in ipairs(fireSprites) do if v.image.Parent then local f=(base+v.phase)%16; v.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
-end)
-end
 local win=New("Frame",{Parent=gui,Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(1280,690),BackgroundColor3=C.base,BackgroundTransparency=.30,ClipsDescendants=true})
 corner(win,30); local winStroke=stroke(win,C.border,.08); winStroke.Thickness=2
 New("UIGradient",{Parent=win,Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(25,25,28)),ColorSequenceKeypoint.new(.52,Color3.fromRGB(5,5,6)),ColorSequenceKeypoint.new(1,Color3.fromRGB(34,34,37))}),Rotation=18})
@@ -89,7 +71,7 @@ UIS.InputChanged:Connect(function(input)
   local half=win.AbsoluteSize/2
   local desired=Vector2.new(startPos.X.Scale*view.X+startPos.X.Offset*scale.Scale+delta.X,startPos.Y.Scale*view.Y+startPos.Y.Offset*scale.Scale+delta.Y)
   desired=Vector2.new(math.clamp(desired.X,half.X,view.X-half.X),math.clamp(desired.Y,half.Y,view.Y-half.Y))
-  win.Position=UDim2.fromOffset(desired.X/scale.Scale,desired.Y/scale.Scale); fireLayer.Position=win.Position
+  win.Position=UDim2.fromOffset(desired.X/scale.Scale,desired.Y/scale.Scale)
  end
 end)
 UIS.InputEnded:Connect(function(input)
@@ -120,8 +102,8 @@ end)
 UIS.InputEnded:Connect(function(input)
  if restoreDragging and (input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1) then restoreDragging=false end
 end)
-mini.MouseButton1Click:Connect(function() win.Visible=false; fireLayer.Visible=false; restore.Visible=true end)
-restore.MouseButton1Click:Connect(function() if restoreMoved then restoreMoved=false return end; restore.Visible=false; win.Visible=true; fireLayer.Visible=true end)
+mini.MouseButton1Click:Connect(function() win.Visible=false; restore.Visible=true end)
+restore.MouseButton1Click:Connect(function() if restoreMoved then restoreMoved=false return end; restore.Visible=false; win.Visible=true end)
 local content=New("ScrollingFrame",{Parent=win,Position=UDim2.fromOffset(275,110),Size=UDim2.new(1,-300,1,-130),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=7,ScrollBarImageColor3=C.accent,CanvasSize=UDim2.fromOffset(0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollingDirection=Enum.ScrollingDirection.Y,ScrollingEnabled=true,Active=true,ElasticBehavior=Enum.ElasticBehavior.WhenScrollable,VerticalScrollBarInset=Enum.ScrollBarInset.Always})
 local cols={}
 for i=1,2 do cols[i]=New("Frame",{Parent=content,Position=UDim2.new((i-1)*.5,(i-1)*10,0,0),Size=UDim2.new(.5,-10,0,0),BackgroundTransparency=1,AutomaticSize=Enum.AutomaticSize.Y}); New("UIListLayout",{Parent=cols[i],Padding=UDim.new(0,16),SortOrder=Enum.SortOrder.LayoutOrder}) end
@@ -157,7 +139,6 @@ local bottom=New("Frame",{Parent=win,AnchorPoint=Vector2.new(.5,1),Position=UDim
 local navButtons={}
 local navIcons={}
 do
-local navFireSprites={}
 local navDefs={
  {"main",16898613509,Vector2.new(820,147),"Home"},
  {"aim",16898613777,Vector2.new(967,759),"Combat"},
@@ -169,30 +150,16 @@ for i,d in ipairs(navDefs) do
  local ring=New("Frame",{Parent=b,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(40,40),BackgroundColor3=Color3.fromRGB(8,8,10),BackgroundTransparency=.24,ZIndex=2}); corner(ring,20); local ringStroke=stroke(ring,C.border,.28); ringStroke.Thickness=1.5
  local glow=New("ImageLabel",{Parent=b,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(35,35),BackgroundTransparency=1,Image="rbxassetid://"..d[2],ImageRectSize=Vector2.new(48,48),ImageRectOffset=d[3],ImageColor3=Color3.fromRGB(205,205,212),ImageTransparency=.78,ZIndex=3})
  local icon=New("ImageLabel",{Parent=b,AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(27,27),BackgroundTransparency=1,Image="rbxassetid://"..d[2],ImageRectSize=Vector2.new(48,48),ImageRectOffset=d[3],ImageColor3=C.dim,ZIndex=4})
- local flames={}
- local flameData={{UDim2.new(.5,-15,.5,-34),0},{UDim2.new(.5,-15,.5,4),180},{UDim2.new(.5,-34,.5,-15),-90},{UDim2.new(.5,4,.5,-15),90}}
- for fi,fd in ipairs(flameData) do
-  local flame=New("ImageLabel",{Parent=b,Position=fd[1],Size=UDim2.fromOffset(17,17),BackgroundTransparency=1,Image=FIRE_SHEET,ImageRectSize=Vector2.new(256,256),ImageColor3=Color3.fromRGB(2,2,4),ImageTransparency=.66,Rotation=fd[2],ZIndex=3})
-  local item={image=flame,phase=(i*3+fi*4)%16}; table.insert(flames,item); table.insert(navFireSprites,item)
- end
- navButtons[d[1]]=b; navIcons[d[1]]={icon=icon,glow=glow,ring=ring,flames=flames}
+ navButtons[d[1]]=b; navIcons[d[1]]={icon=icon,glow=glow,ring=ring}
  b.MouseButton1Down:Connect(function()
   TweenService:Create(ring,TweenInfo.new(.13,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(33,33),Rotation=18}):Play()
   TweenService:Create(icon,TweenInfo.new(.13,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(23,23),Rotation=-10}):Play()
-  for _,f in ipairs(flames) do TweenService:Create(f.image,TweenInfo.new(.12),{ImageColor3=Color3.fromRGB(18,18,22),ImageTransparency=.18,Size=UDim2.fromOffset(22,22)}):Play() end
  end)
  b.MouseButton1Up:Connect(function()
   TweenService:Create(ring,TweenInfo.new(.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(40,40),Rotation=0}):Play()
   TweenService:Create(icon,TweenInfo.new(.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.fromOffset(27,27),Rotation=0}):Play()
  end)
 end
-local navFireClock,navFireLast=0,-1
-RunService.RenderStepped:Connect(function(dt)
- navFireClock+=dt
- local baseFrame=math.floor(navFireClock*9)
- if baseFrame==navFireLast then return end; navFireLast=baseFrame
- for _,data in ipairs(navFireSprites) do if data.image.Parent then local f=(baseFrame+data.phase)%16; data.image.ImageRectOffset=Vector2.new((f%4)*256,math.floor(f/4)*256) end end
-end)
 end
 search.Parent=header; search.Position=UDim2.new(1,-370,0,28); search.Size=UDim2.fromOffset(210,46)
 local activePage="home"
@@ -206,7 +173,6 @@ local function selectPage(page)
    TweenService:Create(data.icon,TweenInfo.new(.22,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{ImageColor3=active and C.text or C.dim,Size=active and UDim2.fromOffset(31,31) or UDim2.fromOffset(27,27),Rotation=active and 0 or -2}):Play()
    TweenService:Create(data.glow,TweenInfo.new(.22),{ImageTransparency=active and .42 or .86,Size=active and UDim2.fromOffset(44,44) or UDim2.fromOffset(35,35)}):Play()
    TweenService:Create(data.ring,TweenInfo.new(.28,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=active and UDim2.fromOffset(46,46) or UDim2.fromOffset(40,40),BackgroundTransparency=active and .06 or .24}):Play()
-   for _,f in ipairs(data.flames) do TweenService:Create(f.image,TweenInfo.new(.28),{ImageTransparency=active and .38 or .78,ImageColor3=active and Color3.fromRGB(8,8,11) or Color3.fromRGB(2,2,4),Size=active and UDim2.fromOffset(21,21) or UDim2.fromOffset(17,17)}):Play() end
   end
  end
 end
@@ -252,7 +218,7 @@ function host.CreateTab()
  local tab={}
  function tab:AddSection(name,description)
   local isConfig=name=="NOIR CONFIG"
-  local isVisual=name=="Visuals" or name=="Object ESP"
+  local isVisual=name=="Visuals" or name=="Object ESP" or string.sub(name,1,9)=="VISUAL • "
   local isMain=string.sub(name,1,5)=="MAIN "
   local isWorld=string.sub(name,1,6)=="WORLD "
   local col
@@ -264,18 +230,18 @@ function host.CreateTab()
   local panel=New("Frame",{Parent=col,Size=UDim2.new(1,0,0,90),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=C.panel,BackgroundTransparency=.36,ClipsDescendants=true}); corner(panel,22); stroke(panel,C.border,.2)
   table.insert(sectionPanels,{panel=panel,page=page,name=string.lower(name.." "..(description or ""))})
   local bar=New("Frame",{Parent=panel,Position=UDim2.fromOffset(0,0),Size=UDim2.fromOffset(4,42),BackgroundColor3=C.accent}); corner(bar,4)
-  local shownName=name:gsub("^MAIN • ",""):gsub("^WORLD • ","")
+  local shownName=name:gsub("^MAIN • ",""):gsub("^WORLD • ",""):gsub("^VISUAL • ","")
   text(panel,shownName,19,UDim2.fromOffset(24,14)); if description and description~="" then text(panel,description,12,UDim2.fromOffset(24,42),true) end
   local holder=New("Frame",{Parent=panel,Position=UDim2.fromOffset(20,description~="" and 72 or 55),Size=UDim2.new(1,-40,0,0),AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1})
-  New("UIListLayout",{Parent=holder,Padding=UDim.new(0,5),SortOrder=Enum.SortOrder.LayoutOrder})
-  New("UIPadding",{Parent=holder,PaddingBottom=UDim.new(0,18)})
+  New("UIListLayout",{Parent=holder,Padding=UDim.new(0,3),SortOrder=Enum.SortOrder.LayoutOrder})
+  New("UIPadding",{Parent=holder,PaddingBottom=UDim.new(0,12)})
   holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(refreshCanvas); refreshCanvas()
   local api={}
   local function row(label,h)
    local r=New("Frame",{Parent=holder,Size=UDim2.new(1,0,0,h or 62),BackgroundTransparency=1}); text(r,label,16,UDim2.fromOffset(0,10)); return r
   end
   function api:AddToggle(label,callback)
-   local state=false; local r=row(label,62); local pill=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,8),Size=UDim2.fromOffset(64,34),BackgroundColor3=C.off,Text="",AutoButtonColor=false}); corner(pill,17); stroke(pill,C.border,.55)
+   local state=false; local r=row(label,52); local pill=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,8),Size=UDim2.fromOffset(64,34),BackgroundColor3=C.off,Text="",AutoButtonColor=false}); corner(pill,17); stroke(pill,C.border,.55)
    local dot=New("Frame",{Parent=pill,Position=UDim2.fromOffset(4,4),Size=UDim2.fromOffset(26,26),BackgroundColor3=Color3.fromRGB(145,145,180)}); corner(dot,13)
    local function set(v) state=v==true; TweenService:Create(pill,TweenInfo.new(.18),{BackgroundColor3=state and C.accent or C.off}):Play(); TweenService:Create(dot,TweenInfo.new(.18),{Position=state and UDim2.fromOffset(34,4) or UDim2.fromOffset(4,4),BackgroundColor3=state and Color3.new(1,1,1) or Color3.fromRGB(145,145,180)}):Play(); callback(state) end
    pill.MouseButton1Click:Connect(function() set(not state) end); return function(v) set(v==nil and not state or v) end
@@ -284,7 +250,7 @@ function host.CreateTab()
    local b=New("TextButton",{Parent=holder,Size=UDim2.new(1,0,0,48),BackgroundColor3=Color3.fromRGB(68,68,74),Text=label,TextColor3=C.text,TextSize=15,Font=Enum.Font.Gotham}); corner(b,11); stroke(b,C.accent,.25); b.MouseButton1Click:Connect(callback); return b
   end
   function api:AddSlider(label,min,max,default,callback)
-   local r=row(label,76); local value=New("TextBox",{Parent=r,Position=UDim2.new(1,-72,0,5),Size=UDim2.fromOffset(72,30),BackgroundColor3=C.surface,BackgroundTransparency=.12,Text=tostring(default),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Center,ClearTextOnFocus=false}); corner(value,9); stroke(value,C.border,.4)
+   local r=row(label,68); local value=New("TextBox",{Parent=r,Position=UDim2.new(1,-72,0,5),Size=UDim2.fromOffset(72,30),BackgroundColor3=C.surface,BackgroundTransparency=.12,Text=tostring(default),TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Center,ClearTextOnFocus=false}); corner(value,9); stroke(value,C.border,.4)
    local track=New("Frame",{Parent=r,Position=UDim2.new(0,0,1,-18),Size=UDim2.new(1,0,0,5),BackgroundColor3=C.off}); corner(track,3)
    local fill=New("Frame",{Parent=track,Size=UDim2.fromScale((default-min)/(max-min),1),BackgroundColor3=C.accent}); corner(fill,3)
    local current=default
@@ -294,7 +260,7 @@ function host.CreateTab()
    return {SetValue=function(_,v)set(v)end}
   end
   function api:AddDropdown(label,values,callback)
-   local r=row(label,64); local idx=1
+   local r=row(label,56); local idx=1
    local b=New("TextButton",{Parent=r,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),Size=UDim2.fromOffset(190,42),BackgroundColor3=C.surface,Text=tostring(values[1] or "None").."  ⌄",TextColor3=C.text,TextSize=14,Font=Enum.Font.Gotham,ZIndex=5}); corner(b,10); stroke(b)
    local popup
    local function close() if popup then popup:Destroy(); popup=nil end end
@@ -311,7 +277,7 @@ function host.CreateTab()
    return ctl
   end
   function api:AddTextBox(label,callback)
-   local r=row(label,72); local box=New("TextBox",{Parent=r,Position=UDim2.fromOffset(0,30),Size=UDim2.new(1,0,0,38),BackgroundColor3=C.surface,Text="",PlaceholderText=label,TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.Gotham,ClearTextOnFocus=false}); corner(box,9); stroke(box); box.FocusLost:Connect(function()callback(box.Text)end); return {SetValue=function(_,v)box.Text=tostring(v)end}
+   local r=row(label,64); local box=New("TextBox",{Parent=r,Position=UDim2.fromOffset(0,30),Size=UDim2.new(1,0,0,38),BackgroundColor3=C.surface,Text="",PlaceholderText=label,TextColor3=C.text,PlaceholderColor3=C.dim,TextSize=14,Font=Enum.Font.Gotham,ClearTextOnFocus=false}); corner(box,9); stroke(box); box.FocusLost:Connect(function()callback(box.Text)end); return {SetValue=function(_,v)box.Text=tostring(v)end}
   end
   function api:AddLabel(label) local r=row(label,44); return r end
   return api
@@ -1067,50 +1033,6 @@ local function createShootButton()
     innerGradient.Parent = innerStroke
     table.insert(gradientStrokes,innerGradient)
 
-    local fireAura = Instance.new("Frame")
-    fireAura.Name = "NoirSpriteFire"
-    fireAura.BackgroundTransparency = 1
-    fireAura.Position = UDim2.new(0, -8, 0, -8)
-    fireAura.Size = UDim2.new(1, 16, 1, 16)
-    fireAura.ZIndex = 3
-    fireAura.Parent = button
-    local shootFlames = {}
-    local function addShootFlame(position,size,rotation,phase)
-        local flame=Instance.new("ImageLabel")
-        flame.BackgroundTransparency=1
-        flame.Image=FIRE_SHEET
-        flame.ImageColor3=Color3.fromRGB(2,2,4)
-        flame.ImageTransparency=.36
-        flame.ImageRectSize=Vector2.new(256,256)
-        flame.Position=position
-        flame.Size=size
-        flame.Rotation=rotation
-        flame.ScaleType=Enum.ScaleType.Stretch
-        flame.ZIndex=3
-        flame.Parent=fireAura
-        table.insert(shootFlames,{image=flame,phase=phase})
-    end
-    for i=0,5 do
-        addShootFlame(UDim2.new(i/6,-2,0,-6),UDim2.new(1/6,10,0,20),0,i*2)
-        addShootFlame(UDim2.new(i/6,-2,1,-14),UDim2.new(1/6,10,0,20),180,i*2+5)
-    end
-    for i=0,2 do
-        addShootFlame(UDim2.new(0,-6,i/3,-2),UDim2.new(0,20,1/3,8),-90,i*3+2)
-        addShootFlame(UDim2.new(1,-14,i/3,-2),UDim2.new(0,20,1/3,8),90,i*3+7)
-    end
-    local shootFireClock,shootFireLast=0,-1
-    local shootFireConnection
-    shootFireConnection=RunService.RenderStepped:Connect(function(dt)
-        if not button.Parent then shootFireConnection:Disconnect() return end
-        shootFireClock+=dt
-        local baseFrame=math.floor(shootFireClock*10)
-        if baseFrame==shootFireLast then return end; shootFireLast=baseFrame
-        for _,data in ipairs(shootFlames) do
-            local frame=(baseFrame+data.phase)%16
-            data.image.ImageRectOffset=Vector2.new((frame%4)*256,math.floor(frame/4)*256)
-        end
-    end)
-
     local traceA=Instance.new("Frame")
     traceA.AnchorPoint=Vector2.new(.5,.5)
     traceA.Position=UDim2.fromScale(0,.08)
@@ -1166,7 +1088,6 @@ local function createShootButton()
             traceA.Position=UDim2.fromScale(0,.08); traceB.Position=UDim2.fromScale(1,.92)
             TweenService:Create(traceA,TweenInfo.new(.38,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(1,.08)}):Play()
             TweenService:Create(traceB,TweenInfo.new(.38,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),{Position=UDim2.fromScale(0,.92)}):Play()
-            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.16),{ImageColor3=Color3.fromRGB(15,15,19),ImageTransparency=.12}):Play() end
             sound:Play()
             local absolute = button.AbsolutePosition
             ripple.Position = UDim2.new(0, input.Position.X - absolute.X, 0, input.Position.Y - absolute.Y)
@@ -1195,7 +1116,6 @@ local function createShootButton()
             TweenService:Create(button,TweenInfo.new(.42,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=normalSize,TextSize=17,BackgroundColor3=Color3.fromRGB(8,8,10),BackgroundTransparency=.28}):Play()
             button.Text="Shoot Murder"
             traceA.Visible=false; traceB.Visible=false
-            for _,data in ipairs(shootFlames) do TweenService:Create(data.image,TweenInfo.new(.45),{ImageColor3=Color3.fromRGB(2,2,4),ImageTransparency=.36}):Play() end
         end
     end)
     button.Activated:Connect(function()
@@ -1681,36 +1601,27 @@ knifeSection:AddToggle("Knife Silent Aim", function(value) config.knifeEnabled =
 knifeSection:AddToggle("Knife Wall Check", function(value) config.knifeWallCheck = value == true end)
 knifeSection:AddToggle("Prioritize Sheriff", function(value) config.knifePrioritizeSheriff = value == true end)
 
-local visualSection = tab:AddSection("Visuals", "Outline and Box ESP")
-visualSection:AddLabel("OUTLINE • BY PLAYER")
-visualSection:AddToggle("Outline Everyone", function(value) config.espOutline = value == true; task.spawn(refreshTarget); refreshESP() end)
-visualSection:AddToggle("Outline Murderer Only", function(value) config.espOutlineMurderer = value == true; task.spawn(refreshTarget); refreshESP() end)
-visualSection:AddToggle("Outline Sheriff / Hero Only", function(value) config.espOutlineSheriff = value == true; task.spawn(refreshTarget); refreshESP() end)
-visualSection:AddLabel("ESP BOX • BY PLAYER")
-visualSection:AddToggle("ESP Box Everyone", function(value) config.espBox = value == true; task.spawn(refreshTarget); refreshESP() end)
-visualSection:AddToggle("ESP Box Murderer Only", function(value) config.espBoxMurderer = value == true; task.spawn(refreshTarget); refreshESP() end)
-visualSection:AddToggle("ESP Box Sheriff / Hero Only", function(value) config.espBoxSheriff = value == true; task.spawn(refreshTarget); refreshESP() end)
+local playerOutlineSection=tab:AddSection("VISUAL • PLAYER OUTLINE","Role-colored silhouettes")
+playerOutlineSection:AddToggle("Everyone",function(v) config.espOutline=v==true; task.spawn(refreshTarget); refreshESP() end)
+playerOutlineSection:AddToggle("Murderer Only",function(v) config.espOutlineMurderer=v==true; task.spawn(refreshTarget); refreshESP() end)
+playerOutlineSection:AddToggle("Sheriff / Hero Only",function(v) config.espOutlineSheriff=v==true; task.spawn(refreshTarget); refreshESP() end)
 
+local playerBoxSection=tab:AddSection("VISUAL • PLAYER BOX","Clean role-colored boxes")
+playerBoxSection:AddToggle("Everyone",function(v) config.espBox=v==true; task.spawn(refreshTarget); refreshESP() end)
+playerBoxSection:AddToggle("Murderer Only",function(v) config.espBoxMurderer=v==true; task.spawn(refreshTarget); refreshESP() end)
+playerBoxSection:AddToggle("Sheriff / Hero Only",function(v) config.espBoxSheriff=v==true; task.spawn(refreshTarget); refreshESP() end)
 
-local objectVisuals = tab:AddSection("Object ESP", "Dropped items and map objects")
-objectVisuals:AddLabel("OUTLINE • BY OBJECT")
-objectVisuals:AddToggle("Outline Dropped Gun", function(v) config.outlineDroppedGun=v==true; refreshObjectESP() end)
-objectVisuals:AddToggle("Outline Traps", function(v) config.outlineTraps=v==true; refreshObjectESP() end)
-objectVisuals:AddToggle("Outline Throwing Knives", function(v) config.outlineThrowingKnives=v==true; refreshObjectESP() end)
-objectVisuals:AddToggle("Outline Coins", function(v) config.outlineCoins=v==true; refreshObjectESP() end)
-objectVisuals:AddLabel("ESP BOX • BY OBJECT")
-objectVisuals:AddToggle("ESP Box Dropped Gun", function(v) config.boxDroppedGun=v==true; refreshObjectESP() end)
-objectVisuals:AddToggle("ESP Box Traps", function(v) config.boxTraps=v==true; refreshObjectESP() end)
-objectVisuals:AddToggle("ESP Box Throwing Knives", function(v) config.boxThrowingKnives=v==true; refreshObjectESP() end)
-objectVisuals:AddToggle("ESP Box Coins", function(v) config.boxCoins=v==true; refreshObjectESP() end)
+local objectOutlineSection=tab:AddSection("VISUAL • OBJECT OUTLINE","Dropped items and map objects")
+objectOutlineSection:AddToggle("Dropped Gun",function(v) config.outlineDroppedGun=v==true; refreshObjectESP() end)
+objectOutlineSection:AddToggle("Traps",function(v) config.outlineTraps=v==true; refreshObjectESP() end)
+objectOutlineSection:AddToggle("Throwing Knives",function(v) config.outlineThrowingKnives=v==true; refreshObjectESP() end)
+objectOutlineSection:AddToggle("Coins",function(v) config.outlineCoins=v==true; refreshObjectESP() end)
 
-local shootSection = tab:AddSection("Shoot Murderer", "Mobile shoot button")
-shootSection:AddToggle("Show Shoot Murderer Button", setShootButtonVisible)
-shootSection:AddToggle("Lock Shoot Murderer Button", function(value)
-    config.lockShootButton = value == true
-    notify(config.lockShootButton and "Shoot button locked" or "Shoot button unlocked", 2)
-end)
-shootSection:AddButton("Shoot Murderer Now", shootMurderer)
+local objectBoxSection=tab:AddSection("VISUAL • OBJECT BOX","Compact object boxes")
+objectBoxSection:AddToggle("Dropped Gun",function(v) config.boxDroppedGun=v==true; refreshObjectESP() end)
+objectBoxSection:AddToggle("Traps",function(v) config.boxTraps=v==true; refreshObjectESP() end)
+objectBoxSection:AddToggle("Throwing Knives",function(v) config.boxThrowingKnives=v==true; refreshObjectESP() end)
+objectBoxSection:AddToggle("Coins",function(v) config.boxCoins=v==true; refreshObjectESP() end)
 
 local revert = tab:AddSection("NOIR CONFIG", "Standalone Silent Aim settings; .preset-compatible")
 presetDropdown = revert:AddDropdown("Your Presets", presetNames(), function(value) presetName = cleanPresetName(value) end)
