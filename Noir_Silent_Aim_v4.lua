@@ -238,10 +238,50 @@ local icon = New("ImageLabel", { Parent = header, Position = UDim2.new(1, -152, 
     BackgroundColor3 = C.panel, Image = creatorImage, ScaleType = Enum.ScaleType.Crop })
 corner(icon, 13); stroke(icon, C.border, .45)
 if creatorImage == "" then local fb = text(icon, "N", 22, UDim2.fromOffset(0, 8)); fb.TextXAlignment = Enum.TextXAlignment.Center end
+-- Small utility buttons use the same visual language as Shoot Murder:
+-- dark glass, white animated gradient border, inner border and click sound.
+function styleCircularButton(b, diameter)
+    b.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+    b.BackgroundTransparency = .28
+    b.BorderSizePixel = 0
+    b.AutoButtonColor = false
+    b.ClipsDescendants = false
+    b.ZIndex = 20
+    corner(b, math.floor(diameter / 2))
+    local outer = New("UIStroke", { Parent = b, Color = Color3.fromRGB(255, 255, 255), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+    local gradient = New("UIGradient", { Parent = outer, Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)),
+        ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)),
+        ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)),
+        ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)),
+    }) })
+    table.insert(gradientStrokes, gradient)
+    local inner = New("UIStroke", { Parent = b, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+    local innerGradient = gradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner
+    table.insert(gradientStrokes, innerGradient)
+    local sound = Instance.new("Sound")
+    sound.Name = "NoirButtonSound"; sound.SoundId = "rbxassetid://3868133279"; sound.Volume = .35; sound.Parent = b
+    local baseTextSize = b.TextSize
+    b.MouseEnter:Connect(function()
+        TweenService:Create(b, TweenInfo.new(.18), { BackgroundTransparency = .12, TextSize = baseTextSize + 1 }):Play()
+    end)
+    b.MouseLeave:Connect(function()
+        TweenService:Create(b, TweenInfo.new(.22), { BackgroundTransparency = .28, TextSize = baseTextSize }):Play()
+    end)
+    b.MouseButton1Down:Connect(function()
+        sound:Play()
+        TweenService:Create(b, TweenInfo.new(.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = Color3.fromRGB(27, 27, 31), Size = UDim2.fromOffset(diameter + 6, diameter + 6) }):Play()
+    end)
+    b.MouseButton1Up:Connect(function()
+        TweenService:Create(b, TweenInfo.new(.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { BackgroundColor3 = Color3.fromRGB(8, 8, 10), Size = UDim2.fromOffset(diameter, diameter) }):Play()
+    end)
+    return b
+end
 function topButton(txt, x, color)
     local b = New("TextButton", { Parent = header, Position = UDim2.new(1, x, 0, 26), Size = UDim2.fromOffset(44, 44),
         BackgroundColor3 = color or C.btn, Text = txt, TextColor3 = C.text, TextSize = 22, Font = Enum.Font.GothamBold })
-    corner(b, 13); stroke(b, C.border, .6); return b
+    return styleCircularButton(b, 44)
 end
 local mini = topButton("\u{2212}", -98, C.btn)
 local close = topButton("\u{00d7}", -48, C.btn)
@@ -280,7 +320,7 @@ end)
 local restore = New("TextButton", { Parent = gui, AnchorPoint = Vector2.new(1, .5), Position = NoirPersistence.GetPosition("restore", UDim2.new(1, -22, .5, 0)),
     Size = UDim2.fromOffset(62, 62), BackgroundColor3 = C.panel, Text = "N", TextColor3 = C.text, TextSize = 30,
     Font = Enum.Font.GothamBold, Visible = false, AutoButtonColor = false })
-corner(restore, 18); stroke(restore, C.border, .45)
+styleCircularButton(restore, 62)
 local restoreDragging, restoreMoved, restoreStart, restorePos = false, false, nil, nil
 restore.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -804,7 +844,6 @@ local config = {
     knifeEnabled = false,
     knifeWallCheck = false,
     knifePrioritizeSheriff = true,
-    knifeTargetMode = "Sheriff",      -- Sheriff | Murderer | Nearest | Selected | Random
     knifeAutoThrow = false,
     -- player ESP
     espOutline = false, espOutlineMurderer = false, espOutlineSheriff = false,
@@ -844,6 +883,7 @@ local roundTimerEndsAt, roundPendingStart
 -- retrying forever after the local player has died.
 local roundState = "unknown"
 local roundResetToken = 0
+local lastRoundResetAt = 0
 local instantRoleDetection = false
 local autoNotifyRoles = false
 local announcedRoles = {}
@@ -925,9 +965,9 @@ end
 function playerESPInactive(player)
     local character = player and player.Character
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    -- Gray is deliberately based on both signals: a dead character and any
-    -- pre-round/lobby state (waiting, unknown, or role selection).
-    return roundState ~= "playing" or not humanoid or humanoid.Health <= 0
+    -- Gray is deliberately based on both signals: a dead character and the
+    -- lobby/unknown state. The 10-second starting countdown is active.
+    return (roundState == "waiting" or roundState == "unknown") or not humanoid or humanoid.Health <= 0
 end
 function playerESPColor(player, role)
     return playerESPInactive(player) and ESP_INACTIVE_COLOR or roleColor(role)
@@ -1632,17 +1672,10 @@ function findNearestKnifeTarget()
     return closest
 end
 function knifeTargetPlayer()
-    if config.knifeTargetMode == "Sheriff" then return passesFilters(sheriff) and sheriff or (config.knifePrioritizeSheriff and findByGun()) end
-    if config.knifeTargetMode == "Murderer" then return passesFilters(murderer) and murderer or nil end
-    if config.knifeTargetMode == "Nearest" then return findNearestKnifeTarget() end
-    if config.knifeTargetMode == "Selected" then local p = config.selectedPlayer and Players:FindFirstChild(config.selectedPlayer); return passesFilters(p) and p or nil end
-    if config.knifeTargetMode == "Random" then
-        local list = {}
-        for _, p in ipairs(getPlayers()) do if passesFilters(p) then list[#list + 1] = p end end
-        if #list > 0 then return list[math.random(#list)] end
-        return nil
+    if config.knifePrioritizeSheriff then
+        local sheriffPlayer = findSheriff()
+        if passesFilters(sheriffPlayer) then return sheriffPlayer end
     end
-    if config.knifePrioritizeSheriff then return passesFilters(sheriff) and sheriff or findByGun() end
     return findNearestKnifeTarget()
 end
 function knifeTargetPart()
@@ -1775,8 +1808,8 @@ function calculateKnifeAim(part, origin)
     local vertical = config.verticalMultiplier / 100
     local predictedVelocity = Vector3.new(velocity.X * horizontal, config.predictJump and velocity.Y * vertical or 0, velocity.Z * horizontal)
     local distance = (part.Position - origin).Magnitude
-    local travelTime = math.clamp(distance / 200, 0, 0.4)
-    local time = math.clamp(leadTime() + travelTime, 0.02, 0.5)
+    local travelTime = math.clamp(distance / 125, 0, 0.55)
+    local time = math.clamp(leadTime() + travelTime, 0.03, 0.7)
     local offset = Vector3.new(part.Size.X * config.offsetX / 100, part.Size.Y * config.offsetY / 100, part.Size.Z * config.offsetZ / 100)
     return part.Position + predictedVelocity * time + offset
 end
@@ -1795,12 +1828,11 @@ end
 
 --=================================================== REMOTE MATCHERS
 function knifeRemote(remote, args)
-    if not config.knifeEnabled or args.n < 1 then return false end
+    -- MM2's working throw path sends two CFrames through KnifeThrown.
+    if not config.knifeEnabled or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
-    if remote.Name ~= "KnifeThrown" and remote.Name ~= "KnifeStabbed" then return false end
-    local oneArgument = typeof(args[1]) == "CFrame" and (args.n == 1 or typeof(args[2]) ~= "CFrame")
-    local twoArguments = typeof(args[1]) == "CFrame" and typeof(args[2]) == "CFrame"
-    if not oneArgument and not twoArguments then return false end
+    if remote.Name ~= "KnifeThrown" then return false end
+    if typeof(args[1]) ~= "CFrame" or typeof(args[2]) ~= "CFrame" then return false end
     local character = LocalPlayer.Character
     local knife = character and character:FindFirstChild("Knife")
     return knife ~= nil and remote:IsDescendantOf(knife)
@@ -1825,21 +1857,12 @@ function redirect(remote, args)
     end
     if not part then return end
     if useWallCheck and not targetVisible(part) then return end
-    local singleKnifeArgument = isKnife and (args.n == 1 or typeof(args[2]) ~= "CFrame")
     local origin = args[1].Position
-    if singleKnifeArgument then
-        local character = LocalPlayer.Character
-        local knife = character and character:FindFirstChild("Knife")
-        local handle = knife and knife:FindFirstChild("Handle")
-        origin = handle and handle.Position or (Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.Position) or origin
-    end
     local aim = isKnife and calculateKnifeAim(part, origin) or calculateAim(part)
-    if singleKnifeArgument then
-        args[1] = CFrame.new(aim)
-    else
-        if config.alignDirection and (aim - origin).Magnitude > 0.01 then args[1] = CFrame.lookAt(origin, aim) end
-        args[2] = CFrame.new(aim)
+    if config.alignDirection and (aim - origin).Magnitude > 0.01 then
+        args[1] = CFrame.lookAt(origin, aim)
     end
+    args[2] = CFrame.new(aim)
     redirected = redirected + 1
 end
 
@@ -2018,14 +2041,10 @@ function createShootButton()
         if dragging and input == dragInput and not config.lockShootButton then
             local delta = input.Position - dragStart
             if delta.Magnitude > 8 then moved = true end
-            local view = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-            local halfW, halfH = normalSize.X.Offset / 2, normalSize.Y.Offset / 2
-            local x = startPosition.X.Scale * view.X + startPosition.X.Offset + delta.X
-            local y = startPosition.Y.Scale * view.Y + startPosition.Y.Offset + delta.Y
-            -- Keep a 14px edge margin and reserve the central window area.
-            x = math.clamp(x, halfW + 14, view.X - halfW - 14)
-            y = math.clamp(y, halfH + 14, view.Y - halfH - 14)
-            button.Position = UDim2.fromOffset(x, y)
+            -- Deliberately do not clamp the button: it can be moved freely,
+            -- including partly outside the screen, as requested.
+            button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
         end
     end)
     UIS.InputEnded:Connect(function(input)
@@ -2060,6 +2079,7 @@ local roundTimerGui
 local function resetRoundTimer()
     roundResetToken += 1
     roundState = "waiting"
+    lastRoundResetAt = os.clock()
     roundTimerEndsAt = nil
     roundPendingStart = nil
     if roundTimerGui and roundTimerGui.Parent then roundTimerGui.Text = "WAITING" end
@@ -2095,7 +2115,7 @@ function setRoundTimerVisible(value)
         local getTimer
         while roundTimerGui == thisGui and thisGui.Parent do
             local found, bestScore, phase
-            local activeRound = roundState == "starting" or roundState == "playing"
+            local activeRound = roundState ~= "waiting" or (os.clock() - lastRoundResetAt > 1)
 
             -- Do not read stale GetTimer/UI values while the round is over.
             -- The old implementation did exactly that, so the previous round's
@@ -2130,19 +2150,31 @@ function setRoundTimerVisible(value)
                     local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
                     if pg and roundState ~= "waiting" then
                         for _, v in ipairs(pg:GetDescendants()) do
-                            if v:IsA("TextLabel") and v ~= thisGui then
+                            if (v:IsA("TextLabel") or v:IsA("TextButton") or v:IsA("TextBox")) and v ~= thisGui then
                                 local raw = tostring(v.Text or ""):gsub("<.->", ""):gsub("^%s+", ""):gsub("%s+$", "")
                                 local lowerName = string.lower(v.Name)
+                                local parentName = v.Parent and string.lower(v.Parent.Name) or ""
+                                local timerNamed = string.find(lowerName, "timer", 1, true)
+                                    or string.find(lowerName, "round", 1, true)
+                                    or string.find(lowerName, "game", 1, true)
+                                    or string.find(parentName, "timer", 1, true)
+                                    or string.find(parentName, "round", 1, true)
                                 local score
                                 if raw:match("^%d+%s*[mM]%s*%d+%s*[sS]$") then score = 100
                                 elseif raw:match("^%d+:%d%d$") then score = 95
                                 elseif raw:match("^%d+%s*[sS]$") then score = 90
                                 elseif string.find(lowerName, "roundtimer", 1, true) or string.find(lowerName, "gametimer", 1, true) then score = 80
-                                elseif string.find(lowerName, "timer", 1, true) and raw:match("%d") then score = 60
+                                elseif timerNamed and raw:match("%d") then score = 70
+                                elseif timerNamed and raw:match("^%d+$") and tonumber(raw) and tonumber(raw) <= 600 then score = 65
+                                elseif raw:match("^%d+$") and tonumber(raw) and tonumber(raw) <= 15 then score = 30
                                 end
                                 if score and (not bestScore or score > bestScore) then found, bestScore = raw, score end
                             end
                         end
+                    end
+                    if found and roundState == "unknown" then
+                        local numeric = tonumber(tostring(found):match("%d+"))
+                        roundState = numeric and numeric <= 15 and "starting" or "playing"
                     end
                 end
             end
@@ -2620,7 +2652,7 @@ function exportRevertConfig()
             ignoreFriends = config.ignoreFriends, maxDistance = config.maxDistance,
             adaptive = config.adaptive, fixedLead = config.fixedLead, extraLead = config.extraLead,
             maxLead = config.maxLead, alignDirection = config.alignDirection,
-            knifeTargetMode = config.knifeTargetMode, knifeWallCheck = config.knifeWallCheck,
+            knifeWallCheck = config.knifeWallCheck,
             knifePrioritizeSheriff = config.knifePrioritizeSheriff, knifeAutoThrow = config.knifeAutoThrow,
         },
         author = LocalPlayer.Name,
@@ -2646,7 +2678,7 @@ function applyRevertConfig(data)
     end
     local noir = data.noir
     if typeof(noir) == "table" then
-        for _, key in ipairs({ "targetMode", "hitPart", "knifeTargetMode" }) do
+        for _, key in ipairs({ "targetMode", "hitPart" }) do
             if typeof(noir[key]) == "string" then config[key] = noir[key] end
         end
         for _, key in ipairs({ "fovSize", "maxDistance", "fixedLead", "extraLead", "maxLead" }) do
@@ -2772,8 +2804,6 @@ main:AddSlider("FOV Size", 0, 1000, 0, function(v) config.fovSize = v; updateFov
 main:AddToggle("Show FOV", function(v) config.showFov = v; updateFovCircle() end)
 main:AddKeybind("Aim Key", "None", function(k) config.aimKey = k; aimHeld = (k == "None") end)
 main:AddKeybind("Toggle Key", "None", function(k) config.toggleKey = k end)
-main:AddToggle("Auto Fire", function(v) config.autoFire = v end)
-main:AddKeybind("Auto Fire Key", "None", function(k) config.autoFireKey = k end)
 main:AddToggle("Wall Check", function(v) config.wallCheck = v end)
 main:AddToggle("Ignore Dead", function(v) config.ignoreDead = v end)
 main:AddToggle("Ignore Friends", function(v) config.ignoreFriends = v end)
@@ -2784,7 +2814,6 @@ main:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton = 
 -- Knife Silent Aim
 local knifeSection = tab:AddSection("Knife Silent Aim", "Knife throw / stab aim assist")
 knifeSection:AddToggle("Knife Silent Aim", function(v) config.knifeEnabled = v; if v then installHook() end end)
-knifeSection:AddDropdown("Knife Target Mode", { "Sheriff", "Murderer", "Nearest", "Selected", "Random" }, function(v) config.knifeTargetMode = v end)
 knifeSection:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck = v end)
 knifeSection:AddToggle("Prioritize Sheriff", function(v) config.knifePrioritizeSheriff = v end)
 knifeSection:AddToggle("Auto Throw Knife", function(v) config.knifeAutoThrow = v end)
@@ -2912,7 +2941,6 @@ local function finishRound()
 end
 connectRemote("RoundEndFade", finishRound)
 connectRemote("RoundEnd", finishRound)
-connectRemote("Fade", finishRound)
 connectRemote("RoleSelect", function() task.spawn(refreshTarget) end)
 connectRemote("ShowRoleSelect", function() task.spawn(refreshTarget) end)
 connectRemote("ShowRoleSelectNew", function() task.spawn(refreshTarget) end)
