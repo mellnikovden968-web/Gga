@@ -6,6 +6,23 @@
            fling, misc) + new controls (keybinds, FOV, auto-fire, tracers,
            skeleton, anti-afk, server hop, chat spam).
     The Velvet UI look is preserved ("identical UI").
+
+    v4.1 — PERFORMANCE PASS (lag/freeze fixes):
+      * Object ESP no longer re-scans the whole Workspace on every
+        DescendantAdded/Removing; it now adds/removes highlights
+        incrementally (O(1)) and only does a full scan on a toggle change.
+      * ESP tracer/skeleton loop: cached player list, precomputed bone
+        tables, per-player line cache, no per-frame string concatenation,
+        Drawing lines freed on respawn / player leave.
+      * ESP text/health loop throttled to ~12 Hz and uses cached billboard
+        references (also fixed a name collision on the health bar).
+      * Motion sampling runs at ~30 Hz and only while an aim feature is on.
+      * findDroppedGun uses a registry (no per-tick Workspace scan).
+      * Cached: player list, local root/humanoid, friend status, GetPlayerData
+        remote, pickup remote, RaycastParams.
+      * applyCharacterMods only runs when WalkSpeed/JumpPower is enabled.
+      * Gradient stroke animation throttled to ~30 Hz.
+      * New "Performance Mode" toggle (MAIN > SELF MODS) for low-end devices.
 =======================================================================]]
 
 --============================================================ SERVICES
@@ -77,10 +94,13 @@ function NoirPersistence.SetPosition(key, p)
 end
 
 --=========================================================== UI THEME
+-- Palette sampled straight from the "NOIR ROBLOX HUB" reference image:
+-- near-black backdrop, soft graphite panels and a single green accent.
 local C = {
-    base = Color3.fromRGB(5,5,6), surface = Color3.fromRGB(18,18,20), panel = Color3.fromRGB(28,28,31),
-    border = Color3.fromRGB(145,145,152), accent = Color3.fromRGB(232,232,236), accent2 = Color3.fromRGB(190,190,196),
-    text = Color3.fromRGB(248,248,250), dim = Color3.fromRGB(168,168,174), off = Color3.fromRGB(48,48,53),
+    base = Color3.fromRGB(7,8,10), surface = Color3.fromRGB(15,17,20), panel = Color3.fromRGB(13,15,18),
+    card = Color3.fromRGB(17,19,23), border = Color3.fromRGB(120,126,134), accent = Color3.fromRGB(93,168,94),
+    accent2 = Color3.fromRGB(122,201,122), text = Color3.fromRGB(233,235,238), dim = Color3.fromRGB(124,130,138),
+    off = Color3.fromRGB(42,45,50), btn = Color3.fromRGB(35,38,41),
 }
 function New(class, props)
     local x = Instance.new(class)
@@ -90,23 +110,35 @@ function New(class, props)
 end
 function corner(x, r) New("UICorner", { CornerRadius = UDim.new(0, r or 12), Parent = x }) end
 local gradientStrokes = {}
+local perfMode = false   -- user toggle: skips gradient animation + throttles ESP lines
+-- Gradient stroke: a 1px border whose colour sweeps transparent -> lit -> transparent, exactly
+-- like the reference cards. Each gradient is stored so the highlight can slowly travel the edge.
 function stroke(x, col, tr)
-    local s = New("UIStroke", { Color = col or C.border, Transparency = tr or .35, Thickness = 1, Parent = x })
-    local g = New("UIGradient", { Parent = s, Rotation = 0, Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(42,42,48)),
-        ColorSequenceKeypoint.new(.18, Color3.fromRGB(245,245,248)),
-        ColorSequenceKeypoint.new(.38, Color3.fromRGB(82,82,90)),
-        ColorSequenceKeypoint.new(.58, Color3.fromRGB(255,255,255)),
-        ColorSequenceKeypoint.new(.8, Color3.fromRGB(62,62,70)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(210,210,216)),
+    local s = New("UIStroke", { Color = col or C.border, Transparency = tr or .55, Thickness = 1, Parent = x })
+    local g = New("UIGradient", { Parent = s, Rotation = 35, Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(70,74,80)),
+        ColorSequenceKeypoint.new(.22, Color3.fromRGB(255,255,255)),
+        ColorSequenceKeypoint.new(.5, Color3.fromRGB(96,101,108)),
+        ColorSequenceKeypoint.new(.78, Color3.fromRGB(255,255,255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(70,74,80)),
     }) })
     table.insert(gradientStrokes, g)
     return s
 end
+local gradientAccum = 0
 RunService.RenderStepped:Connect(function(dt)
+    if #gradientStrokes == 0 then return end
+    gradientAccum += dt
+    if gradientAccum < 0.04 then return end
+    local step = gradientAccum * 30
+    gradientAccum = 0
     for i = #gradientStrokes, 1, -1 do
         local g = gradientStrokes[i]
-        if g.Parent then g.Rotation = (g.Rotation + dt * 42) % 360 else table.remove(gradientStrokes, i) end
+        if g.Parent then
+            if not perfMode then g.Rotation = (g.Rotation + step) % 360 end
+        else
+            table.remove(gradientStrokes, i)
+        end
     end
 end)
 function text(parent, value, size, pos, dim)
@@ -126,48 +158,56 @@ rescale()
 if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
 
 local win = New("Frame", { Parent = gui, Name = "Window", AnchorPoint = Vector2.new(.5, .5),
-    Position = NoirPersistence.GetPosition("window", UDim2.fromScale(.5, .5)), Size = UDim2.fromOffset(1280, 690),
-    BackgroundColor3 = C.base, BackgroundTransparency = .30, ClipsDescendants = true, Visible = false })
+    Position = NoirPersistence.GetPosition("window", UDim2.fromScale(.5, .5)), Size = UDim2.fromOffset(1180, 700),
+    BackgroundColor3 = C.base, BackgroundTransparency = .04, ClipsDescendants = true, Visible = false })
 local winScale = New("UIScale", { Parent = win, Scale = .68 })
-corner(win, 30)
-local winStroke = stroke(win, C.border, .08); winStroke.Thickness = 2
+corner(win, 22)
+local winStroke = stroke(win, C.border, .5); winStroke.Thickness = 1.5
+-- subtle sheen: brighter top-left fading to black bottom-right, like the reference backdrop
 New("UIGradient", { Parent = win, Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(25,25,28)),
-    ColorSequenceKeypoint.new(.52, Color3.fromRGB(5,5,6)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(34,34,37)) }), Rotation = 18 })
-task.spawn(function()
-    while winStroke.Parent do
-        TweenService:Create(winStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { Color = Color3.fromRGB(255,255,255), Transparency = .02 }):Play(); task.wait(1.4)
-        TweenService:Create(winStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { Color = Color3.fromRGB(75,75,82), Transparency = .4 }):Play(); task.wait(1.4)
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(20,22,26)),
+    ColorSequenceKeypoint.new(.45, Color3.fromRGB(9,10,13)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(3,4,6)) }), Rotation = 25 })
+
+--=========================================================== SIDEBAR
+local navButtons, navIcons = {}, {}
+local sidebar = New("Frame", { Parent = win, Size = UDim2.fromOffset(240, 700), BackgroundColor3 = C.surface, BackgroundTransparency = .28 })
+corner(sidebar, 22); stroke(sidebar, C.border, .68)
+local logo = New("TextLabel", { Parent = sidebar, Position = UDim2.fromOffset(26, 32), Size = UDim2.fromOffset(190, 42),
+    BackgroundTransparency = 1, Text = "NOIR", TextColor3 = C.text, TextSize = 34, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left })
+New("UIGradient", { Parent = logo, Color = ColorSequence.new(C.text, C.accent2), Rotation = 0 })
+text(sidebar, "R O B L O X   H U B", 10, UDim2.fromOffset(28, 76), true)
+do
+    local navDefs = {
+        { "home",   16898613509, Vector2.new(820, 147), "Home" },
+        { "aim",    16898613777, Vector2.new(967, 759), "Combat" },
+        { "world",  16898613509, Vector2.new(771, 563), "World" },
+        { "visual", 16898613353, Vector2.new(771, 563), "Visuals" },
+    }
+    for i, d in ipairs(navDefs) do
+        local b = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(16, 116 + (i - 1) * 52), Size = UDim2.fromOffset(208, 46),
+            BackgroundColor3 = C.surface, BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Name = d[4] })
+        corner(b, 12)
+        local ic = New("ImageLabel", { Parent = b, Position = UDim2.fromOffset(14, 11), Size = UDim2.fromOffset(24, 24),
+            BackgroundTransparency = 1, Image = "rbxassetid://" .. d[2], ImageRectSize = Vector2.new(48, 48), ImageRectOffset = d[3],
+            ImageColor3 = C.dim })
+        local lbl = New("TextLabel", { Parent = b, Position = UDim2.fromOffset(50, 0), Size = UDim2.new(1, -60, 1, 0),
+            BackgroundTransparency = 1, Text = d[4], TextColor3 = C.dim, TextSize = 15, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+        local bar = New("Frame", { Parent = b, Position = UDim2.fromOffset(0, 12), Size = UDim2.fromOffset(3, 22), BackgroundColor3 = C.accent, BackgroundTransparency = 1 })
+        corner(bar, 2)
+        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, label = lbl, bar = bar }
     end
-end)
+end
+local status = New("Frame", { Parent = sidebar, Position = UDim2.fromOffset(16, 596), Size = UDim2.fromOffset(208, 84), BackgroundColor3 = C.panel, BackgroundTransparency = .18 })
+corner(status, 16); stroke(status, C.border, .6)
+local statusDot = New("Frame", { Parent = status, Position = UDim2.fromOffset(16, 21), Size = UDim2.fromOffset(8, 8), BackgroundColor3 = C.accent })
+corner(statusDot, 4)
+text(status, "Connected", 13, UDim2.fromOffset(30, 15))
+text(status, "Noir Client \u{2022} v4", 15, UDim2.fromOffset(16, 45))
 
-local sidebar = New("Frame", { Parent = win, Size = UDim2.fromOffset(250, 690), BackgroundColor3 = Color3.fromRGB(10,10,20), BackgroundTransparency = .13 })
-stroke(sidebar, C.border, .55)
-local logo = New("TextLabel", { Parent = sidebar, Position = UDim2.fromOffset(35, 30), Size = UDim2.fromOffset(92, 92),
-    BackgroundColor3 = Color3.fromRGB(18,18,20), Text = "V", TextColor3 = C.text, TextSize = 62, Font = Enum.Font.GothamBold })
-corner(logo, 22); stroke(logo, C.accent, .05)
-New("UIGradient", { Parent = logo, Color = ColorSequence.new(C.text, C.accent), Rotation = 90 })
-text(sidebar, "V E L V E T", 20, UDim2.fromOffset(35, 132))
-text(sidebar, "U I  L I B R A R Y", 10, UDim2.fromOffset(38, 162), true)
-local search = New("TextBox", { Parent = sidebar, Position = UDim2.fromOffset(20, 205), Size = UDim2.fromOffset(210, 48),
-    BackgroundColor3 = C.panel, PlaceholderText = "  Search features...", Text = "", TextColor3 = C.text,
-    PlaceholderColor3 = C.dim, TextSize = 14, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
-corner(search, 12); stroke(search)
-local home = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(18, 278), Size = UDim2.fromOffset(214, 58),
-    BackgroundColor3 = Color3.fromRGB(72,72,78), Text = "\u{2302}    Home                         5", TextColor3 = C.text,
-    TextSize = 17, Font = Enum.Font.Gotham, AutoButtonColor = false })
-corner(home, 12); stroke(home, C.accent, .05)
-local configsNav = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(18, 346), Size = UDim2.fromOffset(214, 58),
-    BackgroundColor3 = Color3.fromRGB(20,20,34), Text = "\u{25a3}    Configs", TextColor3 = C.dim, TextSize = 17,
-    Font = Enum.Font.Gotham, AutoButtonColor = false })
-corner(configsNav, 12); stroke(configsNav, C.border, .55)
-local status = New("Frame", { Parent = sidebar, Position = UDim2.fromOffset(18, 590), Size = UDim2.fromOffset(214, 78), BackgroundColor3 = C.panel })
-corner(status, 14); stroke(status)
-text(status, "\u{25cf}  Connected", 13, UDim2.fromOffset(16, 10))
-text(status, "Noir Client", 16, UDim2.fromOffset(16, 35))
-
-local header = New("Frame", { Parent = win, Position = UDim2.fromOffset(250, 0), Size = UDim2.new(1, -250, 0, 110), BackgroundTransparency = 1 })
+local header = New("Frame", { Parent = win, Position = UDim2.fromOffset(240, 0), Size = UDim2.new(1, -240, 0, 96), BackgroundTransparency = 1 })
+text(header, "NOIR HUB", 24, UDim2.fromOffset(28, 24))
+text(header, "Silent Aim \u{2022} ESP \u{2022} Prediction", 13, UDim2.fromOffset(29, 56), true)
 local creatorImage = ""
 do
     local customAsset = (type(getcustomasset) == "function" and getcustomasset) or (type(getsynasset) == "function" and getsynasset)
@@ -190,19 +230,21 @@ do
         if ok then creatorImage = asset end
     end
 end
-local icon = New("ImageLabel", { Parent = header, Position = UDim2.fromOffset(36, 24), Size = UDim2.fromOffset(62, 62),
+local search = New("TextBox", { Parent = header, Position = UDim2.new(1, -470, 0, 26), Size = UDim2.fromOffset(300, 44),
+    BackgroundColor3 = C.panel, PlaceholderText = "   Search features...", Text = "", TextColor3 = C.text,
+    PlaceholderColor3 = C.dim, TextSize = 14, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
+corner(search, 12); stroke(search)
+local icon = New("ImageLabel", { Parent = header, Position = UDim2.new(1, -152, 0, 26), Size = UDim2.fromOffset(44, 44),
     BackgroundColor3 = C.panel, Image = creatorImage, ScaleType = Enum.ScaleType.Crop })
-corner(icon, 16); stroke(icon, C.accent, .25)
-if creatorImage == "" then local fb = text(icon, "N", 30, UDim2.fromOffset(0, 10)); fb.TextXAlignment = Enum.TextXAlignment.Center end
-text(header, "Noir Hub", 30, UDim2.fromOffset(116, 23))
-text(header, "Noir Creator", 16, UDim2.fromOffset(117, 61), true)
+corner(icon, 13); stroke(icon, C.border, .45)
+if creatorImage == "" then local fb = text(icon, "N", 22, UDim2.fromOffset(0, 8)); fb.TextXAlignment = Enum.TextXAlignment.Center end
 function topButton(txt, x, color)
-    local b = New("TextButton", { Parent = header, Position = UDim2.new(1, x, 0, 25), Size = UDim2.fromOffset(43, 43),
-        BackgroundColor3 = color or C.panel, Text = txt, TextColor3 = C.text, TextSize = 22, Font = Enum.Font.GothamBold })
-    corner(b, 13); return b
+    local b = New("TextButton", { Parent = header, Position = UDim2.new(1, x, 0, 26), Size = UDim2.fromOffset(44, 44),
+        BackgroundColor3 = color or C.btn, Text = txt, TextColor3 = C.text, TextSize = 22, Font = Enum.Font.GothamBold })
+    corner(b, 13); stroke(b, C.border, .6); return b
 end
-local mini = topButton("\u{2212}", -108, Color3.fromRGB(75,75,80))
-local close = topButton("\u{00d7}", -58, Color3.fromRGB(62,62,68))
+local mini = topButton("\u{2212}", -98, C.btn)
+local close = topButton("\u{00d7}", -48, C.btn)
 close.MouseButton1Click:Connect(function()
     TweenService:Create(winScale, TweenInfo.new(.28, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Scale = .78 }):Play()
     TweenService:Create(win, TweenInfo.new(.28), { BackgroundTransparency = 1 }):Play()
@@ -236,9 +278,9 @@ UIS.InputEnded:Connect(function(input)
 end)
 
 local restore = New("TextButton", { Parent = gui, AnchorPoint = Vector2.new(1, .5), Position = NoirPersistence.GetPosition("restore", UDim2.new(1, -22, .5, 0)),
-    Size = UDim2.fromOffset(62, 62), BackgroundColor3 = C.panel, Text = "V", TextColor3 = C.text, TextSize = 30,
+    Size = UDim2.fromOffset(62, 62), BackgroundColor3 = C.panel, Text = "N", TextColor3 = C.text, TextSize = 30,
     Font = Enum.Font.GothamBold, Visible = false, AutoButtonColor = false })
-corner(restore, 20); stroke(restore, C.accent, .05)
+corner(restore, 18); stroke(restore, C.border, .45)
 local restoreDragging, restoreMoved, restoreStart, restorePos = false, false, nil, nil
 restore.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -288,9 +330,7 @@ for i = 1, 2 do
         BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
     New("UIListLayout", { Parent = configCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
 end
-sidebar.Visible = false
-header.Position = UDim2.fromOffset(0, 0); header.Size = UDim2.new(1, 0, 0, 105)
-content.Position = UDim2.fromOffset(24, 112); content.Size = UDim2.new(1, -80, 1, -275); content.Visible = false
+content.Position = UDim2.fromOffset(264, 104); content.Size = UDim2.new(1, -288, 1, -128); content.Visible = false
 configContent.Position = content.Position; configContent.Size = content.Size
 local visualContent = content:Clone(); visualContent.Name = "VisualContent"; visualContent.Parent = win; visualContent.Visible = false; visualContent:ClearAllChildren()
 local visualCols = {}
@@ -315,30 +355,47 @@ for i = 1, 2 do
 end
 
 local dashboard = New("Frame", { Parent = win, Position = content.Position, Size = content.Size, BackgroundTransparency = 1 })
-local profile = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(20, 22), Size = UDim2.fromOffset(500, 180), BackgroundColor3 = C.panel, BackgroundTransparency = .36 })
-corner(profile, 22); stroke(profile, C.border, .15)
-local avatar = New("ImageLabel", { Parent = profile, Position = UDim2.fromOffset(24, 28), Size = UDim2.fromOffset(118, 118), BackgroundColor3 = C.surface })
-corner(avatar, 28); stroke(avatar, C.accent, .05)
+-- profile card
+local profile = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 0), Size = UDim2.fromOffset(430, 168), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
+corner(profile, 18); stroke(profile, C.border, .5)
+local avatar = New("ImageLabel", { Parent = profile, Position = UDim2.fromOffset(22, 24), Size = UDim2.fromOffset(120, 120), BackgroundColor3 = C.surface })
+corner(avatar, 20); stroke(avatar, C.border, .45)
 task.spawn(function()
     local ok, img = pcall(function() return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size180x180) end)
     if ok then avatar.Image = img end
 end)
-text(profile, LocalPlayer.DisplayName, 25, UDim2.fromOffset(166, 38))
-text(profile, "@" .. LocalPlayer.Name, 16, UDim2.fromOffset(167, 78), true)
-text(profile, "Noir Client \u{2022} Connected", 15, UDim2.fromOffset(167, 112))
-local fpsCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(545, 22), Size = UDim2.fromOffset(310, 180), BackgroundColor3 = C.panel, BackgroundTransparency = .36 })
-corner(fpsCard, 22); stroke(fpsCard, C.border, .15)
-text(fpsCard, "FPS", 16, UDim2.fromOffset(24, 25), true)
-local fpsText = text(fpsCard, "60", 46, UDim2.fromOffset(24, 62)); fpsText.TextColor3 = C.text
-local pingCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(880, 22), Size = UDim2.new(1, -900, 0, 180), BackgroundColor3 = C.panel, BackgroundTransparency = .36 })
-corner(pingCard, 22); stroke(pingCard, C.border, .15)
-text(pingCard, "NETWORK LATENCY", 16, UDim2.fromOffset(24, 25), true)
-local pingText = text(pingCard, "-- ms", 38, UDim2.fromOffset(24, 66)); pingText.TextColor3 = C.text
-local infoCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(20, 225), Size = UDim2.new(1, -40, 1, -245), BackgroundColor3 = C.panel, BackgroundTransparency = .40 })
-corner(infoCard, 24); stroke(infoCard, C.border, .18)
-text(infoCard, "NOIR SILENT AIM  \u{2022}  v4", 28, UDim2.fromOffset(28, 26))
-text(infoCard, "Gun prediction \u{2022} Knife prediction \u{2022} Player & object ESP \u{2022} Preset profiles", 16, UDim2.fromOffset(29, 68), true)
-local statText = text(infoCard, "", 15, UDim2.fromOffset(29, 104), true)
+text(profile, LocalPlayer.DisplayName, 24, UDim2.fromOffset(162, 32))
+text(profile, "@" .. LocalPlayer.Name, 15, UDim2.fromOffset(163, 70), true)
+local pill = New("Frame", { Parent = profile, Position = UDim2.fromOffset(162, 104), Size = UDim2.fromOffset(158, 30), BackgroundColor3 = C.accent, BackgroundTransparency = .8 })
+corner(pill, 15); stroke(pill, C.accent, .35)
+local pillDot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(12, 11), Size = UDim2.fromOffset(8, 8), BackgroundColor3 = C.accent }); corner(pillDot, 4)
+text(pill, "Connected", 13, UDim2.fromOffset(26, 7))
+-- hero card
+local heroCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(446, 0), Size = UDim2.new(1, -446, 0, 168), BackgroundColor3 = C.card, BackgroundTransparency = .15 })
+corner(heroCard, 18); stroke(heroCard, C.border, .45)
+New("UIGradient", { Parent = heroCard, Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(23,28,25)), ColorSequenceKeypoint.new(1, Color3.fromRGB(10,12,14)) }), Rotation = 25 })
+text(heroCard, "NOIR SILENT AIM", 26, UDim2.fromOffset(26, 24))
+text(heroCard, "v4 \u{2022} gun & knife prediction, player and object ESP, presets", 14, UDim2.fromOffset(27, 62), true)
+local statText = text(heroCard, "", 14, UDim2.fromOffset(27, 96), true)
+-- stat cards
+local fpsCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
+corner(fpsCard, 18); stroke(fpsCard, C.border, .5)
+text(fpsCard, "FPS", 14, UDim2.fromOffset(22, 20), true)
+local fpsText = text(fpsCard, "60", 42, UDim2.fromOffset(22, 50)); fpsText.TextColor3 = C.text
+local pingCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(303, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
+corner(pingCard, 18); stroke(pingCard, C.border, .5)
+text(pingCard, "NETWORK LATENCY", 14, UDim2.fromOffset(22, 20), true)
+local pingText = text(pingCard, "-- ms", 42, UDim2.fromOffset(22, 50)); pingText.TextColor3 = C.text
+local playerCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(606, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
+corner(playerCard, 18); stroke(playerCard, C.border, .5)
+text(playerCard, "PLAYERS", 14, UDim2.fromOffset(22, 20), true)
+local playerText = text(playerCard, "0", 42, UDim2.fromOffset(22, 50)); playerText.TextColor3 = C.text
+-- info card
+local infoCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 332), Size = UDim2.new(1, 0, 1, -348), BackgroundColor3 = C.panel, BackgroundTransparency = .3 })
+corner(infoCard, 18); stroke(infoCard, C.border, .5)
+text(infoCard, "QUICK START", 18, UDim2.fromOffset(24, 22))
+text(infoCard, "Open Combat for silent aim, World for gun & fling tools, Visuals for ESP.", 14, UDim2.fromOffset(25, 54), true)
+text(infoCard, "Settings are saved automatically to NOIR.CONFIG.", 14, UDim2.fromOffset(25, 78), true)
 local frameCounter, lastFps = 0, os.clock()
 RunService.RenderStepped:Connect(function()
     frameCounter += 1
@@ -348,44 +405,13 @@ RunService.RenderStepped:Connect(function()
         frameCounter = 0; lastFps = now
         local ok, v = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
         pingText.Text = ok and (tostring(math.floor(v + .5)) .. " ms") or "-- ms"
+        local pl = #Players:GetPlayers()
+        playerText.Text = tostring(pl)
+        statText.Text = "Loaded \u{2022} " .. tostring(pl) .. " players in server"
     end
 end)
 
-local bottom = New("Frame", { Parent = win, AnchorPoint = Vector2.new(.5, 1), Position = UDim2.new(.5, 0, 1, -18), Size = UDim2.fromOffset(650, 70), BackgroundColor3 = C.panel, BackgroundTransparency = .34 })
-corner(bottom, 22); stroke(bottom, C.border, .1)
-local navButtons, navIcons = {}, {}
-do
-    local navDefs = {
-        {"main", 16898613509, Vector2.new(820, 147), "Home"},
-        {"aim", 16898613777, Vector2.new(967, 759), "Combat"},
-        {"world", 16898613509, Vector2.new(771, 563), "World"},
-        {"visual", 16898613353, Vector2.new(771, 563), "Visuals"},
-    }
-    for i, d in ipairs(navDefs) do
-        local b = New("TextButton", { Parent = bottom, Position = UDim2.fromOffset(10 + (i - 1) * 158, 10), Size = UDim2.fromOffset(151, 50),
-            BackgroundColor3 = C.surface, Text = "", AutoButtonColor = false, Name = d[4] })
-        corner(b, 15); stroke(b, C.border, .68)
-        local ring = New("Frame", { Parent = b, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(40, 40),
-            BackgroundColor3 = Color3.fromRGB(8,8,10), BackgroundTransparency = .24, ZIndex = 2 })
-        corner(ring, 20); local ringStroke = stroke(ring, C.border, .28); ringStroke.Thickness = 1.5
-        local glow = New("ImageLabel", { Parent = b, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(35, 35),
-            BackgroundTransparency = 1, Image = "rbxassetid://" .. d[2], ImageRectSize = Vector2.new(48, 48), ImageRectOffset = d[3],
-            ImageColor3 = Color3.fromRGB(205,205,212), ImageTransparency = .78, ZIndex = 3 })
-        local ic = New("ImageLabel", { Parent = b, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(27, 27),
-            BackgroundTransparency = 1, Image = "rbxassetid://" .. d[2], ImageRectSize = Vector2.new(48, 48), ImageRectOffset = d[3],
-            ImageColor3 = C.dim, ZIndex = 4 })
-        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, glow = glow, ring = ring }
-        b.MouseButton1Down:Connect(function()
-            TweenService:Create(ring, TweenInfo.new(.13, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(33, 33), Rotation = 18 }):Play()
-            TweenService:Create(ic, TweenInfo.new(.13, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(23, 23), Rotation = -10 }):Play()
-        end)
-        b.MouseButton1Up:Connect(function()
-            TweenService:Create(ring, TweenInfo.new(.34, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(40, 40), Rotation = 0 }):Play()
-            TweenService:Create(ic, TweenInfo.new(.34, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(27, 27), Rotation = 0 }):Play()
-        end)
-    end
-end
-search.Parent = header; search.Position = UDim2.new(1, -370, 0, 28); search.Size = UDim2.fromOffset(210, 46)
+-- (navigation now lives in the left sidebar; the old bottom bar was removed)
 local activePage = "home"
 local selectPage
 do
@@ -426,12 +452,12 @@ do
         configContent.Visible = false
         for name, b in pairs(navButtons) do
             local active = name == page
-            TweenService:Create(b, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = active and Color3.fromRGB(72,72,79) or C.surface }):Play()
+            TweenService:Create(b, TweenInfo.new(.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = active and C.card or C.surface, BackgroundTransparency = active and 0 or 1 }):Play()
             local data = navIcons[name]
             if data then
-                TweenService:Create(data.icon, TweenInfo.new(.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { ImageColor3 = active and C.text or C.dim, Size = active and UDim2.fromOffset(31, 31) or UDim2.fromOffset(27, 27), Rotation = active and 0 or -2 }):Play()
-                TweenService:Create(data.glow, TweenInfo.new(.22), { ImageTransparency = active and .42 or .86, Size = active and UDim2.fromOffset(44, 44) or UDim2.fromOffset(35, 35) }):Play()
-                TweenService:Create(data.ring, TweenInfo.new(.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = active and UDim2.fromOffset(46, 46) or UDim2.fromOffset(40, 40), BackgroundTransparency = active and .06 or .24 }):Play()
+                TweenService:Create(data.icon, TweenInfo.new(.2), { ImageColor3 = active and C.accent or C.dim }):Play()
+                TweenService:Create(data.label, TweenInfo.new(.2), { TextColor3 = active and C.text or C.dim }):Play()
+                TweenService:Create(data.bar, TweenInfo.new(.2), { BackgroundTransparency = active and 0 or 1 }):Play()
             end
         end
     end
@@ -490,13 +516,15 @@ function host.CreateTab()
         elseif isWorld then worldSectionCount += 1; col = worldCols[(worldSectionCount - 1) % 2 + 1]; page = "world"
         else sectionCount += 1; col = cols[(sectionCount - 1) % 2 + 1] end
         local panel = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
-            BackgroundColor3 = C.panel, BackgroundTransparency = .36, ClipsDescendants = true })
-        corner(panel, 22); stroke(panel, C.border, .2)
+            BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
+        corner(panel, 18); stroke(panel, C.border, .5)
+        local tick = New("Frame", { Parent = panel, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
+        corner(tick, 2)
         table.insert(sectionPanels, { panel = panel, page = page, name = string.lower(name .. " " .. (description or "")) })
         local shownName = name:gsub("^MAIN \u{2022} ", ""):gsub("^WORLD \u{2022} ", ""):gsub("^VISUAL \u{2022} ", "")
-        text(panel, shownName, 19, UDim2.fromOffset(24, 14))
-        if description and description ~= "" then text(panel, description, 12, UDim2.fromOffset(24, 42), true) end
-        local holder = New("Frame", { Parent = panel, Position = UDim2.fromOffset(20, description ~= "" and 72 or 55), Size = UDim2.new(1, -40, 0, 0),
+        text(panel, shownName, 18, UDim2.fromOffset(24, 16))
+        if description and description ~= "" then text(panel, description, 12, UDim2.fromOffset(24, 44), true) end
+        local holder = New("Frame", { Parent = panel, Position = UDim2.fromOffset(20, description ~= "" and 74 or 57), Size = UDim2.new(1, -40, 0, 0),
             AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
         New("UIListLayout", { Parent = holder, Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder })
         New("UIPadding", { Parent = holder, PaddingBottom = UDim.new(0, 12) })
@@ -519,12 +547,12 @@ function host.CreateTab()
             local pill = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(64, 34),
                 BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
             corner(pill, 17); stroke(pill, C.border, .55)
-            local dot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = Color3.fromRGB(145,145,180) })
+            local dot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = Color3.fromRGB(150,155,162) })
             corner(dot, 13)
             local function set(v, persist)
                 state = v == true
                 TweenService:Create(pill, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = state and C.accent or C.off }):Play()
-                TweenService:Create(dot, TweenInfo.new(.34, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = state and UDim2.fromOffset(34, 4) or UDim2.fromOffset(4, 4), BackgroundColor3 = state and Color3.new(1, 1, 1) or Color3.fromRGB(145,145,180), Size = UDim2.fromOffset(30, 30) }):Play()
+                TweenService:Create(dot, TweenInfo.new(.34, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = state and UDim2.fromOffset(34, 4) or UDim2.fromOffset(4, 4), BackgroundColor3 = state and Color3.new(1, 1, 1) or Color3.fromRGB(150,155,162), Size = UDim2.fromOffset(30, 30) }):Play()
                 task.delay(.20, function() if dot.Parent then TweenService:Create(dot, TweenInfo.new(.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(26, 26) }):Play() end end)
                 callback(state)
                 if persist ~= false then NoirPersistence.data.toggles[storagePrefix .. label] = state; NoirPersistence.Save() end
@@ -534,9 +562,12 @@ function host.CreateTab()
             return function(v) set(v == nil and not state or v, true) end
         end
         function api:AddButton(label, callback)
-            local b = New("TextButton", { Parent = holder, Size = UDim2.new(1, 0, 0, 48), BackgroundColor3 = Color3.fromRGB(68,68,74),
-                Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham })
-            corner(b, 11); stroke(b, C.accent, .25); b.MouseButton1Click:Connect(callback)
+            local b = New("TextButton", { Parent = holder, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
+                Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
+            corner(b, 12); stroke(b, C.border, .5)
+            b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(48,52,56) }):Play() end)
+            b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn }):Play() end)
+            b.MouseButton1Click:Connect(callback)
             return b
         end
         function api:AddSlider(label, min, max, default, callback)
@@ -551,14 +582,17 @@ function host.CreateTab()
                 BackgroundTransparency = .12, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
                 TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false })
             corner(value, 9); stroke(value, C.border, .4)
-            local track = New("Frame", { Parent = r, Position = UDim2.new(0, 0, 1, -18), Size = UDim2.new(1, 0, 0, 5), BackgroundColor3 = C.off })
+            local track = New("Frame", { Parent = r, Position = UDim2.new(0, 0, 1, -18), Size = UDim2.new(1, 0, 0, 6), BackgroundColor3 = C.off })
             corner(track, 3)
             local fill = New("Frame", { Parent = track, Size = UDim2.fromScale((default - min) / (max - min), 1), BackgroundColor3 = C.accent })
             corner(fill, 3)
+            local knob = New("Frame", { Parent = track, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new((default - min) / (max - min), 0, .5, 0), Size = UDim2.fromOffset(14, 14), BackgroundColor3 = C.text })
+            corner(knob, 7); stroke(knob, C.border, .3)
             local current = default
             local function set(v, persist)
                 current = math.clamp(math.floor((tonumber(v) or current or default) + .5), min, max)
                 fill.Size = UDim2.fromScale((current - min) / (max - min), 1)
+                knob.Position = UDim2.new((current - min) / (max - min), 0, .5, 0)
                 value.Text = tostring(current)
                 callback(current)
                 if persist ~= false then NoirPersistence.data.sliders[storagePrefix .. label] = current; NoirPersistence.Save() end
@@ -731,6 +765,15 @@ local playerData = {}
 local aimHeld = true
 local autoFireHeld = false
 
+--===================================================== PERFORMANCE CACHE
+-- Cached player list: avoids allocating a fresh table every frame in hot loops.
+local cachedPlayers = {}
+local function refreshPlayerCache() cachedPlayers = Players:GetPlayers() end
+refreshPlayerCache()
+local function getPlayers() return cachedPlayers end
+Players.PlayerAdded:Connect(refreshPlayerCache)
+Players.PlayerRemoving:Connect(refreshPlayerCache)
+
 --============================================================ HELPERS
 function notify(msg, time)
     if type(host.Notify) == "function" then pcall(host.Notify, "MM2 Silent Aim: " .. tostring(msg), time or 3) end
@@ -741,23 +784,41 @@ function validTarget(player)
     return player ~= nil and player ~= LocalPlayer and character ~= nil and humanoid ~= nil and humanoid.Health > 0
 end
 function localCharacter() return LocalPlayer.Character end
+-- Cache the local humanoid / root per character so hot loops don't re-run FindFirstChild every call.
+local localHumCache, localHumChar
 function localHumanoid()
     local c = LocalPlayer.Character
-    return c and c:FindFirstChildWhichIsA("Humanoid")
+    if c ~= localHumChar then
+        localHumChar = c
+        localHumCache = c and c:FindFirstChildWhichIsA("Humanoid")
+    end
+    return localHumCache
 end
+local localRootCache, localRootChar
 function localRoot()
     local c = LocalPlayer.Character
-    return c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso"))
+    if c ~= localRootChar then
+        localRootChar = c
+        localRootCache = c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso"))
+    end
+    return localRootCache
 end
 function playerHasTool(player, toolName)
     local character = player and player.Character
     local backpack = player and player:FindFirstChildOfClass("Backpack")
     return (character and character:FindFirstChild(toolName)) or (backpack and backpack:FindFirstChild(toolName))
 end
+-- Friend status rarely changes mid-session, so cache the IsFriendsWith result per player.
+local friendCache = {}
+Players.PlayerRemoving:Connect(function(p) friendCache[p] = nil end)
 function isFriend(player)
-    if not config.ignoreFriends then return false end
+    if not config.ignoreFriends or player == nil then return false end
+    local cached = friendCache[player]
+    if cached ~= nil then return cached end
     local ok, res = pcall(function() return player:IsFriendsWith(LocalPlayer.UserId) end)
-    return ok and res == true
+    local value = (ok and res == true)
+    friendCache[player] = value
+    return value
 end
 function distanceTo(player)
     local root = localRoot()
@@ -788,12 +849,12 @@ function setTarget(player)
     end
 end
 function findByKnife()
-    for _, player in ipairs(Players:GetPlayers()) do
+    for _, player in ipairs(getPlayers()) do
         if player ~= LocalPlayer and playerHasTool(player, "Knife") then return player end
     end
 end
 function findByGun()
-    for _, player in ipairs(Players:GetPlayers()) do
+    for _, player in ipairs(getPlayers()) do
         if player ~= LocalPlayer and playerHasTool(player, "Gun") then return player end
     end
 end
@@ -801,7 +862,7 @@ function consumeData(data)
     if typeof(data) ~= "table" then return false end
     local foundMurderer, foundSheriff, foundHero
     local rolesChanged = false
-    for _, player in ipairs(Players:GetPlayers()) do
+    for _, player in ipairs(getPlayers()) do
         local info = data[player.Name] or data[tostring(player.UserId)]
         if typeof(info) == "table" then
             playerData[player.UserId] = info
@@ -840,9 +901,12 @@ function consumeData(data)
     end
     return foundMurderer ~= nil
 end
+local playerDataRemote
 function getPlayerDataRemote()
+    if playerDataRemote and playerDataRemote.Parent then return playerDataRemote end
     local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
-    return remote and remote:IsA("RemoteFunction") and remote or nil
+    playerDataRemote = (remote and remote:IsA("RemoteFunction")) and remote or nil
+    return playerDataRemote
 end
 function refreshTarget()
     local weaponTarget = findByKnife()
@@ -870,7 +934,7 @@ end
 local ESP_OUTLINE_NAME = "NoirESPOutline"
 local ESP_BOX_NAME = "NoirESPBox"
 local espTracers = {}
-local espSkeletons = {}
+local espRefs = {}          -- [player] = { char, info, bar, humanoid } cached billboard refs
 local Drawing = (typeof(Drawing) == "table") and Drawing or nil
 
 function clearESPCharacter(character)
@@ -878,7 +942,7 @@ function clearESPCharacter(character)
     local outline = character:FindFirstChild(ESP_OUTLINE_NAME)
     if outline then outline:Destroy() end
     for _, item in ipairs(character:GetDescendants()) do
-        if item.Name == ESP_BOX_NAME or item.Name == "NoirESPRole" then item:Destroy() end
+        if item.Name == ESP_BOX_NAME or item.Name == "NoirESPRole" or item.Name == "NoirESPBar" then item:Destroy() end
     end
 end
 function makeBillboard(root, role)
@@ -902,7 +966,7 @@ function makeBillboard(root, role)
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
     -- health bar
     local barBg = Instance.new("Frame")
-    barBg.Name = "NoirESPRole"
+    barBg.Name = "NoirESPBar"
     barBg.AnchorPoint = Vector2.new(0, 1)
     barBg.Position = UDim2.new(0, -6, 1, 0)
     barBg.Size = UDim2.new(0, 4, 1, 0)
@@ -946,8 +1010,9 @@ end
 function applyESPPlayer(player)
     if player == LocalPlayer then return end
     local character = player.Character
-    if not character then return end
+    if not character then espRefs[player] = nil return end
     clearESPCharacter(character)
+    espRefs[player] = nil
     local role = espPlayerRole(player)
     local outlineWanted = config.espOutline or (config.espOutlineMurderer and role == "murderer") or (config.espOutlineSheriff and role == "sheriff")
     local chamsWanted = config.espChams or (config.espChamsMurderer and role == "murderer") or (config.espChamsSheriff and role == "sheriff")
@@ -976,128 +1041,185 @@ function applyESPPlayer(player)
             nameLabel.Visible = config.espName
             nameLabel.Text = player.Name
             infoLabel.Visible = config.espDistance or config.espRole
+            espRefs[player] = { char = character, info = infoLabel, bar = bar, humanoid = nil }
         end
     end
 end
 function refreshESP()
-    for _, player in ipairs(Players:GetPlayers()) do applyESPPlayer(player) end
+    for _, player in ipairs(getPlayers()) do applyESPPlayer(player) end
 end
 function bindESPPlayer(player)
     if player == LocalPlayer then return end
     player.CharacterAdded:Connect(function() task.wait(0.4); applyESPPlayer(player) end)
     if player.Character then applyESPPlayer(player) end
 end
-for _, player in ipairs(Players:GetPlayers()) do bindESPPlayer(player) end
+for _, player in ipairs(getPlayers()) do bindESPPlayer(player) end
 Players.PlayerAdded:Connect(bindESPPlayer)
 
--- tracer + skeleton render loop
-function skeletonParts(character)
-    local r15 = {
-        {"Head","UpperTorso"}, {"UpperTorso","LowerTorso"},
-        {"UpperTorso","LeftUpperArm"}, {"LeftUpperArm","LeftLowerArm"}, {"LeftLowerArm","LeftHand"},
-        {"UpperTorso","RightUpperArm"}, {"RightUpperArm","RightLowerArm"}, {"RightLowerArm","RightHand"},
-        {"LowerTorso","LeftUpperLeg"}, {"LeftUpperLeg","LeftLowerLeg"}, {"LeftLowerLeg","LeftFoot"},
-        {"LowerTorso","RightUpperLeg"}, {"RightUpperLeg","RightLowerLeg"}, {"RightLowerLeg","RightFoot"},
-    }
-    local r6 = {
-        {"Head","Torso"}, {"Torso","Left Arm"}, {"Torso","Right Arm"}, {"Torso","Left Leg"}, {"Torso","Right Leg"},
-    }
-    return character:FindFirstChild("UpperTorso") and r15 or r6
+-- tracer + skeleton render loop (optimized: precomputed bones, per-player cache, no per-frame string concat)
+local R15_BONES = {
+    {"Head","UpperTorso"}, {"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"}, {"LeftUpperArm","LeftLowerArm"}, {"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"}, {"RightUpperArm","RightLowerArm"}, {"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"}, {"LeftUpperLeg","LeftLowerLeg"}, {"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"}, {"RightUpperLeg","RightLowerLeg"}, {"RightLowerLeg","RightFoot"},
+}
+local R6_BONES = {
+    {"Head","Torso"}, {"Torso","Left Arm"}, {"Torso","Right Arm"}, {"Torso","Left Leg"}, {"Torso","Right Leg"},
+}
+-- [player] = { char = character, parts = {{a,b},...}, lines = {line,...} }
+local skeletonCache = {}
+
+-- TTL cache for the tool-based role fallback (avoids tool lookups every frame).
+local roleFallbackCache = {}
+local function espRoleFast(player)
+    local cached = roleCache[player.UserId]
+    if cached then return cached end
+    local now = os.clock()
+    local entry = roleFallbackCache[player.UserId]
+    if entry and now - entry.t < 0.5 then return entry.role end
+    local role = espPlayerRole(player)
+    roleFallbackCache[player.UserId] = { role = role, t = now }
+    return role
 end
-function ensureLine(store, index)
+
+local function newLine()
     if not Drawing then return nil end
-    if not store[index] then
-        local line = Drawing.new("Line")
-        line.Thickness = 1.4
-        line.Transparency = 1
-        line.Visible = false
-        store[index] = line
-    end
-    return store[index]
+    local line = Drawing.new("Line")
+    line.Thickness = 1.4
+    line.Transparency = 1
+    line.Visible = false
+    return line
 end
-RunService.RenderStepped:Connect(function()
+
+local function hideAllESP()
+    for _, line in pairs(espTracers) do line.Visible = false end
+    for _, set in pairs(skeletonCache) do
+        local lines = set.lines
+        for i = 1, #lines do lines[i].Visible = false end
+    end
+end
+
+local espLineAccum = 0
+RunService.RenderStepped:Connect(function(dt)
+    local wantTracer = config.espTracer
+    local wantSkeleton = config.espSkeleton and Drawing
+    if not wantTracer and not wantSkeleton then hideAllESP() return end
+    if perfMode then
+        espLineAccum += dt
+        if espLineAccum < 0.033 then return end
+        espLineAccum = 0
+    end
     local cam = Workspace.CurrentCamera
     if not cam then return end
-    for _, player in ipairs(Players:GetPlayers()) do
+    local players = getPlayers()
+    local viewport = cam.ViewportSize
+    local bottom = Vector2.new(viewport.X / 2, viewport.Y)
+    for i = 1, #players do
+        local player = players[i]
         if player ~= LocalPlayer then
             local character = player.Character
-            local role = espPlayerRole(player)
-            local wanted = (config.espTracer or config.espSkeleton) and character
-            if wanted then
-                -- tracer
-                local tracer = ensureLine(espTracers, player)
+            local role = character and espRoleFast(player) or "innocent"
+            if wantTracer then
+                local tracer = espTracers[player]
+                if not tracer then tracer = newLine(); espTracers[player] = tracer end
                 if tracer then
-                    if config.espTracer then
-                        local root = character:FindFirstChild("HumanoidRootPart")
-                        local origin = cam:WorldToViewportPoint(Vector3.new(0, 0, 0))
-                        local bottom = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y)
-                        if root then
-                            local pos = cam:WorldToViewportPoint(root.Position)
-                            tracer.From = bottom
-                            tracer.To = Vector2.new(pos.X, pos.Y)
-                            tracer.Color = roleColor(role)
-                            tracer.Visible = pos.Z > 0
-                        end
+                    local root = character and character:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        local pos = cam:WorldToViewportPoint(root.Position)
+                        tracer.From = bottom
+                        tracer.To = Vector2.new(pos.X, pos.Y)
+                        tracer.Color = roleColor(role)
+                        tracer.Visible = pos.Z > 0
                     else
                         tracer.Visible = false
-                    end
-                end
-                -- skeleton
-                if config.espSkeleton and Drawing then
-                    local bones = skeletonParts(character)
-                    local idx = 0
-                    for _, pair in ipairs(bones) do
-                        idx += 1
-                        local a = character:FindFirstChild(pair[1])
-                        local b = character:FindFirstChild(pair[2])
-                        local line = ensureLine(espSkeletons, player.Name .. tostring(idx))
-                        if line then
-                            if a and b and a:IsA("BasePart") and b:IsA("BasePart") then
-                                local pa = cam:WorldToViewportPoint(a.Position)
-                                local pb = cam:WorldToViewportPoint(b.Position)
-                                line.From = Vector2.new(pa.X, pa.Y)
-                                line.To = Vector2.new(pb.X, pb.Y)
-                                line.Color = roleColor(role)
-                                line.Visible = pa.Z > 0 and pb.Z > 0
-                            else
-                                line.Visible = false
-                            end
-                        end
                     end
                 end
             else
                 local tracer = espTracers[player]
                 if tracer then tracer.Visible = false end
             end
+            if wantSkeleton and character then
+                local set = skeletonCache[player]
+                if not set or set.char ~= character then
+                    if set and set.lines then
+                        for b = 1, #set.lines do if set.lines[b] then set.lines[b]:Remove() end end
+                    end
+                    local bones = character:FindFirstChild("UpperTorso") and R15_BONES or R6_BONES
+                    set = { char = character, bones = bones, parts = {}, lines = {} }
+                    for b = 1, #bones do
+                        set.parts[b] = { character:FindFirstChild(bones[b][1]), character:FindFirstChild(bones[b][2]) }
+                        set.lines[b] = newLine()
+                    end
+                    skeletonCache[player] = set
+                end
+                local parts, lines = set.parts, set.lines
+                for b = 1, #lines do
+                    local line = lines[b]
+                    if line then
+                        local pair = parts[b]
+                        local a, b2 = pair[1], pair[2]
+                        if a and b2 then
+                            local pa = cam:WorldToViewportPoint(a.Position)
+                            local pb = cam:WorldToViewportPoint(b2.Position)
+                            line.From = Vector2.new(pa.X, pa.Y)
+                            line.To = Vector2.new(pb.X, pb.Y)
+                            line.Color = roleColor(role)
+                            line.Visible = pa.Z > 0 and pb.Z > 0
+                        else
+                            line.Visible = false
+                        end
+                    end
+                end
+            elseif skeletonCache[player] then
+                local lines = skeletonCache[player].lines
+                for b = 1, #lines do if lines[b] then lines[b].Visible = false end end
+            end
         end
     end
 end)
-RunService.RenderStepped:Connect(function()
-    if not config.espDistance and not config.espRole and not config.espHealth then return end
-    for _, player in ipairs(Players:GetPlayers()) do
+
+-- Clean up Drawing objects / refs when a player leaves so nothing leaks.
+Players.PlayerRemoving:Connect(function(player)
+    local set = skeletonCache[player]
+    if set then
+        for b = 1, #set.lines do if set.lines[b] then set.lines[b]:Remove() end end
+        skeletonCache[player] = nil
+    end
+    local tracer = espTracers[player]
+    if tracer then tracer:Remove(); espTracers[player] = nil end
+    espRefs[player] = nil
+    roleFallbackCache[player.UserId] = nil
+end)
+
+-- ESP text / health bar loop (throttled to ~12 Hz, uses cached billboard refs)
+local espTextAccum = 0
+RunService.RenderStepped:Connect(function(dt)
+    if not (config.espDistance or config.espRole or config.espHealth) then return end
+    espTextAccum += dt
+    if espTextAccum < 0.08 then return end
+    espTextAccum = 0
+    local players = getPlayers()
+    local showRole, showDist, showHealth = config.espRole, config.espDistance, config.espHealth
+    for i = 1, #players do
+        local player = players[i]
         if player ~= LocalPlayer then
-            local character = player.Character
-            local box = character and character:FindFirstChild("HumanoidRootPart") and character.HumanoidRootPart:FindFirstChild(ESP_BOX_NAME)
-            if box then
-                local frame = box:FindFirstChildOfClass("Frame")
-                local infoLabel = frame and frame:FindFirstChild("NoirESPRole")
-                local bar = frame and frame:FindFirstChild("NoirESPRole")
-                if infoLabel then
-                    local parts = {}
-                    if config.espRole then parts[#parts + 1] = string.upper(espPlayerRole(player)) end
-                    if config.espDistance then parts[#parts + 1] = tostring(math.floor(distanceTo(player))) .. "m" end
-                    infoLabel.Text = table.concat(parts, " | ")
+            local refs = espRefs[player]
+            if refs and refs.char == player.Character then
+                if refs.info and (showRole or showDist) then
+                    local roleText = showRole and string.upper(espRoleFast(player)) or nil
+                    local distText = showDist and (tostring(math.floor(distanceTo(player))) .. "m") or nil
+                    if roleText and distText then refs.info.Text = roleText .. " | " .. distText
+                    elseif roleText then refs.info.Text = roleText
+                    else refs.info.Text = distText or "" end
                 end
-                if config.espHealth then
-                    local hum = character:FindFirstChildWhichIsA("Humanoid")
-                    local barBg = frame and frame:FindFirstChild("NoirESPRole")
-                    if hum and barBg then
-                        local fill = barBg:FindFirstChildOfClass("Frame")
-                        if fill then
-                            local ratio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
-                            fill.Size = UDim2.fromScale(1, ratio)
-                            fill.BackgroundColor3 = Color3.fromRGB(255 * (1 - ratio), 235 * ratio, 60)
-                        end
+                if showHealth and refs.bar then
+                    local hum = refs.humanoid
+                    if not hum or hum.Parent ~= refs.char then hum = refs.char:FindFirstChildWhichIsA("Humanoid"); refs.humanoid = hum end
+                    if hum then
+                        local ratio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+                        refs.bar.Size = UDim2.fromScale(1, ratio)
+                        refs.bar.BackgroundColor3 = Color3.fromRGB(255 * (1 - ratio), 235 * ratio, 60)
                     end
                 end
             end
@@ -1129,37 +1251,110 @@ function objectColor(kind)
     if kind == "coin" then return Color3.fromRGB(255, 220, 50) end
     return Color3.fromRGB(100, 255, 150)
 end
-function refreshObjectESP()
-    for _, instance in ipairs(Workspace:GetDescendants()) do
-        if instance.Name == "NoirObjectOutline" or instance.Name == "NoirObjectBox" then instance:Destroy() end
+
+-- Registry of highlighted objects: [instance] = { outline = Highlight, box = SelectionBox }.
+-- Objects are added/removed incrementally (O(1) per DescendantAdded/Removing) instead of
+-- re-scanning the whole workspace, which was the main source of freezes.
+local objectESPRegistry = {}
+function objectESPAnyEnabled()
+    return config.outlineDroppedGun or config.outlineTraps or config.outlineThrowingKnives or config.outlineCoins
+        or config.boxDroppedGun or config.boxTraps or config.boxThrowingKnives or config.boxCoins
+end
+function objectESPClearAll()
+    for inst, entry in pairs(objectESPRegistry) do
+        if entry.outline then entry.outline:Destroy() end
+        if entry.box then entry.box:Destroy() end
     end
+    table.clear(objectESPRegistry)
+end
+function addObjectESP(instance)
+    local kind = objectKind(instance)
+    if not kind then return end
+    local part = objectPart(instance)
+    if not part then return end
+    if Players:GetPlayerFromCharacter(instance:FindFirstAncestorOfClass("Model")) then return end
+    local entry = objectESPRegistry[instance]
+    if not entry then entry = {}; objectESPRegistry[instance] = entry end
+    if objectEnabled(kind, false) then
+        if not entry.outline then
+            local h = Instance.new("Highlight")
+            h.Name = "NoirObjectOutline"; h.Adornee = instance; h.FillTransparency = 1
+            h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; h.Parent = instance
+            entry.outline = h
+        end
+        entry.outline.OutlineColor = objectColor(kind)
+        entry.outline.OutlineTransparency = 0
+    elseif entry.outline then
+        entry.outline:Destroy(); entry.outline = nil
+    end
+    if objectEnabled(kind, true) then
+        if not entry.box then
+            local box = Instance.new("SelectionBox")
+            box.Name = "NoirObjectBox"; box.Adornee = part; box.SurfaceTransparency = 1
+            box.LineThickness = .04; box.Parent = part
+            entry.box = box
+        end
+        entry.box.Color3 = objectColor(kind)
+    elseif entry.box then
+        entry.box:Destroy(); entry.box = nil
+    end
+end
+function removeObjectESP(instance)
+    local entry = objectESPRegistry[instance]
+    if entry then
+        if entry.outline then entry.outline:Destroy() end
+        if entry.box then entry.box:Destroy() end
+        objectESPRegistry[instance] = nil
+    end
+end
+-- Full scan: only invoked when a toggle changes (initial population / settings change), never per-frame.
+function refreshObjectESP()
+    if not objectESPAnyEnabled() then objectESPClearAll() return end
+    local seen = {}
     for _, instance in ipairs(Workspace:GetDescendants()) do
-        local kind = objectKind(instance)
-        local part = kind and objectPart(instance)
-        if part and not Players:GetPlayerFromCharacter(instance:FindFirstAncestorOfClass("Model")) then
-            if objectEnabled(kind, false) then
-                local h = Instance.new("Highlight")
-                h.Name = "NoirObjectOutline"; h.Adornee = instance; h.FillTransparency = 1; h.OutlineTransparency = 0
-                h.OutlineColor = objectColor(kind); h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; h.Parent = instance
+        if objectKind(instance) then addObjectESP(instance); seen[instance] = true end
+    end
+    for inst in pairs(objectESPRegistry) do
+        if not seen[inst] then removeObjectESP(inst) end
+    end
+end
+
+-- Gun-drop registry so findDroppedGun never has to scan the whole workspace.
+local trackedGuns = {}
+function isGunName(name)
+    local n = string.lower(name)
+    return n == "gundrop" or n == "gun" or string.find(n, "droppedgun", 1, true) or string.find(n, "gun_drop", 1, true)
+end
+function trackGun(instance)
+    if instance:IsA("BasePart") or instance:IsA("Tool") or instance:IsA("Model") then trackedGuns[instance] = true end
+end
+function findTrackedGun()
+    for inst in pairs(trackedGuns) do
+        if inst.Parent then
+            if not Players:GetPlayerFromCharacter(inst:FindFirstAncestorOfClass("Model")) then
+                if inst:IsA("BasePart") then return inst end
+                local part = inst:FindFirstChildWhichIsA("BasePart", true)
+                if part then return part end
             end
-            if objectEnabled(kind, true) then
-                local box = Instance.new("SelectionBox")
-                box.Name = "NoirObjectBox"; box.Adornee = part; box.SurfaceTransparency = 1; box.LineThickness = .04
-                box.Color3 = objectColor(kind); box.Parent = part
-            end
+        else
+            trackedGuns[inst] = nil
         end
     end
 end
+
 Workspace.DescendantAdded:Connect(function(instance)
-    local n = string.lower(instance.Name)
-    if n == "gundrop" or n == "gun" or string.find(n, "droppedgun", 1, true) or string.find(n, "coin", 1, true) or string.find(n, "trap", 1, true) then
-        task.defer(refreshObjectESP)
-    end
+    if isGunName(instance.Name) then trackGun(instance) end
+    if objectESPAnyEnabled() then addObjectESP(instance) end
 end)
 Workspace.DescendantRemoving:Connect(function(instance)
-    local n = string.lower(instance.Name)
-    if n == "gundrop" or string.find(n, "coin", 1, true) or string.find(n, "trap", 1, true) then task.defer(refreshObjectESP) end
+    trackedGuns[instance] = nil
+    removeObjectESP(instance)
 end)
+
+-- Seed the gun registry once at startup so already-present drops are tracked.
+for _, inst in ipairs(Workspace:GetDescendants()) do
+    if isGunName(inst.Name) then trackGun(inst) end
+end
 
 --=================================================== TARGET SELECTION
 function getAimPart(player)
@@ -1201,7 +1396,7 @@ function selectTarget(mode)
     end
     if mode == "Nearest" then
         local best, bd
-        for _, p in ipairs(Players:GetPlayers()) do
+        for _, p in ipairs(getPlayers()) do
             if passesFilters(p) then local d = distanceTo(p); if not bd or d < bd then best, bd = p, d end end
         end
         return best
@@ -1211,7 +1406,7 @@ function selectTarget(mode)
         local best, bd
         if cam then
             local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-            for _, p in ipairs(Players:GetPlayers()) do
+            for _, p in ipairs(getPlayers()) do
                 if passesFilters(p) then
                     local part = getAimPart(p)
                     if part then
@@ -1228,7 +1423,7 @@ function selectTarget(mode)
     end
     if mode == "Lowest Health" then
         local best, bh
-        for _, p in ipairs(Players:GetPlayers()) do
+        for _, p in ipairs(getPlayers()) do
             if passesFilters(p) then
                 local hum = p.Character and p.Character:FindFirstChildWhichIsA("Humanoid")
                 local h = hum and hum.Health or math.huge
@@ -1239,7 +1434,7 @@ function selectTarget(mode)
     end
     if mode == "Random" then
         local list = {}
-        for _, p in ipairs(Players:GetPlayers()) do if passesFilters(p) then list[#list + 1] = p end end
+        for _, p in ipairs(getPlayers()) do if passesFilters(p) then list[#list + 1] = p end end
         if #list > 0 then return list[math.random(#list)] end
         return nil
     end
@@ -1256,7 +1451,7 @@ function findNearestKnifeTarget()
     local root = localRoot()
     if not root then return nil end
     local closest, closestDistance
-    for _, player in ipairs(Players:GetPlayers()) do
+    for _, player in ipairs(getPlayers()) do
         if passesFilters(player) then
             local targetRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
             if targetRoot then
@@ -1274,7 +1469,7 @@ function knifeTargetPlayer()
     if config.knifeTargetMode == "Selected" then local p = config.selectedPlayer and Players:FindFirstChild(config.selectedPlayer); return passesFilters(p) and p or nil end
     if config.knifeTargetMode == "Random" then
         local list = {}
-        for _, p in ipairs(Players:GetPlayers()) do if passesFilters(p) then list[#list + 1] = p end end
+        for _, p in ipairs(getPlayers()) do if passesFilters(p) then list[#list + 1] = p end end
         if #list > 0 then return list[math.random(#list)] end
         return nil
     end
@@ -1416,16 +1611,16 @@ function calculateKnifeAim(part, origin)
     local offset = Vector3.new(part.Size.X * config.offsetX / 100, part.Size.Y * config.offsetY / 100, part.Size.Z * config.offsetZ / 100)
     return part.Position + predictedVelocity * time + offset
 end
+local wallCheckParams = RaycastParams.new()
+wallCheckParams.FilterType = Enum.RaycastFilterType.Exclude
+wallCheckParams.IgnoreWater = true
 function targetVisible(part)
     if not config.wallCheck then return true end
     local character = LocalPlayer.Character
     local originPart = character and (character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart"))
     if not originPart or not part then return false end
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = { character }
-    params.IgnoreWater = true
-    local result = Workspace:Raycast(originPart.Position, part.Position - originPart.Position, params)
+    wallCheckParams.FilterDescendantsInstances = { character }
+    local result = Workspace:Raycast(originPart.Position, part.Position - originPart.Position, wallCheckParams)
     return result == nil or result.Instance:IsDescendantOf(part.Parent)
 end
 
@@ -1785,30 +1980,42 @@ end
 
 function playerNameList()
     local list = { "None" }
-    for _, player in ipairs(Players:GetPlayers()) do
+    for _, player in ipairs(getPlayers()) do
         if player ~= LocalPlayer then list[#list + 1] = player.Name end
     end
     table.sort(list, function(a, b) return a == "None" or (b ~= "None" and string.lower(a) < string.lower(b)) end)
     return list
 end
 
+local lastGunDeepScan = 0
+local pickupRemoteCache
+function findPickupRemote()
+    if pickupRemoteCache and pickupRemoteCache.Parent then return pickupRemoteCache end
+    pickupRemoteCache = nil
+    for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+            local n = string.lower(remote.Name)
+            if (string.find(n, "gun", 1, true) and (string.find(n, "pickup", 1, true) or string.find(n, "grab", 1, true) or string.find(n, "get", 1, true))) or n == "pickupgun" then
+                pickupRemoteCache = remote
+                break
+            end
+        end
+    end
+    return pickupRemoteCache
+end
 function findDroppedGun()
+    -- 1) fast registry lookup (kept up to date by DescendantAdded/Removing)
+    local tracked = findTrackedGun()
+    if tracked then return tracked end
+    -- 2) throttled fallback (at most once per second) instead of a full scan every tick
+    local now = os.clock()
+    if now - lastGunDeepScan < 1 then return nil end
+    lastGunDeepScan = now
     local direct = Workspace:FindFirstChild("GunDrop", true)
     if direct then
         if direct:IsA("BasePart") then return direct end
         local part = direct:FindFirstChildWhichIsA("BasePart", true)
         if part then return part end
-    end
-    for _, object in ipairs(Workspace:GetDescendants()) do
-        local name = string.lower(object.Name)
-        local isGunName = (name == "gundrop" or name == "gun" or string.find(name, "droppedgun", 1, true) or string.find(name, "gun_drop", 1, true))
-        if isGunName and not Players:GetPlayerFromCharacter(object:FindFirstAncestorOfClass("Model")) then
-            if object:IsA("BasePart") then return object end
-            if object:IsA("Tool") or object:IsA("Model") then
-                local part = object:FindFirstChildWhichIsA("BasePart", true)
-                if part then return part end
-            end
-        end
     end
 end
 
@@ -1832,16 +2039,8 @@ function grabGun(silent)
     end
     -- 2) move the dropped gun onto the player so physics triggers pickup
     pcall(function() part.CFrame = root.CFrame end)
-    -- 3) fire any pickup remote as a fallback
-    local pickupRemote
-    for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
-        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
-            local n = string.lower(remote.Name)
-            if (string.find(n, "gun", 1, true) and (string.find(n, "pickup", 1, true) or string.find(n, "grab", 1, true) or string.find(n, "get", 1, true))) or n == "pickupgun" then
-                pickupRemote = remote; break
-            end
-        end
-    end
+    -- 3) fire any pickup remote as a fallback (cached lookup)
+    local pickupRemote = findPickupRemote()
     if pickupRemote then
         pcall(function()
             if pickupRemote:IsA("RemoteFunction") then pickupRemote:InvokeServer(part) else pickupRemote:FireServer(part) end
@@ -1881,7 +2080,7 @@ end
 function nearestPlayer(maxDistance)
     local root = localRoot(); if not root then return nil end
     local best, bestDistance
-    for _, player in ipairs(Players:GetPlayers()) do
+    for _, player in ipairs(getPlayers()) do
         if player ~= LocalPlayer and validTarget(player) then
             local targetRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
             if targetRoot then
@@ -2046,10 +2245,10 @@ task.spawn(function()
     local hadGun = false
     local lastGunScan = 0
     while running do
-        applyCharacterMods()
+        if utility.walkEnabled or utility.jumpEnabled then applyCharacterMods() end
         if utility.autoGrab or utility.gunAura or utility.notifyDropped or utility.notifyPickup then
             local now = os.clock()
-            if now - lastGunScan >= 0.25 then
+            if now - lastGunScan >= 0.5 then
                 lastGunScan = now
                 local gun = findDroppedGun()
                 if utility.autoGrab and gun then grabGun(true) end
@@ -2073,7 +2272,7 @@ task.spawn(function()
         end
         if utility.antiFling then
             applyAntiFling()
-            for _, player in ipairs(Players:GetPlayers()) do
+            for _, player in ipairs(getPlayers()) do
                 if player ~= LocalPlayer and player.Character then
                     for _, part in ipairs(player.Character:GetChildren()) do
                         if part:IsA("BasePart") then part.CanCollide = false end
@@ -2088,7 +2287,7 @@ task.spawn(function()
             local p = validTarget(murderer) and murderer or findByKnife(); if p then flingPlayer(p) end
         end
         if utility.flingAll and not flingBusy then
-            for _, player in ipairs(Players:GetPlayers()) do
+            for _, player in ipairs(getPlayers()) do
                 if not utility.flingAll then break end
                 if player ~= LocalPlayer then flingPlayer(player) end
             end
@@ -2241,6 +2440,7 @@ selfMods:AddSlider("WalkSpeed", 8, 100, 16, function(v) utility.walkSpeed = v; a
 selfMods:AddToggle("Enable JumpPower", function(v) utility.jumpEnabled = v; applyCharacterMods() end)
 selfMods:AddSlider("JumpPower", 25, 150, 50, function(v) utility.jumpPower = v; applyCharacterMods() end)
 selfMods:AddToggle("Anti AFK", function(v) utility.antiAfk = v end)
+selfMods:AddToggle("Performance Mode", function(v) perfMode = v; notify(v and "Performance mode ON" or "Performance mode OFF", 2) end)
 selfMods:AddButton("FPS Boost", fpsBoost)
 selfMods:AddButton("Less Lag", lessLag)
 selfMods:AddButton("Remove Barriers", removeBarriers)
@@ -2459,9 +2659,12 @@ end)
 
 task.spawn(function()
     while running do
-        local part = targetPart()
-        if part then sampleMotion(part) end
-        RunService.RenderStepped:Wait()
+        -- Only sample motion while an aim feature is active; run at ~30 Hz instead of every frame.
+        if config.enabled or config.knifeEnabled then
+            local part = targetPart()
+            if part then sampleMotion(part) end
+        end
+        task.wait(1 / 30)
     end
 end)
 
@@ -2491,8 +2694,6 @@ UIS.InputEnded:Connect(function(input)
 end)
 
 --======================================================== NAV WIRING
-if home then home.MouseButton1Click:Connect(function() selectPage("home") end) end
-if configsNav then configsNav.MouseButton1Click:Connect(function() selectPage("aim") end) end
 refreshCanvas()
 
 --====================================================== INTRO ANIMATION
@@ -2505,8 +2706,8 @@ task.defer(function()
     win.Rotation = -1.2
     winScale.Scale = .68
     win.Visible = true
-    TweenService:Create(win, TweenInfo.new(.56, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = targetPosition, BackgroundTransparency = .30, Rotation = 0 }):Play()
+    TweenService:Create(win, TweenInfo.new(.56, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = targetPosition, BackgroundTransparency = .04, Rotation = 0 }):Play()
     TweenService:Create(winScale, TweenInfo.new(.62, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 end)
 
-notify("v4 ready \u{2022} " .. tostring(#Players:GetPlayers()) .. " players in server", 4)
+notify("v4 ready \u{2022} " .. tostring(#getPlayers()) .. " players in server", 4)
