@@ -2994,9 +2994,8 @@ end)
 notify("v4 ready \u{2022} " .. tostring(#getPlayers()) .. " players in server", 4)
 
 --==================================================== EMBEDDED WORLD PLUGINS
--- The four attached files were written for Overdrive H's plugin API. This
--- bridge maps that API to this script's existing host and routes their
--- sections into the World page without requiring external downloads.
+-- Compatibility bridge for the four attached ODH plugins. Each plugin is
+-- isolated and guarded so one unsupported feature cannot stop the main UI.
 do
     local function makeWorldPluginTab(base)
         local proxy = {}
@@ -3034,6 +3033,7 @@ do
     -- ================================================================
     -- EMBEDDED PLUGIN: Anims.lua.txt
     do
+        local __pluginOk, __pluginError = xpcall(function()
 -- FE Animations: current Overdrive H API + persistent preferences.
 -- Revision 3: full track reset before ID changes + delayed, supersession-safe Animate restart.
 -- Animation presets by aux0on: https://github.com/aux0on/FE/blob/main/Anims.lua
@@ -3907,10 +3907,16 @@ appearanceConnection=LocalPlayer.CharacterAppearanceLoaded:Connect(function(char
 end)
 RequestApply()
 
+        end, function(__error) return tostring(__error) end)
+        if not __pluginOk then
+            warn("[Noir embedded plugin: Anims.lua.txt] " .. tostring(__pluginError))
+            notify("Anims.lua.txt failed to load: " .. tostring(__pluginError), 7)
+        end
     end
     -- ================================================================
     -- EMBEDDED PLUGIN: BJP.lua.txt
     do
+        local __pluginOk, __pluginError = xpcall(function()
 -- ODH 2026 adapter. Embedded in every plugin; no downloads/dependencies.
 local ODHX = (function()
     local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
@@ -5199,10 +5205,16 @@ ODHX.cleanup=function()
 end
 ODHX.Finish()
 
+        end, function(__error) return tostring(__error) end)
+        if not __pluginOk then
+            warn("[Noir embedded plugin: BJP.lua.txt] " .. tostring(__pluginError))
+            notify("BJP.lua.txt failed to load: " .. tostring(__pluginError), 7)
+        end
     end
     -- ================================================================
     -- EMBEDDED PLUGIN: unlimit.lua.txt
     do
+        local __pluginOk, __pluginError = xpcall(function()
 -- Inventory Unlimiter V5: current ODH plugin API + durable preferences.
 -- Changes CLIENT-side values only; server-side limits are not bypassed by this file.
 local shared = odh_shared_plugins
@@ -5533,10 +5545,16 @@ end
 RequestApply()
 print("[Inventory Unlimiter V5] Loaded | Settings: " .. FILE .. " | " .. runtime.saveStatus)
 
+        end, function(__error) return tostring(__error) end)
+        if not __pluginOk then
+            warn("[Noir embedded plugin: unlimit.lua.txt] " .. tostring(__pluginError))
+            notify("unlimit.lua.txt failed to load: " .. tostring(__pluginError), 7)
+        end
     end
     -- ================================================================
     -- EMBEDDED PLUGIN: Pm-Wallhop.lua.txt
     do
+        local __pluginOk, __pluginError = xpcall(function()
 -- ODH 2026 adapter. Embedded in every plugin; no downloads/dependencies.
 local ODHX = (function()
     local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
@@ -6414,6 +6432,10 @@ ODHX.cleanup=function()
 end
 ODHX.Finish()
 
+        end, function(__error) return tostring(__error) end)
+        if not __pluginOk then
+            warn("[Noir embedded plugin: Pm-Wallhop.lua.txt] " .. tostring(__pluginError))
+            notify("Pm-Wallhop.lua.txt failed to load: " .. tostring(__pluginError), 7)
+        end
     end
 end
-
