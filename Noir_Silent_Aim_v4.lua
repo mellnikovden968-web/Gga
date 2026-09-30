@@ -978,12 +978,60 @@ function roleColor(role)
     if role == "hero" then return Color3.fromRGB(255, 220, 45) end
     return Color3.fromRGB(65, 235, 105)
 end
+local function playerIsInLobby(player)
+    if not player then return true end
+    local teamName = player.Team and string.lower(tostring(player.Team.Name)) or ""
+    if string.find(teamName, "lobby", 1, true)
+        or string.find(teamName, "spectat", 1, true)
+        or string.find(teamName, "observer", 1, true)
+        or string.find(teamName, "waiting", 1, true) then
+        return true
+    end
+
+    -- MM2 builds have used both attributes and BoolValues for spectators/dead
+    -- players. Check only objects that actually exist; do not assume a single
+    -- hierarchy so active players remain coloured normally.
+    local containers = { player, player.Character }
+    for _, container in ipairs(containers) do
+        if container then
+            for key, value in pairs(container:GetAttributes()) do
+                local k = string.lower(tostring(key))
+                if (string.find(k, "inround", 1, true) or string.find(k, "ingame", 1, true)
+                    or string.find(k, "isplaying", 1, true) or string.find(k, "alive", 1, true))
+                    and value == false then
+                    return true
+                end
+                if string.find(k, "state", 1, true) or string.find(k, "status", 1, true)
+                    or string.find(k, "location", 1, true) or string.find(k, "place", 1, true) then
+                    local textValue = string.lower(tostring(value))
+                    if string.find(textValue, "lobby", 1, true)
+                        or string.find(textValue, "spectat", 1, true)
+                        or string.find(textValue, "dead", 1, true)
+                        or string.find(textValue, "waiting", 1, true) then
+                        return true
+                    end
+                end
+            end
+            for _, name in ipairs({ "InLobby", "Spectating", "Dead", "IsDead" }) do
+                local flag = container:FindFirstChild(name)
+                if flag and flag:IsA("BoolValue") and flag.Value then return true end
+            end
+            for _, name in ipairs({ "InRound", "InGame", "IsPlaying", "Alive", "IsAlive" }) do
+                local flag = container:FindFirstChild(name)
+                if flag and flag:IsA("BoolValue") and not flag.Value then return true end
+            end
+        end
+    end
+    return false
+end
 function playerESPInactive(player)
     local character = player and player.Character
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    -- Gray is deliberately based on both signals: a dead character and the
-    -- lobby/unknown state. The 10-second starting countdown is active.
-    return (roundState ~= "starting" and roundState ~= "playing") or not humanoid or humanoid.Health <= 0
+    -- Gray applies to the lobby/spectator player individually even while a
+    -- different player is still in an active round.
+    return playerIsInLobby(player)
+        or (roundState ~= "starting" and roundState ~= "playing")
+        or not humanoid or humanoid.Health <= 0
 end
 function playerESPColor(player, role)
     return playerESPInactive(player) and ESP_INACTIVE_COLOR or roleColor(role)
@@ -2124,6 +2172,40 @@ local function parseTimerText(value, nameHint)
     end
     return nil
 end
+-- Decode every shape observed from the supplied Extras.GetTimer RemoteFunction.
+-- Some builds return a number, others a formatted string or a small table.
+local function decodeTimerResult(value)
+    if typeof(value) == "number" then
+        local seconds = math.max(0, math.floor(value + .5))
+        return seconds > 0 and string.format("%dm %02ds", math.floor(seconds / 60), seconds % 60) or nil, seconds, nil
+    end
+    if typeof(value) == "string" then
+        local text, seconds, score = parseTimerText(value, "GetTimer")
+        if text then return text, seconds, nil end
+        local phase = string.lower(value)
+        if phase == "waiting" or phase == "lobby" or phase == "ended" or phase == "gameover" or phase == "victory" then
+            return nil, 0, phase
+        end
+        return nil
+    end
+    if typeof(value) == "table" then
+        local phase = value.Phase or value.phase or value.State or value.state or value.Status or value.status
+        local phaseName = string.lower(tostring(phase or ""))
+        if phaseName == "waiting" or phaseName == "lobby" or phaseName == "ended" or phaseName == "gameover" or phaseName == "victory" then
+            return nil, 0, phaseName
+        end
+        local keys = { "Time", "time", "Timer", "timer", "TimeLeft", "timeLeft", "Remaining", "remaining", "Seconds", "seconds", "Value", "value" }
+        for _, key in ipairs(keys) do
+            local text, seconds = decodeTimerResult(value[key])
+            if text or seconds then return text, seconds, phaseName end
+        end
+        for _, item in pairs(value) do
+            local text, seconds = decodeTimerResult(item)
+            if text or seconds then return text, seconds, phaseName end
+        end
+    end
+    return nil
+end
 local function resetRoundTimer()
     roundResetToken += 1
     roundState = "waiting"
@@ -2132,11 +2214,12 @@ local function resetRoundTimer()
     roundPendingStart = nil
     if roundTimerGui and roundTimerGui.Parent then roundTimerGui.Text = "WAITING" end
 end
-local function beginRoundTimer()
+local function beginRoundTimer(roundLength)
     roundResetToken += 1
     roundState = "playing"
     roundPendingStart = nil
-    roundTimerEndsAt = os.clock() + 180
+    roundLength = math.clamp(tonumber(roundLength) or 180, 1, 600)
+    roundTimerEndsAt = os.clock() + roundLength
 end
 function setRoundTimerVisible(value)
     if not value then
@@ -2177,34 +2260,14 @@ function setRoundTimerVisible(value)
                 if getTimer and getTimer:IsA("RemoteFunction") then
                     local ok, res = pcall(function() return getTimer:InvokeServer() end)
                     if ok and res ~= nil then
-                        local function acceptRemoteSeconds(value)
-                            if typeof(value) ~= "number" then return false end
-                            local left = math.max(0, math.floor(value + .5))
-                            -- GetTimer returns zero/nil in the lobby on some MM2 builds.
-                            if left <= 0 then
-                                if roundState == "starting" or roundState == "playing" then resetRoundTimer() end
-                                return false
-                            end
-                            found = string.format("%dm %02ds", math.floor(left / 60), left % 60)
-                            bestScore, discoveredSeconds = 200, left
-                            return true
-                        end
-                        if typeof(res) == "number" then
-                            acceptRemoteSeconds(res)
-                        elseif typeof(res) == "string" then
-                            local timerText, timerSeconds = parseTimerText(res, "GetTimer")
-                            if timerText and timerSeconds and timerSeconds > 0 then
-                                found, bestScore, discoveredSeconds = timerText, 200, timerSeconds
-                            end
-                        elseif typeof(res) == "table" then
-                            local secs = res.Time or res.time or res.Seconds or res.seconds or res.Remaining or res.remaining
-                            phase = res.Phase or res.phase or res.State or res.state
-                            local phaseName = string.lower(tostring(phase or ""))
-                            if phaseName == "ended" or phaseName == "gameover" or phaseName == "victory" or phaseName == "lobby" or phaseName == "waiting" then
-                                resetRoundTimer()
-                            else
-                                acceptRemoteSeconds(secs)
-                            end
+                        local timerText, timerSeconds, timerPhase = decodeTimerResult(res)
+                        phase = timerPhase ~= "" and timerPhase or phase
+                        if timerPhase == "waiting" or timerPhase == "lobby" or timerPhase == "ended" or timerPhase == "gameover" or timerPhase == "victory" then
+                            resetRoundTimer()
+                        elseif timerText and timerSeconds and timerSeconds > 0 then
+                            found, bestScore, discoveredSeconds = timerText, 200, timerSeconds
+                        elseif timerSeconds == 0 and (roundState == "starting" or roundState == "playing") then
+                            resetRoundTimer()
                         end
                     end
                 end
@@ -2864,8 +2927,6 @@ flingSettings:AddSlider("Fling Power", 1, 3, 1, function(v) utility.flingPower =
 -- Silent Aim
 local main = tab:AddSection("Silent Aim", "Gun aim assist")
 main:AddToggle("Enabled", toggle)
-main:AddDropdown("Target Mode", { "Murderer", "Sheriff", "Hero", "Nearest", "Selected", "Crosshair", "Lowest Health", "Random" }, function(v) config.targetMode = v end)
-main:AddDropdown("Hit Part", { "HumanoidRootPart", "Head", "UpperTorso", "LowerTorso", "Torso", "Random" }, function(v) config.hitPart = v; config.targetPart = v end)
 main:AddSlider("FOV Size", 0, 1000, 0, function(v) config.fovSize = v; updateFovCircle() end)
 main:AddToggle("Show FOV", function(v) config.showFov = v; updateFovCircle() end)
 main:AddKeybind("Aim Key", "None", function(k) config.aimKey = k; aimHeld = (k == "None") end)
@@ -2990,8 +3051,9 @@ function connectRemote(name, handler)
 end
 
 connectRemote("PlayerDataChanged", function(data) consumeData(data) end)
-connectRemote("RoundStart", function()
-    beginRoundTimer()
+connectRemote("RoundStart", function(timerValue)
+    local roundLength = tonumber(timerValue)
+    beginRoundTimer(roundLength)
     murderer, sheriff, hero = nil, nil, nil
     table.clear(roleCache); table.clear(announcedRoles)
     task.spawn(refreshTarget)
@@ -3096,7 +3158,7 @@ do
                     return function(_, name, description)
                         name = tostring(name or "Plugin")
                         if string.sub(name, 1, 6) ~= "WORLD " then
-                            name = "WORLD \\u{2022} " .. name
+                            name = "WORLD \u{2022} " .. name
                         end
                         return base:AddSection(name, description or "")
                     end
@@ -5138,16 +5200,6 @@ local function CreateBombJumpSystem(config)
         end
     end)
     
-    section:AddToggle("Enable " .. displayName .. " Big Button", function(e)
-        state.bigBtnExists = e
-        if e then
-            local size = __UD2(0, state.bigButtonSize, 0, state.bigButtonSize * 0.375)
-            AddBigButton(config.bigButtonId, displayName, FastBombJump, isGold, size)
-        else
-            DeleteBigButton(config.bigButtonId)
-        end
-    end)
-    
     section:AddSlider(displayName .. " Big Button Size", 50, 300, state.bigButtonSize, function(value)
         state.bigButtonSize = value
         local btn = BBSystem.Buttons[config.bigButtonId]
@@ -5238,7 +5290,6 @@ local function CreateBombJumpSystem(config)
     
     ODHX.Bind(section.Name, "Enable Auto " .. displayName, "Toggle", function() return state.enabled end)
     ODHX.Bind(section.Name, "Auto-Get " .. bombName, "Toggle", function() return state.autoGetBomb end)
-    ODHX.Bind(section.Name, "Enable " .. displayName .. " Big Button", "Toggle", function() return state.bigBtnExists end)
     ODHX.Bind(section.Name, "Enable " .. displayName .. " Bind Button", "Toggle", function() return state.bindBtnExists end)
     ODHX.Bind(section.Name, displayName .. " Big Button Size", "Slider", function() return state.bigButtonSize end)
     ODHX.Bind(section.Name, displayName .. " Bind Button Size", "Slider", function() return state.bindButtonSize * 100 end)
@@ -5964,15 +6015,6 @@ wallhop_section:AddSlider("Сила флинга", 20, 100, 50, function(int)
     shared.Notify("Сила: " .. int, 2)
 end)
 
--- Кнопка для ручного флинга (тест)
-wallhop_section:AddButton("Тестовый флинг", function()
-    if isWallHopEnabled then
-        performVideoFlick()
-    else
-        shared.Notify("Сначала включите WallHop!", 2)
-    end
-end)
-
 -- Клавиша для быстрого включения/выключения
 wallhop_section:AddKeybind("Toggle Keybind", "F", function()
     isWallHopEnabled = not isWallHopEnabled
@@ -6282,12 +6324,7 @@ local function CreateWallhopBindButton()
     ToggleWallhopButtonVisibility()
 end
 
--- Добавляем настройки для кнопки
-wallhop_section:AddToggle("📱 Показать кнопку на экране", function(b)
-    showWallhopButton = b
-    ToggleWallhopButtonVisibility()
-end)
-
+-- Настройки размера кнопки WallHop
 wallhop_section:AddSlider("🔘 Размер кнопки (%)", 5, 25, 11, function(value)
     local btnSize = value / 100
     wallhopButtonSize = btnSize
@@ -6558,7 +6595,6 @@ end)
 ODHX.Bind("Pm-WallHop", "Включить WallHop", "Toggle", function() return isWallHopEnabled end)
 ODHX.Bind("Pm-WallHop", "Дистанция обнаружения", "Slider", function() return detectionDistance end)
 ODHX.Bind("Pm-WallHop", "Сила флинга", "Slider", function() return flickPower end)
-ODHX.Bind("Pm-WallHop", "📱 Показать кнопку на экране", "Toggle", function() return showWallhopButton end)
 ODHX.Bind("Pm-WallHop", "🔘 Размер кнопки (%)", "Slider", function() return wallhopButtonSize * 100 end)
 ODHX.cleanup=function()
     for id in pairs(WallhopBindableButtons.Buttons) do WallhopBindableButtons.DeleteBButton(id) end
