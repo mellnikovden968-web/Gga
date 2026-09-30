@@ -2076,6 +2076,45 @@ end
 
 --======================================================= ROUND TIMER
 local roundTimerGui
+-- MM2 has shipped several HUD variants: some use 1:23, some use 83s,
+-- and some put a plain number inside a TextLabel named Timer.  Normalize all
+-- of them here instead of relying on one exact GUI hierarchy or format.
+local function parseTimerText(value, nameHint)
+    local raw = tostring(value or ""):gsub("<.->", "")
+    raw = raw:gsub("[%c]+", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    if raw == "" then return nil end
+    local name = string.lower(tostring(nameHint or ""))
+    local namedTimer = string.find(name, "timer", 1, true)
+        or string.find(name, "clock", 1, true)
+        or string.find(name, "countdown", 1, true)
+        or string.find(name, "round", 1, true)
+        or string.find(name, "timeleft", 1, true)
+        or string.find(name, "time", 1, true)
+    local minutes, seconds = raw:match("^(%d+)%s*[:%.]%s*(%d%d)$")
+    if not minutes then minutes, seconds = raw:match("(%d+)%s*[:%.]%s*(%d%d)") end
+    if minutes and seconds then
+        local total = tonumber(minutes) * 60 + tonumber(seconds)
+        return string.format("%dm %02ds", math.floor(total / 60), total % 60), total, 125
+    end
+    minutes, seconds = raw:match("^(%d+)%s*[mM]%s*[, ]*%s*(%d+)%s*[sS]$")
+    if minutes and seconds then
+        local total = tonumber(minutes) * 60 + tonumber(seconds)
+        return string.format("%dm %02ds", math.floor(total / 60), total % 60), total, 120
+    end
+    seconds = raw:match("^(%d+)%s*[sS]$")
+    if seconds then
+        local total = tonumber(seconds)
+        return string.format("%dm %02ds", math.floor(total / 60), total % 60), total, 115
+    end
+    if namedTimer then
+        seconds = raw:match("^(%d+)$")
+        if seconds and tonumber(seconds) <= 600 then
+            local total = tonumber(seconds)
+            return string.format("%dm %02ds", math.floor(total / 60), total % 60), total, 105
+        end
+    end
+    return nil
+end
 local function resetRoundTimer()
     roundResetToken += 1
     roundState = "waiting"
@@ -2114,7 +2153,7 @@ function setRoundTimerVisible(value)
     task.spawn(function()
         local getTimer
         while roundTimerGui == thisGui and thisGui.Parent do
-            local found, bestScore, phase
+            local found, bestScore, phase, discoveredSeconds
             local activeRound = roundState ~= "waiting" or (os.clock() - lastRoundResetAt > 1)
 
             -- Do not read stale GetTimer/UI values while the round is over.
@@ -2127,7 +2166,7 @@ function setRoundTimerVisible(value)
                     if ok and res ~= nil then
                         if typeof(res) == "number" then
                             local left = math.max(0, math.floor(res + .5))
-                            found = string.format("%dm %02ds", math.floor(left / 60), left % 60); bestScore = 200
+                            found = string.format("%dm %02ds", math.floor(left / 60), left % 60); bestScore = 200; discoveredSeconds = left
                         elseif typeof(res) == "table" then
                             local secs = res.Time or res.time or res.Seconds or res.seconds or res.Remaining or res.remaining
                             phase = res.Phase or res.phase or res.State or res.state
@@ -2136,45 +2175,44 @@ function setRoundTimerVisible(value)
                                 resetRoundTimer()
                             elseif typeof(secs) == "number" then
                                 local left = math.max(0, math.floor(secs + .5))
-                                found = string.format("%dm %02ds", math.floor(left / 60), left % 60); bestScore = 200
+                                found = string.format("%dm %02ds", math.floor(left / 60), left % 60); bestScore = 200; discoveredSeconds = left
                             end
                         end
                     end
                 end
 
-                -- fallback: scan PlayerGui only during an active/starting round
+                -- Fallback: scan PlayerGui during an active/starting round.
+                -- activeRound also remains true a moment after a reset, so this
+                -- can discover the next round even when RoundStart is absent or
+                -- the remote is created after this script starts.
                 if found and roundState == "playing" then
-                    -- authoritative value already won; avoid replacing it with a
-                    -- decorative label from PlayerGui.
+                    -- An authoritative remote value already won; do not replace
+                    -- it with a decorative label from PlayerGui.
                 else
                     local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-                    if pg and roundState ~= "waiting" then
+                    if pg and activeRound then
                         for _, v in ipairs(pg:GetDescendants()) do
                             if (v:IsA("TextLabel") or v:IsA("TextButton") or v:IsA("TextBox")) and v ~= thisGui then
-                                local raw = tostring(v.Text or ""):gsub("<.->", ""):gsub("^%s+", ""):gsub("%s+$", "")
                                 local lowerName = string.lower(v.Name)
                                 local parentName = v.Parent and string.lower(v.Parent.Name) or ""
-                                local timerNamed = string.find(lowerName, "timer", 1, true)
-                                    or string.find(lowerName, "round", 1, true)
-                                    or string.find(lowerName, "game", 1, true)
-                                    or string.find(parentName, "timer", 1, true)
-                                    or string.find(parentName, "round", 1, true)
-                                local score
-                                if raw:match("^%d+%s*[mM]%s*%d+%s*[sS]$") then score = 100
-                                elseif raw:match("^%d+:%d%d$") then score = 95
-                                elseif raw:match("^%d+%s*[sS]$") then score = 90
-                                elseif string.find(lowerName, "roundtimer", 1, true) or string.find(lowerName, "gametimer", 1, true) then score = 80
-                                elseif timerNamed and raw:match("%d") then score = 70
-                                elseif timerNamed and raw:match("^%d+$") and tonumber(raw) and tonumber(raw) <= 600 then score = 65
-                                elseif raw:match("^%d+$") and tonumber(raw) and tonumber(raw) <= 15 then score = 30
+                                local hint = lowerName .. " " .. parentName
+                                local timerText, timerSeconds, score = parseTimerText(v.Text, hint)
+                                if timerText and (not bestScore or score > bestScore) then
+                                    found, bestScore, discoveredSeconds = timerText, score, timerSeconds
                                 end
-                                if score and (not bestScore or score > bestScore) then found, bestScore = raw, score end
                             end
                         end
                     end
-                    if found and roundState == "unknown" then
-                        local numeric = tonumber(tostring(found):match("%d+"))
-                        roundState = numeric and numeric <= 15 and "starting" or "playing"
+                    if found and (roundState == "unknown" or roundState == "waiting") then
+                        if discoveredSeconds and discoveredSeconds <= 15 then
+                            roundState = "starting"
+                            roundPendingStart = roundPendingStart or (os.clock() + discoveredSeconds)
+                        else
+                            roundState = "playing"
+                            if discoveredSeconds and not roundTimerEndsAt then
+                                roundTimerEndsAt = os.clock() + discoveredSeconds
+                            end
+                        end
                     end
                 end
             end
@@ -4601,11 +4639,22 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     ImageButton.Size = __UD2(widthScale, 0, buttonSizeY, 0)
     ImageButton.Position = __UD2(xPos, 0, yPos, 0)
     ImageButton.AnchorPoint = __V2(0.5, 0.5)
-    ImageButton.Image = __SHAPES[0]
-    ImageButton.BackgroundTransparency = 1
+    ImageButton.Image = ""
+    ImageButton.BackgroundColor3 = __RGB(8, 8, 10)
+    ImageButton.BackgroundTransparency = 0.28
     ImageButton.BorderSizePixel = 0
     ImageButton.ClipsDescendants = false
     ImageButton.AutoButtonColor = false
+    Instance.new("UICorner", ImageButton).CornerRadius = __UD(0, 1000)
+    local outerButtonStroke = Instance.new("UIStroke", ImageButton)
+    outerButtonStroke.Color = __PCLR(1, 1, 1)
+    outerButtonStroke.Thickness = 2
+    outerButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local innerButtonStroke = Instance.new("UIStroke", ImageButton)
+    innerButtonStroke.Color = __RGB(105, 105, 112)
+    innerButtonStroke.Transparency = 0.5
+    innerButtonStroke.Thickness = 1
+    innerButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     ImageButton.Parent = Bind_GetStorage()
     buttonMaid:GiveTask(ImageButton)
 
@@ -4615,10 +4664,10 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     TextLabel.Position = __UD2(0.5, 0, 0.5, 0)
     TextLabel.AnchorPoint = __V2(0.5, 0.5)
     TextLabel.BackgroundTransparency = 1
-    TextLabel.Font = Enum.Font.Jura
+    TextLabel.Font = Enum.Font.GothamBold
     TextLabel.Text = text
     TextLabel.TextColor3 = __PCLR(1, 1, 1)
-    TextLabel.TextSize = math.floor(buttonSizeY * 90)
+    TextLabel.TextSize = 14
     TextLabel.TextWrapped = true
     TextLabel.ZIndex = 3
 
@@ -4626,13 +4675,18 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     Aspect.AspectRatio = 1
     Aspect.AspectType = Enum.AspectType.ScaleWithParentSize
 
-    local Stroke = Instance.new("UIGradient", ImageButton)
+    local Stroke = Instance.new("UIGradient", outerButtonStroke)
     Stroke.Name = "@Stroke"
-    if isGold then
-        Stroke.Color = __GOLD_NORMAL_COLOR
-    else
-        Stroke.Color = __NORMAL_COLOR
-    end
+    Stroke.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, __RGB(35, 35, 40)),
+        ColorSequenceKeypoint.new(0.22, __RGB(250, 250, 252)),
+        ColorSequenceKeypoint.new(0.48, __RGB(70, 70, 78)),
+        ColorSequenceKeypoint.new(0.72, __RGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, __RGB(45, 45, 52)),
+    })
+    local innerButtonGradient = Stroke:Clone()
+    innerButtonGradient.Rotation = 180
+    innerButtonGradient.Parent = innerButtonStroke
 
     local ripple = Instance.new("Frame")
     ripple.Name = "@ripple"
@@ -6042,11 +6096,22 @@ function WallhopBindableButtons.AddBButton(id, text, onFunc, offFunc)
     ImageButton.Size = UDim2.new(widthScale, 0, buttonSizeY, 0)
     ImageButton.Position = UDim2.new(xPos, 0, yPos, 0)
     ImageButton.AnchorPoint = Vector2.new(0.5, 0.5)
-    ImageButton.Image = __SHAPES[0]
-    ImageButton.BackgroundTransparency = 1
+    ImageButton.Image = ""
+    ImageButton.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+    ImageButton.BackgroundTransparency = 0.28
     ImageButton.BorderSizePixel = 0
     ImageButton.ClipsDescendants = false
     ImageButton.AutoButtonColor = false
+    Instance.new("UICorner", ImageButton).CornerRadius = UDim.new(0, 1000)
+    local outerButtonStroke = Instance.new("UIStroke", ImageButton)
+    outerButtonStroke.Color = Color3.new(1, 1, 1)
+    outerButtonStroke.Thickness = 2
+    outerButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local innerButtonStroke = Instance.new("UIStroke", ImageButton)
+    innerButtonStroke.Color = Color3.fromRGB(105, 105, 112)
+    innerButtonStroke.Transparency = 0.5
+    innerButtonStroke.Thickness = 1
+    innerButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     ImageButton.Parent = GetStorage()
     buttonMaid:GiveTask(ImageButton)
 
@@ -6059,10 +6124,10 @@ function WallhopBindableButtons.AddBButton(id, text, onFunc, offFunc)
     TextLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
     TextLabel.AnchorPoint = Vector2.new(0.5, 0.5)
     TextLabel.BackgroundTransparency = 1
-    TextLabel.Font = Enum.Font.Jura
+    TextLabel.Font = Enum.Font.GothamBold
     TextLabel.Text = text
     TextLabel.TextColor3 = Color3.new(1, 1, 1)
-    TextLabel.TextSize = 10
+    TextLabel.TextSize = 14
     TextLabel.TextWrapped = true
     TextLabel.ZIndex = 3
 
@@ -6070,9 +6135,18 @@ function WallhopBindableButtons.AddBButton(id, text, onFunc, offFunc)
     Aspect.AspectRatio = 1
     Aspect.AspectType = Enum.AspectType.ScaleWithParentSize
 
-    local Gradient = Instance.new("UIGradient", ImageButton)
+    local Gradient = Instance.new("UIGradient", outerButtonStroke)
     Gradient.Name = "@Stroke"
-    Gradient.Color = __NORMAL_COLOR
+    Gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)),
+        ColorSequenceKeypoint.new(0.22, Color3.fromRGB(250, 250, 252)),
+        ColorSequenceKeypoint.new(0.48, Color3.fromRGB(70, 70, 78)),
+        ColorSequenceKeypoint.new(0.72, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)),
+    })
+    local innerButtonGradient = Gradient:Clone()
+    innerButtonGradient.Rotation = 180
+    innerButtonGradient.Parent = innerButtonStroke
 
     local ripple = Instance.new("Frame")
     ripple.Name = "@ripple"
@@ -6101,7 +6175,13 @@ function WallhopBindableButtons.AddBButton(id, text, onFunc, offFunc)
         fOut.Completed:Wait()
 
         BindValue.Value = not BindValue.Value
-        Gradient.Color = BindValue.Value and __ACTIVE_COLOR or __NORMAL_COLOR
+        Gradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)),
+            ColorSequenceKeypoint.new(0.22, Color3.fromRGB(250, 250, 252)),
+            ColorSequenceKeypoint.new(0.48, Color3.fromRGB(70, 70, 78)),
+            ColorSequenceKeypoint.new(0.72, Color3.fromRGB(255, 255, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)),
+        })
         if BindValue.Value then safecallback(onFunc) else safecallback(offFunc) end
 
         local fIn = game:GetService("TweenService"):Create(ImageButton, tInfo, {ImageTransparency = 0})
