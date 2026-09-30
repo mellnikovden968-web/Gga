@@ -458,7 +458,7 @@ local activePage = "home"
 local selectPage
 do
     local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent }
-    local pageOrder = { home = 0, main = 1, aim = 2, world = 3, visual = 4 }
+    local pageBasePosition = content.Position
     local pageTransitionId = 0
     local function pageScaleFor(object)
         local scaler = object:FindFirstChild("NoirPageScale")
@@ -472,23 +472,39 @@ do
         local oldPage = activePage
         local oldObject = pageObjects[oldPage]
         local newObject = pageObjects[page]
-        local direction = (pageOrder[page] or 0) >= (pageOrder[oldPage] or 0) and 1 or -1
         activePage = page
+
+        -- Pages used to slide horizontally during every navigation change.
+        -- If two transitions overlapped, an old tween could finish later and
+        -- leave the whole section column a few pixels to the left.  Keep one
+        -- immutable horizontal anchor and animate only scale/visibility.
+        for _, object in pairs(pageObjects) do
+            if object ~= oldObject and object ~= newObject then
+                object.Visible = false
+                object.Position = pageBasePosition
+                pageScaleFor(object).Scale = 1
+            end
+        end
         if oldObject and oldObject ~= newObject and oldObject.Visible then
             local oldScale = pageScaleFor(oldObject)
-            TweenService:Create(oldObject, TweenInfo.new(.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = content.Position + UDim2.fromOffset(-direction * 28, 0) }):Play()
+            oldObject.Position = pageBasePosition
             TweenService:Create(oldScale, TweenInfo.new(.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = .96 }):Play()
             task.delay(.18, function()
                 if transitionId == pageTransitionId and oldObject ~= pageObjects[activePage] then
-                    oldObject.Visible = false; oldObject.Position = content.Position; oldScale.Scale = 1
+                    oldObject.Visible = false
+                    oldObject.Position = pageBasePosition
+                    oldScale.Scale = 1
                 end
             end)
         end
-        for _, object in pairs(pageObjects) do if object ~= newObject and object ~= oldObject then object.Visible = false end end
         if newObject then
             local newScale = pageScaleFor(newObject)
-            newObject.Position = content.Position + UDim2.fromOffset(direction * 40, 0); newScale.Scale = .94; newObject.Visible = true
-            TweenService:Create(newObject, TweenInfo.new(.36, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = content.Position }):Play()
+            newObject.Position = pageBasePosition
+            if newObject:IsA("ScrollingFrame") then
+                newObject.CanvasPosition = Vector2.new(0, newObject.CanvasPosition.Y)
+            end
+            newScale.Scale = .94
+            newObject.Visible = true
             TweenService:Create(newScale, TweenInfo.new(.62, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
         end
         configContent.Visible = false
@@ -881,9 +897,9 @@ local roundTimerEndsAt, roundPendingStart
 -- waiting/starting/playing is also used to gate gun automation.  Without a
 -- round state, the lobby can look like a valid GunDrop and the old loop keeps
 -- retrying forever after the local player has died.
-local roundState = "unknown"
+local roundState = "waiting"
 local roundResetToken = 0
-local lastRoundResetAt = 0
+local lastRoundResetAt = os.clock()
 local instantRoleDetection = false
 local autoNotifyRoles = false
 local announcedRoles = {}
@@ -967,7 +983,7 @@ function playerESPInactive(player)
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
     -- Gray is deliberately based on both signals: a dead character and the
     -- lobby/unknown state. The 10-second starting countdown is active.
-    return (roundState == "waiting" or roundState == "unknown") or not humanoid or humanoid.Health <= 0
+    return (roundState ~= "starting" and roundState ~= "playing") or not humanoid or humanoid.Health <= 0
 end
 function playerESPColor(player, role)
     return playerESPInactive(player) and ESP_INACTIVE_COLOR or roleColor(role)
@@ -1032,12 +1048,6 @@ function consumeData(data)
     hero = foundHero or hero
     if foundMurderer then
         setTarget(foundMurderer)
-        if not roundTimerEndsAt then
-            roundState = "starting"
-            if not roundPendingStart then roundPendingStart = os.clock() + 10 end
-        else
-            roundState = "playing"
-        end
     end
     if rolesChanged then
         if type(refreshESP) == "function" then refreshESP() end
@@ -1054,7 +1064,6 @@ end
 function refreshTarget()
     local weaponTarget = findByKnife()
     if weaponTarget then
-        roundState = "playing"
         setTarget(weaponTarget)
         return
     end
@@ -2160,22 +2169,41 @@ function setRoundTimerVisible(value)
             -- The old implementation did exactly that, so the previous round's
             -- number immediately reappeared after GameOver/VictoryScreen.
             if activeRound then
-                getTimer = (getTimer and getTimer.Parent and getTimer) or ReplicatedStorage:FindFirstChild("GetTimer", true)
+                if not (getTimer and getTimer.Parent) then
+                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                    local extras = remotes and remotes:FindFirstChild("Extras")
+                    getTimer = (extras and extras:FindFirstChild("GetTimer")) or ReplicatedStorage:FindFirstChild("GetTimer", true)
+                end
                 if getTimer and getTimer:IsA("RemoteFunction") then
                     local ok, res = pcall(function() return getTimer:InvokeServer() end)
                     if ok and res ~= nil then
+                        local function acceptRemoteSeconds(value)
+                            if typeof(value) ~= "number" then return false end
+                            local left = math.max(0, math.floor(value + .5))
+                            -- GetTimer returns zero/nil in the lobby on some MM2 builds.
+                            if left <= 0 then
+                                if roundState == "starting" or roundState == "playing" then resetRoundTimer() end
+                                return false
+                            end
+                            found = string.format("%dm %02ds", math.floor(left / 60), left % 60)
+                            bestScore, discoveredSeconds = 200, left
+                            return true
+                        end
                         if typeof(res) == "number" then
-                            local left = math.max(0, math.floor(res + .5))
-                            found = string.format("%dm %02ds", math.floor(left / 60), left % 60); bestScore = 200; discoveredSeconds = left
+                            acceptRemoteSeconds(res)
+                        elseif typeof(res) == "string" then
+                            local timerText, timerSeconds = parseTimerText(res, "GetTimer")
+                            if timerText and timerSeconds and timerSeconds > 0 then
+                                found, bestScore, discoveredSeconds = timerText, 200, timerSeconds
+                            end
                         elseif typeof(res) == "table" then
                             local secs = res.Time or res.time or res.Seconds or res.seconds or res.Remaining or res.remaining
                             phase = res.Phase or res.phase or res.State or res.state
                             local phaseName = string.lower(tostring(phase or ""))
                             if phaseName == "ended" or phaseName == "gameover" or phaseName == "victory" or phaseName == "lobby" or phaseName == "waiting" then
                                 resetRoundTimer()
-                            elseif typeof(secs) == "number" then
-                                local left = math.max(0, math.floor(secs + .5))
-                                found = string.format("%dm %02ds", math.floor(left / 60), left % 60); bestScore = 200; discoveredSeconds = left
+                            else
+                                acceptRemoteSeconds(secs)
                             end
                         end
                     end
@@ -2197,7 +2225,7 @@ function setRoundTimerVisible(value)
                                 local parentName = v.Parent and string.lower(v.Parent.Name) or ""
                                 local hint = lowerName .. " " .. parentName
                                 local timerText, timerSeconds, score = parseTimerText(v.Text, hint)
-                                if timerText and (not bestScore or score > bestScore) then
+                                if timerText and timerSeconds and timerSeconds > 0 and (not bestScore or score > bestScore) then
                                     found, bestScore, discoveredSeconds = timerText, score, timerSeconds
                                 end
                             end
@@ -2843,9 +2871,6 @@ main:AddToggle("Show FOV", function(v) config.showFov = v; updateFovCircle() end
 main:AddKeybind("Aim Key", "None", function(k) config.aimKey = k; aimHeld = (k == "None") end)
 main:AddKeybind("Toggle Key", "None", function(k) config.toggleKey = k end)
 main:AddToggle("Wall Check", function(v) config.wallCheck = v end)
-main:AddToggle("Ignore Dead", function(v) config.ignoreDead = v end)
-main:AddToggle("Ignore Friends", function(v) config.ignoreFriends = v end)
-main:AddSlider("Max Distance", 0, 500, 0, function(v) config.maxDistance = v end)
 main:AddToggle("Show Shoot Murder Button", setShootButtonVisible)
 main:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton = v end)
 
