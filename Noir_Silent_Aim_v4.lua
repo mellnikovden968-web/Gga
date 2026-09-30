@@ -330,7 +330,9 @@ for i = 1, 2 do
         BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
     New("UIListLayout", { Parent = configCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
 end
-content.Position = UDim2.fromOffset(264, 104); content.Size = UDim2.new(1, -288, 1, -128); content.Visible = false
+-- Keep every page clear of the 240px sidebar.  The old 264px inset was
+-- too small on narrow viewports and some cards visually crossed into the nav.
+content.Position = UDim2.fromOffset(282, 104); content.Size = UDim2.new(1, -306, 1, -128); content.Visible = false
 configContent.Position = content.Position; configContent.Size = content.Size
 local visualContent = content:Clone(); visualContent.Name = "VisualContent"; visualContent.Parent = win; visualContent.Visible = false; visualContent:ClearAllChildren()
 local visualCols = {}
@@ -496,12 +498,64 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 local host = {}
+
+-- Notifications live in their own right-side rail instead of being created at
+-- the same bottom-right pixel position.  This prevents a stack of toasts from
+-- covering the window, the round timer, or the shoot button.
+local notificationHolder = New("Frame", {
+    Parent = gui, Name = "NotificationRail", AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -20, 0, 82), Size = UDim2.new(0, 360, 0, 270),
+    BackgroundTransparency = 1, ClipsDescendants = false, ZIndex = 1000,
+})
+local notificationLayout = New("UIListLayout", {
+    Parent = notificationHolder, Padding = UDim.new(0, 9),
+    FillDirection = Enum.FillDirection.Vertical, HorizontalAlignment = Enum.HorizontalAlignment.Right,
+    VerticalAlignment = Enum.VerticalAlignment.Top, SortOrder = Enum.SortOrder.LayoutOrder,
+})
+local notificationSerial = 0
+local activeNotifications = {}
+local function trimNotifications()
+    while #activeNotifications > 3 do
+        local oldest = table.remove(activeNotifications, 1)
+        if oldest and oldest.Parent then oldest:Destroy() end
+    end
+end
 function host.Notify(title, duration)
-    local toast = New("TextLabel", { Parent = gui, AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -22, 1, -22), Size = UDim2.fromOffset(330, 58),
-        BackgroundColor3 = C.panel, Text = "  " .. tostring(title), TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham,
-        TextXAlignment = Enum.TextXAlignment.Left })
-    corner(toast, 13); stroke(toast, C.accent, .15)
-    task.delay(duration or 3, function() if toast.Parent then toast:Destroy() end end)
+    notificationSerial += 1
+    local life = math.max(1.5, tonumber(duration) or 3)
+    local card = New("Frame", {
+        Parent = notificationHolder, Name = "Toast_" .. tostring(notificationSerial),
+        Size = UDim2.new(1, 0, 0, 76), BackgroundColor3 = C.panel,
+        BackgroundTransparency = .04, BorderSizePixel = 0, LayoutOrder = notificationSerial,
+        ZIndex = 1000,
+    })
+    corner(card, 14); stroke(card, C.accent, .18)
+    New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 13), Size = UDim2.fromOffset(3, 50),
+        BackgroundColor3 = C.accent, BorderSizePixel = 0, ZIndex = 1001 })
+    local badge = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(18, 9), Size = UDim2.new(1, -30, 0, 17),
+        BackgroundTransparency = 1, Text = "NOIR  •  NOTIFICATION", TextColor3 = C.accent2,
+        TextSize = 10, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 1001 })
+    local message = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(18, 29), Size = UDim2.new(1, -30, 0, 30),
+        BackgroundTransparency = 1, Text = tostring(title), TextColor3 = C.text,
+        TextSize = 14, Font = Enum.Font.Gotham, TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = 1001 })
+    local progress = New("Frame", { Parent = card, Position = UDim2.fromOffset(18, 69), Size = UDim2.new(1, -30, 0, 2),
+        BackgroundColor3 = C.accent, BorderSizePixel = 0, ZIndex = 1001 })
+    table.insert(activeNotifications, card); trimNotifications()
+    TweenService:Create(progress, TweenInfo.new(life, Enum.EasingStyle.Linear), { Size = UDim2.new(0, 0, 0, 2) }):Play()
+    task.delay(life, function()
+        for i = #activeNotifications, 1, -1 do
+            if activeNotifications[i] == card then table.remove(activeNotifications, i) break end
+        end
+        if card.Parent then
+            local out = TweenService:Create(card, TweenInfo.new(.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                Position = UDim2.new(1, 24, 0, 0), BackgroundTransparency = 1,
+            })
+            out:Play(); out.Completed:Connect(function() if card.Parent then card:Destroy() end end)
+        end
+    end)
 end
 function host.CreateTab()
     local tab = {}
@@ -529,7 +583,7 @@ function host.CreateTab()
         New("UIListLayout", { Parent = holder, Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder })
         New("UIPadding", { Parent = holder, PaddingBottom = UDim.new(0, 12) })
         holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(refreshCanvas); refreshCanvas()
-        local api = {}
+        local api = { Name = name }
         local storagePrefix = name .. "::"
         local function row(label, h)
             local r = New("Frame", { Parent = holder, Size = UDim2.new(1, 0, 0, h or 62), BackgroundTransparency = 1 })
@@ -645,6 +699,7 @@ function host.CreateTab()
             b.MouseButton1Click:Connect(function() if popup then close() else open() end end)
             local ctl = {}
             function ctl:SetValue(v) set(v) end
+            function ctl:Select(v) set(v) end
             function ctl:Refresh(newValues, selected) values = newValues or {}; idx = 1; set(selected or values[1]) end
             return ctl
         end
@@ -656,7 +711,34 @@ function host.CreateTab()
             box.FocusLost:Connect(function() callback(box.Text) end)
             return { SetValue = function(_, v) box.Text = tostring(v) end }
         end
-        function api:AddLabel(label) return row(label, 44) end
+        function api:AddLabel(label)
+            local r = row(label, 44)
+            local labelObject = r:FindFirstChildWhichIsA("TextLabel")
+            return { SetValue = function(_, value) if labelObject and labelObject.Parent then labelObject.Text = tostring(value) end end,
+                GetValue = function() return labelObject and labelObject.Text or "" end,
+                Instance = r }
+        end
+        function api:AddParagraph(title, body)
+            local r = row(tostring(title or ""), 68)
+            if body and tostring(body) ~= "" then
+                local detail = text(r, tostring(body), 12, UDim2.fromOffset(0, 32), true)
+                detail.TextWrapped = true
+                detail.Size = UDim2.new(1, 0, 0, 30)
+            end
+            return r
+        end
+        -- Compatibility surface for embedded ODH plugins. The current
+        -- plugins do not require a colour picker, but exposing a small
+        -- SetRGBValue-compatible control keeps their adapter API intact.
+        function api:AddColorpicker(label, default, callback)
+            local r = row(label, 52)
+            local colour = default or C.accent
+            local swatch = New("Frame", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(64, 34), BackgroundColor3 = colour })
+            corner(swatch, 10); stroke(swatch)
+            if callback then callback(colour) end
+            return { SetRGBValue = function(_, value) if typeof(value) == "Color3" then colour = value; swatch.BackgroundColor3 = value; if callback then callback(value) end end end,
+                GetValue = function() return colour end }
+        end
         function api:AddKeybind(label, default, callback)
             local savedKey = NoirPersistence.data.keybinds[storagePrefix .. label] or default
             local r = row(label, 52)
@@ -757,6 +839,11 @@ local previousEstimatedVelocity = Vector3.zero
 local estimatedAcceleration = Vector3.zero
 local lastAutoTune = 0
 local roundTimerEndsAt, roundPendingStart
+-- waiting/starting/playing is also used to gate gun automation.  Without a
+-- round state, the lobby can look like a valid GunDrop and the old loop keeps
+-- retrying forever after the local player has died.
+local roundState = "unknown"
+local roundResetToken = 0
 local instantRoleDetection = false
 local autoNotifyRoles = false
 local announcedRoles = {}
@@ -828,11 +915,22 @@ function distanceTo(player)
 end
 
 --========================================================== ROLE ENGINE
+local ESP_INACTIVE_COLOR = Color3.fromRGB(150, 154, 162)
 function roleColor(role)
     if role == "murderer" then return Color3.fromRGB(255, 55, 65) end
     if role == "sheriff" then return Color3.fromRGB(55, 145, 255) end
     if role == "hero" then return Color3.fromRGB(255, 220, 45) end
     return Color3.fromRGB(65, 235, 105)
+end
+function playerESPInactive(player)
+    local character = player and player.Character
+    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+    -- Gray is deliberately based on both signals: a dead character and any
+    -- pre-round/lobby state (waiting, unknown, or role selection).
+    return roundState ~= "playing" or not humanoid or humanoid.Health <= 0
+end
+function playerESPColor(player, role)
+    return playerESPInactive(player) and ESP_INACTIVE_COLOR or roleColor(role)
 end
 function espPlayerRole(player)
     local cached = player and roleCache[player.UserId]
@@ -894,7 +992,12 @@ function consumeData(data)
     hero = foundHero or hero
     if foundMurderer then
         setTarget(foundMurderer)
-        if not roundTimerEndsAt and not roundPendingStart then roundPendingStart = os.clock() + 10 end
+        if not roundTimerEndsAt then
+            roundState = "starting"
+            if not roundPendingStart then roundPendingStart = os.clock() + 10 end
+        else
+            roundState = "playing"
+        end
     end
     if rolesChanged then
         if type(refreshESP) == "function" then refreshESP() end
@@ -910,7 +1013,11 @@ function getPlayerDataRemote()
 end
 function refreshTarget()
     local weaponTarget = findByKnife()
-    if weaponTarget then setTarget(weaponTarget) return end
+    if weaponTarget then
+        roundState = "playing"
+        setTarget(weaponTarget)
+        return
+    end
     local remote = getPlayerDataRemote()
     if remote then
         local ok, data = pcall(function() return remote:InvokeServer() end)
@@ -1005,7 +1112,7 @@ function makeBillboard(root, role)
     infoLabel.TextStrokeTransparency = .3
     infoLabel.Text = ""
     infoLabel.Parent = frame
-    return box, nameLabel, infoLabel, bar
+    return box, nameLabel, infoLabel, bar, line
 end
 function applyESPPlayer(player)
     if player == LocalPlayer then return end
@@ -1014,25 +1121,29 @@ function applyESPPlayer(player)
     clearESPCharacter(character)
     espRefs[player] = nil
     local role = espPlayerRole(player)
+    local displayColor = playerESPColor(player, role)
     local outlineWanted = config.espOutline or (config.espOutlineMurderer and role == "murderer") or (config.espOutlineSheriff and role == "sheriff")
     local chamsWanted = config.espChams or (config.espChamsMurderer and role == "murderer") or (config.espChamsSheriff and role == "sheriff")
     local boxWanted = config.espBox or (config.espBoxMurderer and role == "murderer") or (config.espBoxSheriff and role == "sheriff")
     local textWanted = config.espName or config.espDistance or config.espHealth or config.espRole
+    local highlight
+    local boxStroke
     if outlineWanted or chamsWanted then
-        local highlight = Instance.new("Highlight")
+        highlight = Instance.new("Highlight")
         highlight.Name = ESP_OUTLINE_NAME
         highlight.Adornee = character
         highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         highlight.FillTransparency = chamsWanted and .45 or 1
-        highlight.FillColor = roleColor(role)
+        highlight.FillColor = displayColor
         highlight.OutlineTransparency = outlineWanted and 0 or 1
-        highlight.OutlineColor = roleColor(role)
+        highlight.OutlineColor = displayColor
         highlight.Parent = character
     end
     if boxWanted or textWanted then
         local root = character:FindFirstChild("HumanoidRootPart")
         if root then
-            local box, nameLabel, infoLabel, bar = makeBillboard(root, role)
+            local box, nameLabel, infoLabel, bar, line = makeBillboard(root, role)
+            boxStroke = line
             if not boxWanted then
                 local frame = box:FindFirstChildOfClass("Frame")
                 if frame then local s = frame:FindFirstChildOfClass("UIStroke"); if s then s.Transparency = 1 end end
@@ -1041,8 +1152,14 @@ function applyESPPlayer(player)
             nameLabel.Visible = config.espName
             nameLabel.Text = player.Name
             infoLabel.Visible = config.espDistance or config.espRole
-            espRefs[player] = { char = character, info = infoLabel, bar = bar, humanoid = nil }
+            infoLabel.TextColor3 = displayColor
+            espRefs[player] = { char = character, info = infoLabel, bar = bar, humanoid = character:FindFirstChildWhichIsA("Humanoid"), highlight = highlight, boxStroke = boxStroke }
         end
+    end
+    -- Keep a reference even when only Highlight/Chams are enabled so the
+    -- colour can change to gray immediately when the player dies.
+    if not espRefs[player] then
+        espRefs[player] = { char = character, info = nil, bar = nil, humanoid = character:FindFirstChildWhichIsA("Humanoid"), highlight = highlight, boxStroke = boxStroke }
     end
 end
 function refreshESP()
@@ -1055,6 +1172,35 @@ function bindESPPlayer(player)
 end
 for _, player in ipairs(getPlayers()) do bindESPPlayer(player) end
 Players.PlayerAdded:Connect(bindESPPlayer)
+
+-- Highlight colours must react to Humanoid.Health and roundState changes even
+-- when the character itself did not respawn.  This lightweight loop only
+-- updates already-created ESP instances; it does not rescan the workspace.
+task.spawn(function()
+    while running do
+        for _, player in ipairs(getPlayers()) do
+            if player ~= LocalPlayer then
+                local character = player.Character
+                local refs = espRefs[player]
+                if character and (not refs or refs.char ~= character) then
+                    applyESPPlayer(player)
+                    refs = espRefs[player]
+                end
+                if character and refs and refs.char == character then
+                    local role = espPlayerRole(player)
+                    local color = playerESPColor(player, role)
+                    if refs.highlight then
+                        refs.highlight.FillColor = color
+                        refs.highlight.OutlineColor = color
+                    end
+                    if refs.boxStroke then refs.boxStroke.Color = color end
+                    if refs.info then refs.info.TextColor3 = color end
+                end
+            end
+        end
+        task.wait(.15)
+    end
+end)
 
 -- tracer + skeleton render loop (optimized: precomputed bones, per-player cache, no per-frame string concat)
 local R15_BONES = {
@@ -1120,6 +1266,7 @@ RunService.RenderStepped:Connect(function(dt)
         if player ~= LocalPlayer then
             local character = player.Character
             local role = character and espRoleFast(player) or "innocent"
+            local displayColor = playerESPColor(player, role)
             if wantTracer then
                 local tracer = espTracers[player]
                 if not tracer then tracer = newLine(); espTracers[player] = tracer end
@@ -1129,7 +1276,7 @@ RunService.RenderStepped:Connect(function(dt)
                         local pos = cam:WorldToViewportPoint(root.Position)
                         tracer.From = bottom
                         tracer.To = Vector2.new(pos.X, pos.Y)
-                        tracer.Color = roleColor(role)
+                        tracer.Color = displayColor
                         tracer.Visible = pos.Z > 0
                     else
                         tracer.Visible = false
@@ -1164,7 +1311,7 @@ RunService.RenderStepped:Connect(function(dt)
                             local pb = cam:WorldToViewportPoint(b2.Position)
                             line.From = Vector2.new(pa.X, pa.Y)
                             line.To = Vector2.new(pb.X, pb.Y)
-                            line.Color = roleColor(role)
+                            line.Color = displayColor
                             line.Visible = pa.Z > 0 and pb.Z > 0
                         else
                             line.Visible = false
@@ -1219,7 +1366,9 @@ RunService.RenderStepped:Connect(function(dt)
                     if hum then
                         local ratio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
                         refs.bar.Size = UDim2.fromScale(1, ratio)
-                        refs.bar.BackgroundColor3 = Color3.fromRGB(255 * (1 - ratio), 235 * ratio, 60)
+                        refs.bar.BackgroundColor3 = playerESPInactive(player)
+                            and ESP_INACTIVE_COLOR
+                            or Color3.fromRGB(255 * (1 - ratio), 235 * ratio, 60)
                     end
                 end
             end
@@ -1328,12 +1477,32 @@ end
 function trackGun(instance)
     if instance:IsA("BasePart") or instance:IsA("Tool") or instance:IsA("Model") then trackedGuns[instance] = true end
 end
+local function gunPickupPart(container)
+    local fallback
+    local function inspect(part)
+        if not fallback then fallback = part end
+        -- GunDrop models often have several mesh parts; only one carries the
+        -- TouchInterest/TouchTransmitter that the game's pickup code listens to.
+        if part:FindFirstChild("TouchInterest") or part:FindFirstChild("TouchTransmitter")
+            or part:FindFirstChildOfClass("TouchTransmitter") then
+            return part
+        end
+    end
+    if container:IsA("BasePart") then return inspect(container) or fallback end
+    for _, child in ipairs(container:GetDescendants()) do
+        if child:IsA("BasePart") then
+            local pickup = inspect(child)
+            if pickup then return pickup end
+        end
+    end
+    return fallback
+end
 function findTrackedGun()
     for inst in pairs(trackedGuns) do
         if inst.Parent then
-            if not Players:GetPlayerFromCharacter(inst:FindFirstAncestorOfClass("Model")) then
-                if inst:IsA("BasePart") then return inst end
-                local part = inst:FindFirstChildWhichIsA("BasePart", true)
+            local ownerModel = inst:FindFirstAncestorOfClass("Model")
+            if not Players:GetPlayerFromCharacter(ownerModel) then
+                local part = gunPickupPart(inst)
                 if part then return part end
             end
         else
@@ -1778,16 +1947,20 @@ function createShootButton()
     if type(gethui) == "function" then local ok, result = pcall(gethui); if ok and typeof(result) == "Instance" then parent = result end end
     if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
     shootGui = Instance.new("ScreenGui")
-    shootGui.Name = "MM2ShootMurdererButton"; shootGui.ResetOnSpawn = false; shootGui.IgnoreGuiInset = true; shootGui.Parent = parent
+    shootGui.Name = "MM2ShootMurdererButton"; shootGui.ResetOnSpawn = false; shootGui.IgnoreGuiInset = true
+    shootGui.DisplayOrder = 80; shootGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling; shootGui.Parent = parent
     local button = Instance.new("TextButton")
     button.Name = "ShootMurderer"
     button.AnchorPoint = Vector2.new(0.5, 0.5)
-    button.Position = NoirPersistence.GetPosition("shoot", UDim2.new(0.5, 0, 0.5, 0))
-    button.Size = UDim2.new(0, 190, 0, 62)
+    -- Start in the right-side safe rail, outside the main window.  The v4
+    -- position key is intentionally new so an old centre-screen position is
+    -- not restored over the UI after updating.
+    button.Position = NoirPersistence.GetPosition("shoot_v2", UDim2.new(1, -132, 1, -124))
+    button.Size = UDim2.new(0, 194, 0, 66)
     button.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
     button.BackgroundTransparency = 0.28
     button.BorderSizePixel = 0
-    button.Text = "Shoot Target"
+    button.Text = "Shoot Murder"
     button.TextColor3 = Color3.fromRGB(245, 245, 248)
     button.TextSize = 17
     button.TextWrapped = true
@@ -1822,8 +1995,8 @@ function createShootButton()
     Instance.new("UICorner", traceB).CornerRadius = UDim.new(1, 0)
     traceA.Visible = false; traceB.Visible = false
     local sound = Instance.new("Sound"); sound.Name = "Sound"; sound.SoundId = "rbxassetid://3868133279"; sound.Volume = 0.5; sound.Parent = button
-    local normalSize = UDim2.new(0, 190, 0, 62)
-    local pressedSize = UDim2.new(0, 202, 0, 68)
+    local normalSize = UDim2.new(0, 194, 0, 66)
+    local pressedSize = UDim2.new(0, 206, 0, 72)
     local pressTween = TweenInfo.new(0.30, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
     local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
     button.InputBegan:Connect(function(input)
@@ -1845,15 +2018,22 @@ function createShootButton()
         if dragging and input == dragInput and not config.lockShootButton then
             local delta = input.Position - dragStart
             if delta.Magnitude > 8 then moved = true end
-            button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+            local view = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+            local halfW, halfH = normalSize.X.Offset / 2, normalSize.Y.Offset / 2
+            local x = startPosition.X.Scale * view.X + startPosition.X.Offset + delta.X
+            local y = startPosition.Y.Scale * view.Y + startPosition.Y.Offset + delta.Y
+            -- Keep a 14px edge margin and reserve the central window area.
+            x = math.clamp(x, halfW + 14, view.X - halfW - 14)
+            y = math.clamp(y, halfH + 14, view.Y - halfH - 14)
+            button.Position = UDim2.fromOffset(x, y)
         end
     end)
     UIS.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
-            NoirPersistence.SetPosition("shoot", button.Position)
+            NoirPersistence.SetPosition("shoot_v2", button.Position)
             TweenService:Create(button, TweenInfo.new(.62, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = normalSize, TextSize = 17, BackgroundColor3 = Color3.fromRGB(8,8,10), BackgroundTransparency = .28 }):Play()
-            button.Text = "Shoot Target"
+            button.Text = "Shoot Murder"
             traceA.Visible = false; traceB.Visible = false
         end
     end)
@@ -1877,6 +2057,19 @@ end
 
 --======================================================= ROUND TIMER
 local roundTimerGui
+local function resetRoundTimer()
+    roundResetToken += 1
+    roundState = "waiting"
+    roundTimerEndsAt = nil
+    roundPendingStart = nil
+    if roundTimerGui and roundTimerGui.Parent then roundTimerGui.Text = "WAITING" end
+end
+local function beginRoundTimer()
+    roundResetToken += 1
+    roundState = "playing"
+    roundPendingStart = nil
+    roundTimerEndsAt = os.clock() + 180
+end
 function setRoundTimerVisible(value)
     if not value then
         if roundTimerGui then roundTimerGui:Destroy(); roundTimerGui = nil end
@@ -1888,64 +2081,98 @@ function setRoundTimerVisible(value)
     roundTimerGui.Parent = gui
     roundTimerGui.AnchorPoint = Vector2.new(.5, 0)
     roundTimerGui.Position = UDim2.new(.5, 0, 0, 18)
-    roundTimerGui.Size = UDim2.fromOffset(200, 50)
+    roundTimerGui.Size = UDim2.fromOffset(220, 50)
     roundTimerGui.BackgroundColor3 = C.panel
-    roundTimerGui.BackgroundTransparency = .2
+    roundTimerGui.BackgroundTransparency = .12
     roundTimerGui.TextColor3 = C.text
+    roundTimerGui.Text = (roundState == "waiting" or roundState == "unknown") and "WAITING" or "STARTING"
     roundTimerGui.TextSize = 20
     roundTimerGui.Font = Enum.Font.GothamBold
+    roundTimerGui.ZIndex = 900
     corner(roundTimerGui, 15); stroke(roundTimerGui, C.border, .15)
+    local thisGui = roundTimerGui
     task.spawn(function()
-        local getTimer = ReplicatedStorage:FindFirstChild("GetTimer", true)
-        while roundTimerGui and roundTimerGui.Parent do
+        local getTimer
+        while roundTimerGui == thisGui and thisGui.Parent do
             local found, bestScore, phase
-            -- 1) authoritative: GetTimer remote
-            if getTimer and getTimer:IsA("RemoteFunction") then
-                local ok, res = pcall(function() return getTimer:InvokeServer() end)
-                if ok and res ~= nil then
-                    if typeof(res) == "number" then
-                        local left = math.max(0, math.floor(res + .5))
-                        found = string.format("%dm %02ds", math.floor(left / 60), left % 60); bestScore = 200
-                    elseif typeof(res) == "table" then
-                        local secs = res.Time or res.time or res.Seconds or res.seconds or res.Remaining or res.remaining
-                        phase = res.Phase or res.phase or res.State or res.state
-                        if typeof(secs) == "number" then
-                            local left = math.max(0, math.floor(secs + .5))
+            local activeRound = roundState == "starting" or roundState == "playing"
+
+            -- Do not read stale GetTimer/UI values while the round is over.
+            -- The old implementation did exactly that, so the previous round's
+            -- number immediately reappeared after GameOver/VictoryScreen.
+            if activeRound then
+                getTimer = (getTimer and getTimer.Parent and getTimer) or ReplicatedStorage:FindFirstChild("GetTimer", true)
+                if getTimer and getTimer:IsA("RemoteFunction") then
+                    local ok, res = pcall(function() return getTimer:InvokeServer() end)
+                    if ok and res ~= nil then
+                        if typeof(res) == "number" then
+                            local left = math.max(0, math.floor(res + .5))
                             found = string.format("%dm %02ds", math.floor(left / 60), left % 60); bestScore = 200
+                        elseif typeof(res) == "table" then
+                            local secs = res.Time or res.time or res.Seconds or res.seconds or res.Remaining or res.remaining
+                            phase = res.Phase or res.phase or res.State or res.state
+                            local phaseName = string.lower(tostring(phase or ""))
+                            if phaseName == "ended" or phaseName == "gameover" or phaseName == "victory" or phaseName == "lobby" or phaseName == "waiting" then
+                                resetRoundTimer()
+                            elseif typeof(secs) == "number" then
+                                local left = math.max(0, math.floor(secs + .5))
+                                found = string.format("%dm %02ds", math.floor(left / 60), left % 60); bestScore = 200
+                            end
+                        end
+                    end
+                end
+
+                -- fallback: scan PlayerGui only during an active/starting round
+                if found and roundState == "playing" then
+                    -- authoritative value already won; avoid replacing it with a
+                    -- decorative label from PlayerGui.
+                else
+                    local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                    if pg and roundState ~= "waiting" then
+                        for _, v in ipairs(pg:GetDescendants()) do
+                            if v:IsA("TextLabel") and v ~= thisGui then
+                                local raw = tostring(v.Text or ""):gsub("<.->", ""):gsub("^%s+", ""):gsub("%s+$", "")
+                                local lowerName = string.lower(v.Name)
+                                local score
+                                if raw:match("^%d+%s*[mM]%s*%d+%s*[sS]$") then score = 100
+                                elseif raw:match("^%d+:%d%d$") then score = 95
+                                elseif raw:match("^%d+%s*[sS]$") then score = 90
+                                elseif string.find(lowerName, "roundtimer", 1, true) or string.find(lowerName, "gametimer", 1, true) then score = 80
+                                elseif string.find(lowerName, "timer", 1, true) and raw:match("%d") then score = 60
+                                end
+                                if score and (not bestScore or score > bestScore) then found, bestScore = raw, score end
+                            end
                         end
                     end
                 end
             end
-            -- 2) fallback: scan PlayerGui for a timer label
-            if not found then
-                local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-                if pg then
-                    for _, v in ipairs(pg:GetDescendants()) do
-                        if v:IsA("TextLabel") and v ~= roundTimerGui then
-                            local raw = tostring(v.Text or ""):gsub("<.->", ""):gsub("^%s+", ""):gsub("%s+$", "")
-                            local lowerName = string.lower(v.Name)
-                            local score
-                            if raw:match("^%d+%s*[mM]%s*%d+%s*[sS]$") then score = 100
-                            elseif raw:match("^%d+:%d%d$") then score = 95
-                            elseif raw:match("^%d+%s*[sS]$") then score = 90
-                            elseif string.find(lowerName, "roundtimer", 1, true) or string.find(lowerName, "gametimer", 1, true) then score = 80
-                            elseif string.find(lowerName, "timer", 1, true) and raw:match("%d") then score = 60
-                            elseif not roundTimerEndsAt and raw:match("^%d+$") and tonumber(raw) and tonumber(raw) <= 15 then score = 30 end
-                            if score and (not bestScore or score > bestScore) then found, bestScore = raw, score end
-                        end
-                    end
-                end
-            end
-            -- 3) internal estimate
-            if roundPendingStart then
+
+            if roundState == "starting" and roundPendingStart then
                 local pre = math.ceil(roundPendingStart - os.clock())
-                if pre > 0 then found = "Starts in " .. tostring(pre) else roundPendingStart = nil; roundTimerEndsAt = os.clock() + 180 end
-            end
-            if roundTimerEndsAt then
+                if pre > 0 then
+                    found = "Starts in " .. tostring(pre)
+                else
+                    roundPendingStart = nil
+                    beginRoundTimer()
+                    found = "3m 00s"
+                end
+            elseif roundState == "playing" and roundTimerEndsAt then
                 local left = math.max(0, math.floor(roundTimerEndsAt - os.clock() + .5))
-                if left > 0 then found = string.format("%dm %02ds", math.floor(left / 60), left % 60) else roundTimerEndsAt = nil end
+                if left > 0 then
+                    if not found then found = string.format("%dm %02ds", math.floor(left / 60), left % 60) end
+                else
+                    resetRoundTimer()
+                    found = "WAITING"
+                end
             end
-            roundTimerGui.Text = phase and (string.upper(tostring(phase)) .. "  " .. (found or "")) or (found or "WAITING")
+
+            if roundState == "waiting" then
+                thisGui.Text = "WAITING"
+            elseif roundState == "starting" then
+                thisGui.Text = found or "STARTING"
+            else
+                thisGui.Text = phase and (string.upper(tostring(phase)) .. "  " .. (found or "")) or (found or "WAITING")
+            end
             task.wait(.2)
         end
     end)
@@ -2013,42 +2240,79 @@ function findDroppedGun()
     lastGunDeepScan = now
     local direct = Workspace:FindFirstChild("GunDrop", true)
     if direct then
-        if direct:IsA("BasePart") then return direct end
-        local part = direct:FindFirstChildWhichIsA("BasePart", true)
+        local part = gunPickupPart(direct)
         if part then return part end
     end
 end
 
+local function localHasGun()
+    return playerHasTool(LocalPlayer, "Gun") ~= nil
+end
+local function localIsMurderer()
+    return murderer == LocalPlayer
+        or roleCache[LocalPlayer.UserId] == "murderer"
+        or playerHasTool(LocalPlayer, "Knife") ~= nil
+end
+local function gunRoundActive()
+    local humanoid = localHumanoid()
+    if not humanoid or humanoid.Health <= 0 then return false end
+    -- A round must be positively identified by RoundStart/role data.  This
+    -- also keeps a persisted Auto Grab toggle idle while the player is in the
+    -- lobby after dying.
+    if roundState ~= "starting" and roundState ~= "playing" then return false end
+    return true
+end
+
 function grabGun(silent)
+    if not gunRoundActive() then
+        if not silent then notify("Gun pickup is unavailable in the lobby", 2.5) end
+        return false
+    end
+    if localHasGun() then return true end
+    if utility.grabSafety and localIsMurderer() then
+        if not silent then notify("Pickup blocked by Safety Check", 2.5) end
+        return false
+    end
     local gun = findDroppedGun()
-    if not gun then if not silent then notify("Dropped gun not found", 2) end return false end
-    if utility.grabSafety and murderer == LocalPlayer then return false end
+    if not gun then
+        if not silent then notify("Dropped gun not found", 2) end
+        return false
+    end
     local root = localRoot()
     if not root then return false end
     local part = gun:IsA("BasePart") and gun or gun:FindFirstChildWhichIsA("BasePart", true)
-    if not part then return false end
-    local grabbed = false
-    -- 1) fire touch interest (server-side Touched pickup)
+    if not part or not part.Parent then return false end
+
+    local attempted = false
+    -- MM2's normal dropped-gun pickup is a touch interaction.  Verify the
+    -- local inventory after the attempt instead of treating the existence of
+    -- firetouchinterest as a successful pickup.
     if type(firetouchinterest) == "function" then
-        pcall(function()
+        local ok = pcall(function()
             firetouchinterest(root, part, 0)
-            task.wait()
+            task.wait(.05)
             firetouchinterest(root, part, 1)
         end)
-        grabbed = true
+        attempted = ok or attempted
     end
-    -- 2) move the dropped gun onto the player so physics triggers pickup
+    -- Keep the legacy fallback for executors that do not expose touch events.
     pcall(function() part.CFrame = root.CFrame end)
-    -- 3) fire any pickup remote as a fallback (cached lookup)
+
     local pickupRemote = findPickupRemote()
     if pickupRemote then
-        pcall(function()
-            if pickupRemote:IsA("RemoteFunction") then pickupRemote:InvokeServer(part) else pickupRemote:FireServer(part) end
+        local ok = pcall(function()
+            if pickupRemote:IsA("RemoteFunction") then
+                pickupRemote:InvokeServer(part)
+            else
+                pickupRemote:FireServer(part)
+            end
         end)
-        grabbed = true
+        attempted = ok or attempted
     end
-    if not grabbed and not silent then notify("Gun pickup failed", 3) end
-    return grabbed
+
+    local pickedUp = localHasGun()
+    if not pickedUp and not silent and not attempted then notify("Gun pickup failed", 3) end
+    return pickedUp or attempted
 end
 
 function fpsBoost()
@@ -2242,7 +2506,7 @@ end
 
 -- main utility loop
 task.spawn(function()
-    local hadGun = false
+    local hadDrop = false
     local lastGunScan = 0
     while running do
         if utility.walkEnabled or utility.jumpEnabled then applyCharacterMods() end
@@ -2250,15 +2514,22 @@ task.spawn(function()
             local now = os.clock()
             if now - lastGunScan >= 0.5 then
                 lastGunScan = now
-                local gun = findDroppedGun()
-                if utility.autoGrab and gun then grabGun(true) end
-                if utility.gunAura and gun then
+                local active = gunRoundActive()
+                -- Reset the edge detector in the lobby.  This prevents a stale
+                -- GunDrop from alternating between “dropped” and “picked up”
+                -- notifications while the player is dead or waiting.
+                if not active then
+                    hadDrop = false
+                else
+                    local gun = findDroppedGun()
                     local root = localRoot()
-                    if root and (root.Position - gun.Position).Magnitude <= utility.gunAuraRange then grabGun(true) end
+                    local closeEnough = gun and root and (root.Position - gun.Position).Magnitude <= (utility.gunAuraRange or 10)
+                    local shouldGrab = gun and not localHasGun() and (utility.autoGrab or (utility.gunAura and closeEnough))
+                    if shouldGrab then grabGun(true) end
+                    if utility.notifyDropped and gun and not hadDrop then notify("Dropped gun detected", 3) end
+                    if utility.notifyPickup and not gun and hadDrop then notify("Gun picked up", 3) end
+                    hadDrop = gun ~= nil
                 end
-                if utility.notifyDropped and gun and not hadGun then notify("Gun dropped", 3) end
-                if utility.notifyPickup and not gun and hadGun then notify("Gun picked up", 3) end
-                hadGun = gun ~= nil
             end
         end
         if utility.touchFling then
@@ -2608,39 +2879,49 @@ syncRevertControls = function(syncToggles)
 end
 
 --===================================================== EVENT CONNECTIONS
+local remoteConnections = {}
 function connectRemote(name, handler)
-    local remote = ReplicatedStorage:FindFirstChild(name, true)
-    if remote and remote:IsA("RemoteEvent") then
-        remote.OnClientEvent:Connect(function(...) pcall(handler, ...) end)
+    local wanted = string.lower(tostring(name))
+    local first
+    for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+        if string.lower(remote.Name) == wanted then
+            if remote:IsA("RemoteEvent") then
+                first = first or remote
+                table.insert(remoteConnections, remote.OnClientEvent:Connect(function(...) pcall(handler, ...) end))
+            elseif remote:IsA("BindableEvent") then
+                first = first or remote
+                table.insert(remoteConnections, remote.Event:Connect(function(...) pcall(handler, ...) end))
+            end
+        end
     end
-    return remote
+    return first
 end
 
 connectRemote("PlayerDataChanged", function(data) consumeData(data) end)
 connectRemote("RoundStart", function()
-    roundTimerEndsAt = os.clock() + 180
-    roundPendingStart = nil
+    beginRoundTimer()
     murderer, sheriff, hero = nil, nil, nil
     table.clear(roleCache); table.clear(announcedRoles)
     task.spawn(refreshTarget)
 end)
-connectRemote("RoundEndFade", function()
-    roundTimerEndsAt = nil; roundPendingStart = nil
+local function finishRound()
+    resetRoundTimer()
     murderer, sheriff, hero = nil, nil, nil
     table.clear(roleCache); table.clear(announcedRoles)
-    refreshESP()
-end)
-connectRemote("Fade", function() roundTimerEndsAt = nil; roundPendingStart = nil end)
+    if type(refreshESP) == "function" then refreshESP() end
+end
+connectRemote("RoundEndFade", finishRound)
+connectRemote("RoundEnd", finishRound)
+connectRemote("Fade", finishRound)
 connectRemote("RoleSelect", function() task.spawn(refreshTarget) end)
 connectRemote("ShowRoleSelect", function() task.spawn(refreshTarget) end)
 connectRemote("ShowRoleSelectNew", function() task.spawn(refreshTarget) end)
 connectRemote("ChangeTarget", function() task.spawn(refreshTarget) end)
 connectRemote("GiveWeapon", function() task.spawn(refreshTarget) end)
 connectRemote("KillEvent", function() task.spawn(refreshTarget) end)
-connectRemote("GameOver", function() roundTimerEndsAt = nil end)
-connectRemote("VictoryScreen", function() roundTimerEndsAt = nil end)
+connectRemote("GameOver", finishRound)
+connectRemote("VictoryScreen", finishRound)
 connectRemote("Stealth", function() notify("Stealth activated", 3) end)
-
 --======================================================== BACKGROUND LOOPS
 task.spawn(function()
     while running do
@@ -2711,3 +2992,3428 @@ task.defer(function()
 end)
 
 notify("v4 ready \u{2022} " .. tostring(#getPlayers()) .. " players in server", 4)
+
+--==================================================== EMBEDDED WORLD PLUGINS
+-- The four attached files were written for Overdrive H's plugin API. This
+-- bridge maps that API to this script's existing host and routes their
+-- sections into the World page without requiring external downloads.
+do
+    local function makeWorldPluginTab(base)
+        local proxy = {}
+        setmetatable(proxy, {
+            __index = function(_, key)
+                if key == "AddSection" then
+                    return function(_, name, description)
+                        name = tostring(name or "Plugin")
+                        if string.sub(name, 1, 6) ~= "WORLD " then
+                            name = "WORLD \\u{2022} " .. name
+                        end
+                        return base:AddSection(name, description or "")
+                    end
+                end
+                local method = base[key]
+                if type(method) == "function" then
+                    return function(_, ...)
+                        return method(base, ...)
+                    end
+                end
+                return method
+            end,
+        })
+        return proxy
+    end
+    local odh_shared_plugins = {
+        game_name = "Murder Mystery 2",
+        CreateTab = function(_, title, icon)
+            return makeWorldPluginTab(host.CreateTab())
+        end,
+        Notify = function(textValue, duration)
+            notify(tostring(textValue), duration or 3)
+        end,
+    }
+    -- ================================================================
+    -- EMBEDDED PLUGIN: Anims.lua.txt
+    do
+-- FE Animations: current Overdrive H API + persistent preferences.
+-- Revision 3: full track reset before ID changes + delayed, supersession-safe Animate restart.
+-- Animation presets by aux0on: https://github.com/aux0on/FE/blob/main/Anims.lua
+-- R15 only. Asset availability/replication depends on Roblox and the experience.
+-- Self-contained: does not download or execute the old external CrashHandler.
+local shared = odh_shared_plugins
+if not shared or type(shared.CreateTab) ~= "function" then
+    warn("[FE Animations] Load this file through the current Overdrive H plugin menu.")
+    return
+end
+local KEY = "ODH_FEAnimationsRuntime_v2"
+if type(_G[KEY]) == "table" and _G[KEY].alive then
+    if type(shared.Notify)=="function" then
+        pcall(shared.Notify,"FE Animations is already loaded. Use its existing tab.",4)
+    end
+    return
+end
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then warn("[FE Animations] LocalPlayer unavailable."); return end
+local HttpService = game:GetService("HttpService")
+local runtime = {version=3,alive=true, initializing=true, enabled=false, generation=0,
+    selections={all="Default",idle="Default",walk="Default",run="Default",jump="Default",climb="Default",fall="Default"}}
+local FILE = "ODH_FEAnimations_settings.json"
+runtime.settingsFile=FILE
+local warnings={}
+local function WarnOnce(key,text)
+    if warnings[key] then return end
+    warnings[key]=true
+    warn("[FE Animations] "..text)
+    if type(shared.Notify)=="function" then pcall(shared.Notify,"FE Animations: "..text,5) end
+end
+local environment={}
+if type(getgenv)=="function" then
+    local ok,result=pcall(getgenv)
+    if ok and type(result)=="table" then environment=result end
+end
+local fileRead=type(readfile)=="function" and readfile or environment.readfile
+local fileWrite=type(writefile)=="function" and writefile or environment.writefile
+local fileExists=type(isfile)=="function" and isfile or environment.isfile
+local canPersist=type(fileRead)=="function" and type(fileWrite)=="function"
+runtime.saveStatus=canPersist and "Not saved" or "Unavailable"
+
+local animPresets = {
+    ["Default"] = nil,
+    ["OG Rthro Run"] = {run = "http://www.roblox.com/asset/?id=9801814462"},
+    ["Vampire"] = {
+        idle1 = "http://www.roblox.com/asset/?id=1083445855",
+        idle2 = "http://www.roblox.com/asset/?id=1083450166",
+        walk  = "http://www.roblox.com/asset/?id=1083473930",
+        run   = "http://www.roblox.com/asset/?id=1083462077",
+        jump  = "http://www.roblox.com/asset/?id=1083455352",
+        climb = "http://www.roblox.com/asset/?id=1083439238",
+        fall  = "http://www.roblox.com/asset/?id=1083443587"
+    },
+    ["Hero"] = {
+        idle1 = "http://www.roblox.com/asset/?id=616111295",
+        idle2 = "http://www.roblox.com/asset/?id=616113536",
+        walk  = "http://www.roblox.com/asset/?id=616122287",
+        run   = "http://www.roblox.com/asset/?id=616117076",
+        jump  = "http://www.roblox.com/asset/?id=616115533",
+        climb = "http://www.roblox.com/asset/?id=616104706",
+        fall  = "http://www.roblox.com/asset/?id=616108001"
+    },
+    ["Zombie Classic"] = {
+        idle1 = "http://www.roblox.com/asset/?id=616158929",
+        idle2 = "http://www.roblox.com/asset/?id=616160636",
+        walk  = "http://www.roblox.com/asset/?id=616168032",
+        run   = "http://www.roblox.com/asset/?id=616163682",
+        jump  = "http://www.roblox.com/asset/?id=616161997",
+        climb = "http://www.roblox.com/asset/?id=616156119",
+        fall  = "http://www.roblox.com/asset/?id=616157476"
+    },
+    ["Mage"] = {
+        idle1 = "http://www.roblox.com/asset/?id=707742142",
+        idle2 = "http://www.roblox.com/asset/?id=707855907",
+        walk  = "http://www.roblox.com/asset/?id=707897309",
+        run   = "http://www.roblox.com/asset/?id=707861613",
+        jump  = "http://www.roblox.com/asset/?id=707853694",
+        climb = "http://www.roblox.com/asset/?id=707826056",
+        fall  = "http://www.roblox.com/asset/?id=707829716"
+    },
+    ["Ghost"] = {
+        idle1 = "http://www.roblox.com/asset/?id=616006778",
+        idle2 = "http://www.roblox.com/asset/?id=616008087",
+        walk  = "http://www.roblox.com/asset/?id=616010382",
+        run   = "http://www.roblox.com/asset/?id=616013216",
+        jump  = "http://www.roblox.com/asset/?id=616008936",
+        climb = "http://www.roblox.com/asset/?id=616003713",
+        fall  = "http://www.roblox.com/asset/?id=616005863"
+    },
+    ["Elder"] = {
+        idle1 = "http://www.roblox.com/asset/?id=845397899",
+        idle2 = "http://www.roblox.com/asset/?id=845400520",
+        walk  = "http://www.roblox.com/asset/?id=845403856",
+        run   = "http://www.roblox.com/asset/?id=845386501",
+        jump  = "http://www.roblox.com/asset/?id=845398858",
+        climb = "http://www.roblox.com/asset/?id=845392038",
+        fall  = "http://www.roblox.com/asset/?id=845396048"
+    },
+    ["Levitation"] = {
+        idle1 = "http://www.roblox.com/asset/?id=616006778",
+        idle2 = "http://www.roblox.com/asset/?id=616008087",
+        walk  = "http://www.roblox.com/asset/?id=616013216",
+        run   = "http://www.roblox.com/asset/?id=616010382",
+        jump  = "http://www.roblox.com/asset/?id=616008936",
+        climb = "http://www.roblox.com/asset/?id=616003713",
+        fall  = "http://www.roblox.com/asset/?id=616005863"
+    },
+    ["Astronaut"] = {
+        idle1 = "http://www.roblox.com/asset/?id=891621366",
+        idle2 = "http://www.roblox.com/asset/?id=891633237",
+        walk  = "http://www.roblox.com/asset/?id=891667138",
+        run   = "http://www.roblox.com/asset/?id=891636393",
+        jump  = "http://www.roblox.com/asset/?id=891627522",
+        climb = "http://www.roblox.com/asset/?id=891609353",
+        fall  = "http://www.roblox.com/asset/?id=891617961"
+    },
+    ["Ninja"] = {
+        idle1 = "http://www.roblox.com/asset/?id=656117400",
+        idle2 = "http://www.roblox.com/asset/?id=656118341",
+        walk  = "http://www.roblox.com/asset/?id=656121766",
+        run   = "http://www.roblox.com/asset/?id=656118852",
+        jump  = "http://www.roblox.com/asset/?id=656117878",
+        climb = "http://www.roblox.com/asset/?id=656114359",
+        fall  = "http://www.roblox.com/asset/?id=656115606"
+    },
+    ["Werewolf"] = {
+        idle1 = "http://www.roblox.com/asset/?id=1083195517",
+        idle2 = "http://www.roblox.com/asset/?id=1083214717",
+        walk  = "http://www.roblox.com/asset/?id=1083178339",
+        run   = "http://www.roblox.com/asset/?id=1083216690",
+        jump  = "http://www.roblox.com/asset/?id=1083218792",
+        climb = "http://www.roblox.com/asset/?id=1083182000",
+        fall  = "http://www.roblox.com/asset/?id=1083189019"
+    },
+    ["Cartoon"] = {
+        idle1 = "http://www.roblox.com/asset/?id=742637544",
+        idle2 = "http://www.roblox.com/asset/?id=742638445",
+        walk  = "http://www.roblox.com/asset/?id=742640026",
+        run   = "http://www.roblox.com/asset/?id=742638842",
+        jump  = "http://www.roblox.com/asset/?id=742637942",
+        climb = "http://www.roblox.com/asset/?id=742636889",
+        fall  = "http://www.roblox.com/asset/?id=742637151"
+    },
+    ["Pirate"] = {
+        idle1 = "http://www.roblox.com/asset/?id=750781874",
+        idle2 = "http://www.roblox.com/asset/?id=750782770",
+        walk  = "http://www.roblox.com/asset/?id=750785693",
+        run   = "http://www.roblox.com/asset/?id=750783738",
+        jump  = "http://www.roblox.com/asset/?id=750782230",
+        climb = "http://www.roblox.com/asset/?id=750779899",
+        fall  = "http://www.roblox.com/asset/?id=750780242"
+    },
+    ["Sneaky"] = {
+        idle1 = "http://www.roblox.com/asset/?id=1132473842",
+        idle2 = "http://www.roblox.com/asset/?id=1132477671",
+        walk  = "http://www.roblox.com/asset/?id=1132510133",
+        run   = "http://www.roblox.com/asset/?id=1132494274",
+        jump  = "http://www.roblox.com/asset/?id=1132489853",
+        climb = "http://www.roblox.com/asset/?id=1132461372",
+        fall  = "http://www.roblox.com/asset/?id=1132469004"
+    },
+    ["Toy"] = {
+        idle1 = "http://www.roblox.com/asset/?id=782841498",
+        idle2 = "http://www.roblox.com/asset/?id=782845736",
+        walk  = "http://www.roblox.com/asset/?id=782843345",
+        run   = "http://www.roblox.com/asset/?id=782842708",
+        jump  = "http://www.roblox.com/asset/?id=782847020",
+        climb = "http://www.roblox.com/asset/?id=782843869",
+        fall  = "http://www.roblox.com/asset/?id=782846423"
+    },
+    ["Knight"] = {
+        idle1 = "http://www.roblox.com/asset/?id=657595757",
+        idle2 = "http://www.roblox.com/asset/?id=657568135",
+        walk  = "http://www.roblox.com/asset/?id=657552124",
+        run   = "http://www.roblox.com/asset/?id=657564596",
+        jump  = "http://www.roblox.com/asset/?id=658409194",
+        climb = "http://www.roblox.com/asset/?id=658360781",
+        fall  = "http://www.roblox.com/asset/?id=657600338"
+    },
+    ["Confident"] = {
+        idle1 = "http://www.roblox.com/asset/?id=1069977950",
+        idle2 = "http://www.roblox.com/asset/?id=1069987858",
+        walk  = "http://www.roblox.com/asset/?id=1070017263",
+        run   = "http://www.roblox.com/asset/?id=1070001516",
+        jump  = "http://www.roblox.com/asset/?id=1069984524",
+        climb = "http://www.roblox.com/asset/?id=1069946257",
+        fall  = "http://www.roblox.com/asset/?id=1069973677"
+    },
+    ["Popstar"] = {
+        idle1 = "http://www.roblox.com/asset/?id=1212900985",
+        idle2 = "http://www.roblox.com/asset/?id=1212900985",
+        walk  = "http://www.roblox.com/asset/?id=1212980338",
+        run   = "http://www.roblox.com/asset/?id=1212980348",
+        jump  = "http://www.roblox.com/asset/?id=1212954642",
+        climb = "http://www.roblox.com/asset/?id=1213044953",
+        fall  = "http://www.roblox.com/asset/?id=1212900995"
+    },
+    ["Princess"] = {
+        idle1 = "http://www.roblox.com/asset/?id=941003647",
+        idle2 = "http://www.roblox.com/asset/?id=941013098",
+        walk  = "http://www.roblox.com/asset/?id=941028902",
+        run   = "http://www.roblox.com/asset/?id=941015281",
+        jump  = "http://www.roblox.com/asset/?id=941008832",
+        climb = "http://www.roblox.com/asset/?id=940996062",
+        fall  = "http://www.roblox.com/asset/?id=941000007"
+    },
+    ["Cowboy"] = {
+        idle1 = "http://www.roblox.com/asset/?id=1014390418",
+        idle2 = "http://www.roblox.com/asset/?id=1014398616",
+        walk  = "http://www.roblox.com/asset/?id=1014421541",
+        run   = "http://www.roblox.com/asset/?id=1014401683",
+        jump  = "http://www.roblox.com/asset/?id=1014394726",
+        climb = "http://www.roblox.com/asset/?id=1014380606",
+        fall  = "http://www.roblox.com/asset/?id=1014384571"
+    },
+    ["Patrol"] = {
+        idle1 = "http://www.roblox.com/asset/?id=1149612882",
+        idle2 = "http://www.roblox.com/asset/?id=1150842221",
+        walk  = "http://www.roblox.com/asset/?id=1151231493",
+        run   = "http://www.roblox.com/asset/?id=1150967949",
+        jump  = "http://www.roblox.com/asset/?id=1150944216",
+        climb = "http://www.roblox.com/asset/?id=1148811837",
+        fall  = "http://www.roblox.com/asset/?id=1148863382"
+    },
+    ["Zombie FE"] = {
+        idle1 = "http://www.roblox.com/asset/?id=3489171152",
+        idle2 = "http://www.roblox.com/asset/?id=3489171152",
+        walk  = "http://www.roblox.com/asset/?id=3489174223",
+        run   = "http://www.roblox.com/asset/?id=3489173414",
+        jump  = "http://www.roblox.com/asset/?id=616161997",
+        climb = "http://www.roblox.com/asset/?id=616156119",
+        fall  = "http://www.roblox.com/asset/?id=616157476"
+    },
+    ["Catwalk Glam"] = {
+        idle1 = "http://www.roblox.com/asset/?id=133806214992291",
+        idle2 = "http://www.roblox.com/asset/?id=133806214992291",
+        walk  = "http://www.roblox.com/asset/?id=109168724482748",
+        run   = "http://www.roblox.com/asset/?id=81024476153754",
+        jump  = "http://www.roblox.com/asset/?id=116936326516985",
+        climb = "http://www.roblox.com/asset/?id=119377220967554",
+        fall  = "http://www.roblox.com/asset/?id=92294537340807"
+    },
+    ["Amazon Unboxed"] = {
+        idle1 = "http://www.roblox.com/asset/?id=98281136301627",
+        idle2 = "http://www.roblox.com/asset/?id=98281136301627",
+        walk  = "http://www.roblox.com/asset/?id=90478085024465",
+        run   = "http://www.roblox.com/asset/?id=134824450619865",
+        jump  = "http://www.roblox.com/asset/?id=121454505477205",
+        climb = "http://www.roblox.com/asset/?id=121145883950231",
+        fall  = "http://www.roblox.com/asset/?id=94788218468396"
+    },
+    ["Glow Motion"] = {
+        idle1 = "https://www.roblox.com/asset/?id=137764781910579",
+        idle2 = "https://www.roblox.com/asset/?id=137764781910579",
+        walk  = "http://www.roblox.com/asset/?id=85809016093530",
+        run   = "http://www.roblox.com/asset/?id=101925097435036",
+        jump  = "http://www.roblox.com/asset/?id=74159004634379",
+        climb = "http://www.roblox.com/asset/?id=108236155509584",
+        fall  = "https://www.roblox.com/asset/?id=98070939608691"
+    },
+    ["Bubbly"] = {
+        idle1 = "https://www.roblox.com/asset/?id=10921054344",
+        idle2 = "https://www.roblox.com/asset/?id=10921054344",
+        walk  = "http://www.roblox.com/asset/?id=10980888364",
+        run   = "http://www.roblox.com/asset/?id=10921057244",
+        jump  = "http://www.roblox.com/asset/?id=10921062673",
+        climb = "http://www.roblox.com/asset/?id=10921053544",
+        fall  = "https://www.roblox.com/asset/?id=10921061530"
+    },
+    ["Adidas Comm"] = {
+        idle1 = "https://www.roblox.com/asset/?id=122257458498464",
+        idle2 = "https://www.roblox.com/asset/?id=122257458498464",
+        walk  = "http://www.roblox.com/asset/?id=122150855457006",
+        run   = "http://www.roblox.com/asset/?id=82598234841035",
+        jump  = "http://www.roblox.com/asset/?id=75290611992385",
+        climb = "http://www.roblox.com/asset/?id=88763136693023",
+        fall  = "https://www.roblox.com/asset/?id=98600215928904"
+    },
+    ["KATSEYE"] = {
+        idle1 = "https://www.roblox.com/asset/?id=108187809145790",
+        idle2 = "https://www.roblox.com/asset/?id=108187809145790",
+        walk  = "http://www.roblox.com/asset/?id=99182913548783",
+        run   = "http://www.roblox.com/asset/?id=73117360545482",
+        jump  = "http://www.roblox.com/asset/?id=103632305262747",
+        climb = "http://www.roblox.com/asset/?id=106213237973858",
+        fall  = "https://www.roblox.com/asset/?id=127802717128367"
+    },
+    ["Wicked Popular"] = {
+        idle1 = "https://www.roblox.com/asset/?id=118832222982049",
+        idle2 = "https://www.roblox.com/asset/?id=118832222982049",
+        walk  = "http://www.roblox.com/asset/?id=92072849924640",
+        run   = "http://www.roblox.com/asset/?id=72301599441680",
+        jump  = "http://www.roblox.com/asset/?id=104325245285198",
+        climb = "http://www.roblox.com/asset/?id=131326830509784",
+        fall  = "https://www.roblox.com/asset/?id=121152442762481"
+    },
+    ["Dizzy"] = {
+        idle1 = "http://www.roblox.com/asset/?id=132806359718468",
+        idle2 = "http://www.roblox.com/asset/?id=132806359718468",
+        walk  = "http://www.roblox.com/asset/?id=110106034100313",
+        run   = "http://www.roblox.com/asset/?id=138305342272849",
+        jump  = "http://www.roblox.com/asset/?id=108564434408211",
+        climb = "http://www.roblox.com/asset/?id=93550710314258",
+        fall  = "http://www.roblox.com/asset/?id=138967706335414"
+    },
+    ["WDTL"] = {
+        idle1 = "http://www.roblox.com/asset/?id=92849173543269",
+        idle2 = "http://www.roblox.com/asset/?id=92849173543269",
+        walk  = "http://www.roblox.com/asset/?id=73718308412641",
+        run   = "http://www.roblox.com/asset/?id=135515454877967",
+        jump  = "http://www.roblox.com/asset/?id=78508480717326",
+        climb = "http://www.roblox.com/asset/?id=129447497744818",
+        fall  = "http://www.roblox.com/asset/?id=78147885297412"
+    },
+    ["Billie Eilish"] = {
+        idle1 = "http://www.roblox.com/asset/?id=102934602884410",
+        idle2 = "http://www.roblox.com/asset/?id=102934602884410",
+        walk  = "http://www.roblox.com/asset/?id=81877886552514",
+        run   = "http://www.roblox.com/asset/?id=100920560634123",
+        jump  = "http://www.roblox.com/asset/?id=117602630922781",
+        climb = "http://www.roblox.com/asset/?id=117873469361430",
+        fall  = "http://www.roblox.com/asset/?id=81072141180299"
+    },
+    ["Cute Bouncy"] = {
+        idle1 = "http://www.roblox.com/asset/?id=88464649697812",
+        idle2 = "http://www.roblox.com/asset/?id=88464649697812",
+        walk  = "http://www.roblox.com/asset/?id=98713727778027",
+        run   = "http://www.roblox.com/asset/?id=133955346539948",
+        jump  = "http://www.roblox.com/asset/?id=124147147418885",
+        climb = "http://www.roblox.com/asset/?id=95542189442725",
+        fall  = "http://www.roblox.com/asset/?id=128620818122982"
+    },
+    ["Cute"] = {
+        idle1 = "http://www.roblox.com/asset/?id=85735421117197",
+        idle2 = "http://www.roblox.com/asset/?id=85735421117197",
+        walk  = "http://www.roblox.com/asset/?id=140409718187215",
+        run   = "http://www.roblox.com/asset/?id=118375157537412",
+        jump  = "http://www.roblox.com/asset/?id=132381016103721",
+        climb = "http://www.roblox.com/asset/?id=86318575131600",
+        fall  = "http://www.roblox.com/asset/?id=77496925287217"
+    },
+    ["Jolly"] = {
+        idle1 = "http://www.roblox.com/asset/?id=136145727878709",
+        idle2 = "http://www.roblox.com/asset/?id=136145727878709",
+        walk  = "http://www.roblox.com/asset/?id=83277136078444",
+        run   = "http://www.roblox.com/asset/?id=124419804298310",
+        jump  = "http://www.roblox.com/asset/?id=122115816220842",
+        climb = "http://www.roblox.com/asset/?id=107190574095036",
+        fall  = "http://www.roblox.com/asset/?id=85263802503331"
+    },
+    ["Cute Kawaii"] = {
+        idle1 = "http://www.roblox.com/asset/?id=72311682331639",
+        idle2 = "http://www.roblox.com/asset/?id=72311682331639",
+        walk  = "http://www.roblox.com/asset/?id=107212872423561",
+        run   = "http://www.roblox.com/asset/?id=118582510545072",
+        jump  = "http://www.roblox.com/asset/?id=112952548321695",
+        climb = "http://www.roblox.com/asset/?id=126383408493776",
+        fall  = "http://www.roblox.com/asset/?id=83307333809322"
+    },
+    ["Doll 3.0"] = {
+        idle1 = "http://www.roblox.com/asset/?id=83032187271383",
+        idle2 = "http://www.roblox.com/asset/?id=83032187271383",
+        walk  = "http://www.roblox.com/asset/?id=78434960966537",
+        run   = "http://www.roblox.com/asset/?id=129768396663808",
+        jump  = "http://www.roblox.com/asset/?id=75369057994828",
+        climb = "http://www.roblox.com/asset/?id=112371892133970",
+        fall  = "http://www.roblox.com/asset/?id=81027444073311"
+    },
+    ["Victoria Model"] = {
+        idle1 = "http://www.roblox.com/asset/?id=132069965396465",
+        idle2 = "http://www.roblox.com/asset/?id=132069965396465",
+        walk  = "http://www.roblox.com/asset/?id=84814915379579",
+        run   = "http://www.roblox.com/asset/?id=84814915379579",
+        jump  = "http://www.roblox.com/asset/?id=78163261581163",
+        climb = "http://www.roblox.com/asset/?id=87772134905508",
+        fall  = "http://www.roblox.com/asset/?id=110073924253388"
+    },
+    ["Bike/Bicyclist"] = {
+        idle1 = "http://www.roblox.com/asset/?id=126390120399173",
+        idle2 = "http://www.roblox.com/asset/?id=136791517336633",
+        walk  = "http://www.roblox.com/asset/?id=98707881660541",
+        run   = "http://www.roblox.com/asset/?id=102775737211919",
+        jump  = "http://www.roblox.com/asset/?id=129144847881258",
+        climb = "http://www.roblox.com/asset/?id=88267082364595",
+        fall  = "http://www.roblox.com/asset/?id=110684787086498"
+    },
+    ["Animal"] = {
+        idle1 = "http://www.roblox.com/asset/?id=128838183008466",
+        idle2 = "http://www.roblox.com/asset/?id=99689776099970",
+        walk  = "http://www.roblox.com/asset/?id=112238064449133",
+        run   = "http://www.roblox.com/asset/?id=97412731442167",
+        jump  = "http://www.roblox.com/asset/?id=123565665274439",
+        climb = "http://www.roblox.com/asset/?id=75085836535654",
+        fall  = "http://www.roblox.com/asset/?id=124705831982259"
+    },
+    ["It-Girl Essential Model"] = {
+        idle1 = "http://www.roblox.com/asset/?id=132232079260125",
+        idle2 = "http://www.roblox.com/asset/?id=102440789796215",
+        walk  = "http://www.roblox.com/asset/?id=86579666661215",
+        run   = "http://www.roblox.com/asset/?id=83336349930143",
+        jump  = "http://www.roblox.com/asset/?id=103382156539106",
+        climb = "http://www.roblox.com/asset/?id=77385815954046",
+        fall  = "http://www.roblox.com/asset/?id=127262648208409"
+    },
+    ["Oldschool"] = {
+        idle1 = "http://www.roblox.com/asset/?id=10921230744",
+        idle2 = "http://www.roblox.com/asset/?id=10921232093",
+        walk  = "http://www.roblox.com/asset/?id=10921244891",
+        run   = "http://www.roblox.com/asset/?id=10921240218",
+        jump  = "http://www.roblox.com/asset/?id=10921242013",
+        climb = "http://www.roblox.com/asset/?id=10921229866",
+        fall  = "http://www.roblox.com/asset/?id=10921241244"
+    },
+    ["Spider"] = {
+        idle1 = "http://www.roblox.com/asset/?id=112316814377814",
+        idle2 = "http://www.roblox.com/asset/?id=103439018552145",
+        walk  = "http://www.roblox.com/asset/?id=109976439277879",
+        run   = "http://www.roblox.com/asset/?id=119985832593347",
+        jump  = "http://www.roblox.com/asset/?id=87979233462906",
+        climb = "http://www.roblox.com/asset/?id=119278342251995",
+        fall  = "http://www.roblox.com/asset/?id=71112238570777"
+    },
+    ["Joy"] = {
+        idle1 = "http://www.roblox.com/asset/?id=119957475250242",
+        idle2 = "http://www.roblox.com/asset/?id=101200477339169",
+        walk  = "http://www.roblox.com/asset/?id=112597572150963",
+        run   = "http://www.roblox.com/asset/?id=96521659811743",
+        jump  = "http://www.roblox.com/asset/?id=82500357520736",
+        climb = "http://www.roblox.com/asset/?id=110061716873830",
+        fall  = "http://www.roblox.com/asset/?id=132095139090357"
+    },
+    ["Flying Aura"] = {
+        idle1 = "http://www.roblox.com/asset/?id=122426844584505",
+        idle2 = "http://www.roblox.com/asset/?id=122426844584505",
+        walk  = "http://www.roblox.com/asset/?id=83077254246622",
+        run   = "http://www.roblox.com/asset/?id=77053251062908",
+        jump  = "http://www.roblox.com/asset/?id=125422018244301",
+        climb = "http://www.roblox.com/asset/?id=95973965948476",
+        fall  = "http://www.roblox.com/asset/?id=109790195947848"
+    },
+                
+    ["FHA V2"] = {
+        idle1 = "http://www.roblox.com/asset/?id=77320840005481",
+        idle2 = "http://www.roblox.com/asset/?id=77320840005481",
+        walk  = "http://www.roblox.com/asset/?id=134493251445479",
+        run   = "http://www.roblox.com/asset/?id=122214533401932",
+        jump  = "http://www.roblox.com/asset/?id=80078165493816",
+        climb = "http://www.roblox.com/asset/?id=114562994724647",
+        fall  = "http://www.roblox.com/asset/?id=98383265864436"
+    },
+   
+    ["Silent Nurse"] = {
+        idle1 = "http://www.roblox.com/asset/?id=111047244862844",
+        idle2 = "http://www.roblox.com/asset/?id=111047244862844",
+        walk  = "http://www.roblox.com/asset/?id=94196382152901",
+        run   = "http://www.roblox.com/asset/?id=94196382152901",
+        jump  = "http://www.roblox.com/asset/?id=106098057235980",
+        climb = "http://www.roblox.com/asset/?id=108985375609705",
+        fall  = "http://www.roblox.com/asset/?id=131579609334755"
+    },
+
+    ["Supermodel"] = {
+        idle1 = "http://www.roblox.com/asset/?id=91917730726110",
+        idle2 = "http://www.roblox.com/asset/?id=91917730726110",
+        walk  = "http://www.roblox.com/asset/?id=90320132970213",
+        run   = "http://www.roblox.com/asset/?id=112051258179255",
+        jump  = "http://www.roblox.com/asset/?id=91931403363860",
+        climb = "http://www.roblox.com/asset/?id=82728029306069",
+        fall  = "http://www.roblox.com/asset/?id=119173466228299"
+    },
+    
+    ["Enchanted Fairy"] = {
+        idle1 = "http://www.roblox.com/asset/?id=73650178233095",
+        idle2 = "http://www.roblox.com/asset/?id=73650178233095",
+        walk  = "http://www.roblox.com/asset/?id=94547195663763",
+        run   = "http://www.roblox.com/asset/?id=76909584337943",
+        jump  = "http://www.roblox.com/asset/?id=120533712803667",
+        climb = "http://www.roblox.com/asset/?id=140663406485180",
+        fall  = "http://www.roblox.com/asset/?id=100947971756348"
+    },
+    
+    ["Furry"] = {
+        idle1 = "http://www.roblox.com/asset/?id=111821292044705",
+        idle2 = "http://www.roblox.com/asset/?id=111821292044705",
+        walk  = "http://www.roblox.com/asset/?id=104011441852459",
+        run   = "http://www.roblox.com/asset/?id=87770060317862",
+        jump  = "http://www.roblox.com/asset/?id=102635582722041",
+        climb = "http://www.roblox.com/asset/?id=76660530164497",
+        fall  = "http://www.roblox.com/asset/?id=137079985547592"
+    },
+    
+    ["Vlada Model"] = {
+        idle1 = "http://www.roblox.com/asset/?id=100139116433530",
+        idle2 = "http://www.roblox.com/asset/?id=100139116433530",
+        walk  = "http://www.roblox.com/asset/?id=77983757225444",
+        run   = "http://www.roblox.com/asset/?id=116717848244930",
+        jump  = "http://www.roblox.com/asset/?id=120751055172567",
+        climb = "http://www.roblox.com/asset/?id=70966616077778",
+        fall  = "http://www.roblox.com/asset/?id=136118518255777"
+    },
+    ["R6 Converter"] = {
+        idle1 = "http://www.roblox.com/asset/?id=90040240627854",
+        idle2 = "http://www.roblox.com/asset/?id=90040240627854",
+        walk  = "http://www.roblox.com/asset/?id=92149852708428",
+        run   = "http://www.roblox.com/asset/?id=72259383092959",
+        jump  = "http://www.roblox.com/asset/?id=130519980521511",
+        climb = "http://www.roblox.com/asset/?id=80369171706383",
+        fall  = "http://www.roblox.com/asset/?id=130011792193300"
+    },
+}
+
+local animMap = {
+    idle  = { folder = "idle",  slots = { { child = "Animation1", origKey = "idle1" }, { child = "Animation2", origKey = "idle2" } } },
+    walk  = { folder = "walk",  slots = { { child = "WalkAnim",   origKey = "walk"  } } },
+    run   = { folder = "run",   slots = { { child = "RunAnim",    origKey = "run"   } } },
+    jump  = { folder = "jump",  slots = { { child = "JumpAnim",   origKey = "jump"  } } },
+    climb = { folder = "climb", slots = { { child = "ClimbAnim",  origKey = "climb" } } },
+    fall  = { folder = "fall",  slots = { { child = "FallAnim",   origKey = "fall"  } } },
+}
+
+local allAnimOptions = {
+    "Default", "Vampire", "Hero", "Zombie Classic", "Mage", "Ghost",
+    "Elder", "Levitation", "Astronaut", "Ninja", "Werewolf", "Cartoon",
+    "Pirate", "Sneaky", "Toy", "Knight", "Confident", "Popstar",
+    "Princess", "Cowboy", "Patrol", "Zombie FE", "Catwalk Glam", "Amazon Unboxed",
+    "Glow Motion", "Bubbly", "Adidas Comm", "KATSEYE", "Wicked Popular",
+    "Dizzy", "WDTL", "Billie Eilish", "Cute Bouncy", "Cute",
+    "Jolly", "Cute Kawaii", "Doll 3.0", "Victoria Model",
+    "Bike/Bicyclist", "Animal", "It-Girl Essential Model",
+    "Oldschool", "Spider", "Joy", "Flying Aura", "FHA V2", "Silent Nurse", "Supermodel", "Enchanted Fairy", "Furry", "Vlada Model", "R6 Converter"
+}
+
+local runAnimOptions = {
+    "Default", "OG Rthro Run", "Vampire", "Hero", "Zombie Classic", "Mage", "Ghost",
+    "Elder", "Levitation", "Astronaut", "Ninja", "Werewolf", "Cartoon",
+    "Pirate", "Sneaky", "Toy", "Knight", "Confident", "Popstar",
+    "Princess", "Cowboy", "Patrol", "Zombie FE", "Catwalk Glam", "Amazon Unboxed",
+    "Glow Motion", "Bubbly", "Adidas Comm", "KATSEYE", "Wicked Popular",
+    "Dizzy", "WDTL", "Billie Eilish", "Cute Bouncy", "Cute",
+    "Jolly", "Cute Kawaii", "Doll 3.0", "Victoria Model",
+    "Bike/Bicyclist", "Animal", "It-Girl Essential Model",
+    "Oldschool", "Spider", "Joy", "Flying Aura", "FHA V2", "Silent Nurse", "Supermodel", "Enchanted Fairy", "Furry", "Vlada Model", "R6 Converter"
+}
+
+
+local allowed={}
+for key in pairs(runtime.selections) do
+    allowed[key]={}
+    for _,name in ipairs(key=="run" and runAnimOptions or allAnimOptions) do allowed[key][name]=true end
+end
+local function LoadSettings()
+    if not canPersist then
+        WarnOnce("filesystem","readfile/writefile unavailable; settings are session-only.")
+        return
+    end
+    if type(fileExists)=="function" then
+        local ok,exists=pcall(fileExists,FILE)
+        if ok and not exists then return end
+    end
+    local ok,text=pcall(fileRead,FILE)
+    if not ok then
+        if type(fileExists)=="function" then
+            runtime.saveStatus="Read error"
+            WarnOnce("read","Cannot read the settings file.")
+        end
+        return
+    end
+    local decoded,data=pcall(function() return HttpService:JSONDecode(text) end)
+    if not decoded or type(data)~="table" or data.version~=1 or type(data.selections)~="table" then
+        runtime.saveStatus="Invalid file"
+        WarnOnce("read","Invalid settings file; kept unchanged until you edit a setting.")
+        return
+    end
+    if type(data.enabled)=="boolean" then runtime.enabled=data.enabled end
+    for key in pairs(runtime.selections) do
+        local value=data.selections[key]
+        if type(value)=="string" and allowed[key][value] then runtime.selections[key]=value end
+    end
+    runtime.saveStatus="Loaded"
+end
+local function SaveSettings()
+    if not runtime.alive or runtime.initializing or not canPersist then return false end
+    local ok,err=pcall(function()
+        fileWrite(FILE,HttpService:JSONEncode({version=1,enabled=runtime.enabled,selections=runtime.selections}))
+    end)
+    if not ok then
+        runtime.saveStatus="Write error"
+        WarnOnce("write","Cannot save settings: "..tostring(err))
+        return false
+    end
+    warnings.write=nil
+    runtime.saveStatus="Saved"
+    return true
+end
+LoadSettings()
+local statusLabel
+local function Status(text)
+    runtime.status=text
+    if statusLabel then pcall(function() statusLabel:SetValue(text) end) end
+end
+local changed={} -- [Animation instance] = {original=assetId,last=assetId,animate=LocalScript}
+local touched={} -- Animate scripts refreshed by this plugin, including Default selections.
+local restarts={} -- One pending restart per Animate; newest batch owns its restart.
+
+-- AnimationTrack.Animation may reference the very Animation whose ID we replace.
+-- Matching tracks by that ID AFTER writing IDs misses stale, still-playing tracks.
+-- A full transition reset also clears cross-fading tracks and cached idle/run blends.
+local function StopTracks(animate)
+    local character=animate.Parent
+    local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return true end
+    local animator=humanoid:FindFirstChildOfClass("Animator")
+    local ok,tracks=pcall(function()
+        return animator and animator:GetPlayingAnimationTracks() or humanoid:GetPlayingAnimationTracks()
+    end)
+    if not ok then
+        WarnOnce("tracks","Cannot enumerate active animation tracks: "..tostring(tracks))
+        return false
+    end
+    local stopped=true
+    for _,track in ipairs(tracks) do
+        -- Do not destroy tracks owned by tools/emotes or other scripts. This reset
+        -- interrupts them once, but does not permanently block future animations.
+        pcall(function() track:AdjustWeight(0,0) end)
+        local stopOK=pcall(function() track:Stop(0) end)
+        if not stopOK then stopped=false end
+    end
+    if not stopped then WarnOnce("stop","Some animation tracks could not be stopped.") end
+    return stopped
+end
+local function FinishRestart(animate,lease)
+    if restarts[animate]~=lease then return true end -- superseded by a later toggle/choice
+    local stopOK=StopTracks(animate)
+    -- Always attempt to restore Disabled, even if stopping a track failed.
+    local ok,err=pcall(function() animate.Disabled=lease.wasDisabled end)
+    if ok then
+        restarts[animate]=nil
+    else
+        WarnOnce("restart","Could not restart Animate: "..tostring(err))
+    end
+    return ok and stopOK
+end
+local function WriteBatch(animate,entries,forceRestart)
+    if #entries==0 and not forceRestart then return true end
+    local pending=restarts[animate]
+    local wasDisabled=animate.Disabled
+    if pending then wasDisabled=pending.wasDisabled end
+    local lease={wasDisabled=wasDisabled}
+    restarts[animate]=lease
+    local stopped=true
+    -- ID writes never yield. A new request cannot observe a half-written batch.
+    local ok,err=pcall(function()
+        animate.Disabled=true
+        stopped=StopTracks(animate) -- BEFORE mutating Animation.AnimationId
+        for _,entry in ipairs(entries) do
+            entry.anim.AnimationId=entry.value
+            if entry.saved and entry.anim.AnimationId==entry.value then entry.saved.beforeWrite=nil end
+        end
+    end)
+    if not ok then
+        FinishRestart(animate,lease)
+        WarnOnce("apply","Animation update failed: "..tostring(err))
+        return false
+    end
+    task.spawn(function()
+        -- Keep Animate stopped for actual scheduler frames; an immediate true/false
+        -- flip is not a reliable script restart. New requests inherit the ORIGINAL
+        -- Disabled state, not the temporary true used by this transaction.
+        task.wait(0.1)
+        if restarts[animate]~=lease then return end
+        local restarted=FinishRestart(animate,lease)
+        if not restarted and runtime.alive then Status("Reset incomplete — press Reapply / Retry") end
+    end)
+    return stopped
+end
+local function RestoreOriginals()
+    local batches={}
+    local restored=true
+    -- Even if IDs are already original, old loaded tracks may still be running.
+    for animate in pairs(touched) do
+        if animate.Parent then batches[animate]={} else touched[animate]=nil end
+    end
+    for anim,saved in pairs(changed) do
+        local ok,current=pcall(function() return anim.Parent and anim.AnimationId end)
+        if not ok or not current or not saved.animate.Parent then
+            changed[anim]=nil
+        elseif current==saved.original then
+            changed[anim]=nil
+        elseif current~=saved.last and (saved.beforeWrite==nil or current~=saved.beforeWrite) then
+            WarnOnce("conflict","Another script changed an animation; its ID was left untouched.")
+            changed[anim]=nil
+        else
+            batches[saved.animate]=batches[saved.animate] or {}
+            table.insert(batches[saved.animate],{anim=anim,value=saved.original})
+        end
+    end
+    for animate,entries in pairs(batches) do
+        if WriteBatch(animate,entries,true) then touched[animate]=nil else restored=false end
+        for _,entry in ipairs(entries) do
+            if entry.anim.AnimationId==entry.value then changed[entry.anim]=nil else restored=false end
+        end
+    end
+    return restored
+end
+local function Current(character,ticket)
+    return runtime.alive and runtime.enabled and runtime.generation==ticket and LocalPlayer.Character==character
+end
+local function ReadySlots(character,ticket)
+    local deadline=os.clock()+10
+    repeat
+        if not Current(character,ticket) then return nil,"Cancelled" end
+        local humanoid=character:FindFirstChildOfClass("Humanoid")
+        if humanoid and humanoid.RigType~=Enum.HumanoidRigType.R15 then
+            return nil,"R15 required — settings retained"
+        end
+        if humanoid and humanoid.Health<=0 then return nil,"Waiting for respawn" end
+        local animate=character:FindFirstChild("Animate")
+        if humanoid and animate then
+            local slots={}
+            local complete=true
+            for animType,info in pairs(animMap) do
+                local folder=animate:FindFirstChild(info.folder)
+                for _,slot in ipairs(info.slots) do
+                    local anim=folder and folder:FindFirstChild(slot.child)
+                    if not anim or not anim:IsA("Animation") or anim.AnimationId=="" then
+                        complete=false
+                    else
+                        table.insert(slots,{anim=anim,kind=animType,key=slot.origKey})
+                    end
+                end
+            end
+            if complete then return {animate=animate,slots=slots} end
+        end
+        task.wait(0.1)
+    until os.clock()>=deadline
+    return nil,"Animate not ready — use Reapply / Retry"
+end
+local function ApplyReady(ready,forceRestart)
+    local entries={}
+    for _,slot in ipairs(ready.slots) do
+        local anim=slot.anim
+        local saved=changed[anim]
+        -- If a game/avatar script replaced an ID since our last write, use that
+        -- new ID as the restoration baseline rather than a stale avatar default.
+        if saved and anim.AnimationId~=saved.last and anim.AnimationId~=saved.original and anim.AnimationId~=saved.beforeWrite then
+            changed[anim]=nil
+            saved=nil
+        end
+        local original=saved and saved.original or anim.AnimationId
+        local name=runtime.selections[slot.kind]
+        if name=="Default" then name=runtime.selections.all end
+        local preset=animPresets[name]
+        local desired=preset and preset[slot.key] or original
+        if anim.AnimationId~=desired then
+            saved=saved or {original=original,animate=ready.animate}
+            -- Each batch is synchronous; a failed assignment leaves either the
+            -- old value or this intended value, both safe for restoration.
+            saved.beforeWrite=anim.AnimationId
+            saved.last=desired
+            changed[anim]=saved
+            table.insert(entries,{anim=anim,value=desired,saved=saved})
+        end
+    end
+    if #entries>0 or forceRestart then touched[ready.animate]=true end
+    if not WriteBatch(ready.animate,entries,forceRestart) then return false end
+    for _,entry in ipairs(entries) do
+        if entry.anim.AnimationId~=entry.value then return false end
+    end
+    return true
+end
+local function RequestApply()
+    runtime.generation=runtime.generation+1
+    local ticket=runtime.generation
+    if not runtime.alive then return end
+    if not runtime.enabled then
+        Status(RestoreOriginals() and "OFF — original animations restored" or "OFF — restoration pending; press Retry")
+        return
+    end
+    local character=LocalPlayer.Character
+    if not character then Status("Waiting for character"); return end
+    Status("Applying saved selection...")
+    task.spawn(function()
+        local ok,err=pcall(function()
+            local ready,reason=ReadySlots(character,ticket)
+            if not Current(character,ticket) then return end
+            if not ready then Status(reason); return end
+            if ApplyReady(ready,true) then Status("ON — selection applied") else Status("Could not apply — press Retry") end
+            -- A single delayed recheck handles late avatar appearance updates.
+            task.wait(0.5)
+            if not Current(character,ticket) then return end
+            ready,reason=ReadySlots(character,ticket)
+            if not Current(character,ticket) then return end
+            if ready then
+                if ApplyReady(ready) then Status("ON — selection applied") else Status("Could not apply — press Retry") end
+            else Status(reason) end
+        end)
+        if not ok and Current(character,ticket) then
+            Status("Animation error — press Retry")
+            WarnOnce("worker",tostring(err))
+        end
+    end)
+end
+runtime.Reapply=RequestApply
+runtime.SaveSettings=SaveSettings
+local characterConnection
+local appearanceConnection
+function runtime.Cleanup()
+    runtime.alive=false
+    runtime.generation=runtime.generation+1
+    if characterConnection then characterConnection:Disconnect() end
+    if appearanceConnection then appearanceConnection:Disconnect() end
+    local restored=RestoreOriginals()
+    -- Cleanup must leave no deferred restart that could interfere with a reload.
+    local pending={}
+    for animate,lease in pairs(restarts) do pending[#pending+1]={animate=animate,lease=lease} end
+    for _,item in ipairs(pending) do
+        if not FinishRestart(item.animate,item.lease) then restored=false end
+    end
+    return restored
+end
+
+local tab=shared.CreateTab("FE Animations","/mellnikovden968-web/CFG_PM2/refs/heads/main/icon")
+local section=tab:AddSection("FE Animations","aux0on presets • R15 • full track reset • auto-save")
+statusLabel=section:AddLabel("Loading settings...",true)
+section:AddParagraph("Saved settings","Toggle and all animation choices are saved automatically. Individual Default uses All Animations; All Animations = Default uses your avatar's originals. R15 only.")
+local toggle=section:AddToggle("Enable FE Anims",function(value)
+    if runtime.initializing or not runtime.alive then return end
+    runtime.enabled=value==true
+    SaveSettings()
+    RequestApply()
+end)
+local dropdowns={
+    {label="All Animations",key="all"},
+    {label="Idle Animation",key="idle"},
+    {label="Walk Animation",key="walk"},
+    {label="Run Animation",key="run"},
+    {label="Jump Animation",key="jump"},
+    {label="Climb Animation",key="climb"},
+    {label="Fall Animation",key="fall"},
+}
+for _,dd in ipairs(dropdowns) do
+    local key=dd.key
+    local control=section:AddDropdown(dd.label,key=="run" and runAnimOptions or allAnimOptions,function(value)
+        if runtime.initializing or not runtime.alive or type(value)~="string" or not allowed[key][value] then return end
+        runtime.selections[key]=value
+        SaveSettings()
+        if runtime.enabled then RequestApply() end
+    end)
+    if control then
+        local ok=pcall(function() control:Select(runtime.selections[key]) end)
+        if not ok then WarnOnce("ui","Could not display a saved selection; the backing setting is retained.") end
+    end
+end
+section:AddParagraph("Full animation reset","Switching presets, toggling OFF or pressing Retry briefly stops ALL current animation tracks, including emotes/tool poses, then restarts Animate. Nothing is blocked permanently.")
+section:AddButton("Reapply / Retry",function() if runtime.alive then RequestApply() end end)
+if runtime.enabled and type(toggle)=="function" then
+    local ok=pcall(toggle)
+    if not ok then WarnOnce("toggle","Could not display the saved toggle state.") end
+end
+runtime.initializing=false
+_G[KEY]=runtime
+characterConnection=LocalPlayer.CharacterAdded:Connect(function()
+    if not runtime.alive then return end
+    RestoreOriginals()
+    RequestApply()
+end)
+appearanceConnection=LocalPlayer.CharacterAppearanceLoaded:Connect(function(character)
+    if runtime.alive and runtime.enabled and character==LocalPlayer.Character then RequestApply() end
+end)
+RequestApply()
+
+    end
+    -- ================================================================
+    -- EMBEDDED PLUGIN: BJP.lua.txt
+    do
+-- ODH 2026 adapter. Embedded in every plugin; no downloads/dependencies.
+local ODHX = (function()
+    local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
+    X.id, X.title, X.file = "BJP", "Bomb Jump+", "ODH_BJP_settings.json"
+    local host = odh_shared_plugins
+    assert(host and type(host.CreateTab)=="function", X.title .. ": load through the current Overdrive H plugin menu")
+    local env = {}
+    if type(getgenv)=="function" then local ok,g=pcall(getgenv); if ok and type(g)=="table" then env=g end end
+    local rd = type(readfile)=="function" and readfile or env.readfile
+    local wr = type(writefile)=="function" and writefile or env.writefile
+    local exists = type(isfile)=="function" and isfile or env.isfile
+    local http = game:GetService("HttpService")
+    local reported = {}
+    local function report(message)
+        if reported[message] then return end
+        reported[message]=true
+        warn("[" .. X.title .. "] " .. message)
+        if type(host.Notify)=="function" then pcall(host.Notify, X.title .. ": " .. message, 5) end
+    end
+    X.Report = report
+    local function finite(v) return type(v)=="number" and v==v and math.abs(v)<math.huge end
+    local function encode(v, depth)
+        depth=depth or 0
+        if depth>20 then error("settings nesting too deep") end
+        if typeof(v)=="Color3" then return {__odhColor={v.R,v.G,v.B}} end
+        local t=type(v)
+        if t=="boolean" or t=="string" then return v end
+        if t=="number" then if finite(v) then return v end; return nil end
+        if t=="table" then
+            local result={}
+            for k,item in pairs(v) do
+                if type(k)=="string" or type(k)=="number" then result[k]=encode(item,depth+1) end
+            end
+            return result
+        end
+        return nil -- never serialize Instances, connections, functions or players
+    end
+    local function decode(v, depth)
+        depth=depth or 0
+        if depth>20 then error("settings nesting too deep") end
+        if type(v)~="table" then return v end
+        if v.__odhColor then
+            local c=v.__odhColor
+            assert(type(c)=="table" and finite(c[1]) and finite(c[2]) and finite(c[3]),"invalid color")
+            return Color3.new(math.clamp(c[1],0,1),math.clamp(c[2],0,1),math.clamp(c[3],0,1))
+        end
+        local result={}
+        for k,item in pairs(v) do result[k]=decode(item,depth+1) end
+        return result
+    end
+    X.Encode, X.Decode = encode, decode
+    if not X.external then
+        if type(rd)=="function" and type(wr)=="function" then
+            local present=true
+            if type(exists)=="function" then local ok,v=pcall(exists,X.file); if ok then present=v end end
+            if present then
+                local ok,text=pcall(rd,X.file)
+                if ok then
+                    local good,data=pcall(function() return decode(http:JSONDecode(text)) end)
+                    if good and type(data)=="table" and data.version==1 and type(data.controls)=="table" then X.data=data
+                    else X.badFile=true; report("Invalid settings file; defaults loaded. A manual change will replace it.") end
+                elseif type(exists)=="function" then report("Could not read settings file: " .. tostring(text)); X.badFile=true end
+            end
+        else report("readfile/writefile unavailable; settings last only for this session.") end
+    end
+    local tab
+    X.shared=setmetatable({}, {__index=host}) -- never mutate the host API
+    X.shared.Notify=function(text,seconds)
+        if X.restoring then return end
+        if type(host.Notify)=="function" then return host.Notify(text,seconds or 3) end
+    end
+    local function key(section,name,kind) return section .. " / " .. kind .. " / " .. name end
+    local function safeValue(r,v)
+        if r.kind=="Toggle" then if type(v)=="boolean" then return v end
+        elseif r.kind=="Slider" then if finite(v) then return math.clamp(v,r.min,r.max) end
+        elseif r.kind=="Colorpicker" then if typeof(v)=="Color3" then return v end
+        elseif r.kind=="Dropdown" then
+            for _,item in ipairs(r.items) do if v==item then return v end end
+        end
+        return nil
+    end
+    local function show(r,v)
+        if v==nil or r.shown==v then return end
+        local prior=X.silent; X.silent=true
+        local ok,err=pcall(function()
+            if r.kind=="Toggle" then
+                if r.visual~=v then assert(type(r.handle)=="function","AddToggle must return a closure"); r.handle() end
+            elseif r.kind=="Slider" then r.handle:SetValue(v)
+            elseif r.kind=="Colorpicker" then r.handle:SetRGBValue(v)
+            elseif r.kind=="Dropdown" then r.handle:Select(v) end
+        end)
+        X.silent=prior
+        if ok then r.shown=v else report("UI sync failed: " .. r.name .. ": " .. tostring(err)) end
+    end
+    function X.Bind(section,name,kind,getter)
+        local r=X.byKey[key(section,name,kind)]
+        assert(r,"Unknown binding " .. section .. " / " .. name)
+        r.get=getter
+    end
+    function X.Sync()
+        for _,r in ipairs(X.records) do
+            if r.get then
+                local ok,v=pcall(r.get)
+                if ok then
+                    v=safeValue(r,v)
+                    if v~=nil then
+                        r.value=v
+                        if not r.exclude then X.data.controls[r.key]=v end
+                        show(r,v)
+                    end
+                end
+            end
+        end
+    end
+    function X.Commit()
+        if not X.ready or X.silent or X.restoring or X.stopped or X.committing then return end
+        X.committing=true
+        local ok,err=pcall(function()
+            X.Sync()
+            if X.capture then X.data.snapshot=X.capture() end
+            if X.external then
+                if not X.backend or not X.backend(X.data) then error("native settings file could not be saved") end
+            elseif type(wr)=="function" then
+                wr(X.file,http:JSONEncode(encode(X.data)))
+            end
+        end)
+        X.committing=false
+        if not ok then report("Settings save failed: " .. tostring(err)) end
+    end
+    function X.Restore()
+        X.restoring=true
+        -- Options before enabling modules. Actions and player selections are never replayed.
+        for _,togglePass in ipairs({false,true}) do
+            for _,r in ipairs(X.records) do
+                if not r.exclude and ((r.kind=="Toggle")==togglePass) then
+                    local v=safeValue(r,X.data.controls[r.key])
+                    if v==nil and r.get then local ok,x=pcall(r.get); if ok then v=safeValue(r,x) end end
+                    if v==nil then v=r.default end
+                    if v~=nil then
+                        show(r,v)
+                        local ok,err=pcall(r.callback,v)
+                        if not ok then report("Restore failed: " .. r.name .. ": " .. tostring(err)) end
+                        r.value=v; X.data.controls[r.key]=v
+                    end
+                end
+            end
+        end
+        X.restoring=false
+    end
+    function X.Finish()
+        if X.replay then X.Restore() else X.Sync() end
+        X.ready=true
+        if not X.badFile then X.Commit() end
+    end
+    function X.Set(section,name,kind,v,apply)
+        local r=X.byKey[key(section,name,kind)]
+        if not r then return end
+        v=safeValue(r,v); if v==nil then return end
+        show(r,v); r.value=v; X.data.controls[r.key]=v
+        if apply then r.callback(v) end
+    end
+    function X.ResetControls()
+        X.data.controls={}
+        for _,r in ipairs(X.records) do
+            if r.kind=="Toggle" and not r.exclude then X.Set(r.section,r.name,r.kind,false,true) end
+        end
+    end
+    function X.shared.AddSection(name,subtitle)
+        if not tab then tab=host.CreateTab(X.title,"/mellnikovden968-web/CFG_PM2/refs/heads/main/icon") end
+        local raw=tab:AddSection(name,subtitle or "")
+        local section={Name=name,Raw=raw}
+        local function register(kind,label,callback,default,min,max,items)
+            local r={section=name,name=label,kind=kind,callback=callback,default=default,min=min,max=max,items=items,visual=false}
+            r.key=key(name,label,kind)
+            r.exclude=(name=="🔑 Keys") -- key-capture toggles are actions, not enabled modes
+            X.records[#X.records+1]=r; X.byKey[r.key]=r
+            local function changed(v)
+                if kind=="Toggle" then r.visual=(v==true) end
+                if not X.ready or X.silent or X.restoring or X.stopped then return end
+                v=safeValue(r,v); if v==nil then return end
+                r.shown=v
+                local ok,err=pcall(callback,v)
+                if ok then
+                    r.value=v
+                    if not r.exclude then X.data.controls[r.key]=v end
+                    X.Commit()
+                else report("Callback failed: " .. label .. ": " .. tostring(err)) end
+            end
+            if kind=="Toggle" then r.handle=raw:AddToggle(label,changed)
+            elseif kind=="Slider" then r.handle=raw:AddSlider(label,min,max,default,changed)
+            elseif kind=="Colorpicker" then r.handle=raw:AddColorpicker(label,default,changed)
+            elseif kind=="Dropdown" then r.handle=raw:AddDropdown(label,items,changed) end
+            return r.handle
+        end
+        function section:AddToggle(label,cb) return register("Toggle",label,cb,false) end
+        function section:AddSlider(label,min,max,default,cb) return register("Slider",label,cb,default,min,max) end
+        function section:AddColorpicker(label,default,cb) return register("Colorpicker",label,cb,default) end
+        function section:AddDropdown(label,items,cb) return register("Dropdown",label,cb,items[1],nil,nil,items) end
+        local function action(cb)
+            return function(...)
+                if not X.ready or X.stopped then return end
+                local ok,err=pcall(cb,...)
+                if not ok then report("Action failed: " .. tostring(err)) end
+                X.Commit()
+            end
+        end
+        function section:AddButton(label,cb) return raw:AddButton(label,action(cb)) end
+        function section:AddKeybind(label,default,cb) return raw:AddKeybind(label,default,action(cb)) end
+        function section:AddPlayerDropdown(label,cb) return raw:AddPlayerDropdown(label,action(cb)) end
+        function section:AddTextBox(label,cb) return raw:AddTextBox(label,action(cb)) end
+        function section:AddLabel(...) return raw:AddLabel(...) end
+        function section:AddParagraph(...) return raw:AddParagraph(...) end
+        return section
+    end
+    -- Stable GUI paths, never serialized Instances. Player name is session-independent.
+    function X.Path(object)
+        local parts={}
+        local player=game:GetService("Players").LocalPlayer
+        while object and object~=game do
+            table.insert(parts,1,object==player and "$LocalPlayer" or object.Name)
+            object=object.Parent
+            if #parts>32 then return nil end
+        end
+        if object~=game then return nil end
+        return parts
+    end
+    function X.Resolve(parts)
+        if type(parts)~="table" then return nil end
+        local object=game
+        for _,name in ipairs(parts) do
+            if name=="$LocalPlayer" then object=game:GetService("Players").LocalPlayer
+            elseif type(name)=="string" and object then object=object:FindFirstChild(name)
+            else return nil end
+        end
+        return object
+    end
+    X.connections={}
+    function X.Connect(signal,callback)
+        local c=signal:Connect(function(...) if not X.stopped then return callback(...) end end)
+        X.connections[#X.connections+1]=c
+        return c
+    end
+    function X.Stop()
+        if X.stopped then return end
+        X.Commit()
+        X.stopped=true
+        for _,c in ipairs(X.connections) do pcall(function() c:Disconnect() end) end
+        if X.cleanup then pcall(X.cleanup) end
+    end
+    local registry=rawget(_G,"ODH_2026_PluginRuntimes")
+    if type(registry)~="table" then registry={}; rawset(_G,"ODH_2026_PluginRuntimes",registry) end
+    local previous=registry[X.id]
+    if previous and type(previous.Stop)=="function" then pcall(previous.Stop) end
+    registry[X.id]=X
+    return X
+end)()
+-- END ODH 2026 ADAPTER
+
+local table_insert = table.insert
+
+local Maid = {}
+Maid.__index = Maid
+
+function Maid.new() 
+    return setmetatable({_tasks = {}, _destroyed = false}, Maid) 
+end
+
+function Maid:GiveTask(task)
+    if self._destroyed then
+        self:_cleanupTask(task)
+        return
+    end
+    table_insert(self._tasks, task)
+    return task
+end
+
+function Maid:GiveTasks(...)
+    for _, task in ipairs({...}) do
+        self:GiveTask(task)
+    end
+end
+
+function Maid:_cleanupTask(task)
+    local taskType = typeof(task)
+    if taskType == "RBXScriptConnection" then
+        task:Disconnect()
+    elseif taskType == "Instance" then
+        task:Destroy()
+    elseif taskType == "function" then
+        task()
+    elseif taskType == "table" and type(task.Destroy) == "function" then
+        task:Destroy()
+    end
+end
+
+function Maid:DoCleaning()
+    if self._destroyed then return end
+    self._destroyed = true
+    for _, task in ipairs(self._tasks) do
+        self:_cleanupTask(task)
+    end
+    self._tasks = {}
+end
+
+function Maid:Destroy() 
+    self:DoCleaning() 
+end
+
+local RootMaid = Maid.new()
+
+local shared = ODHX.shared
+
+local Services = {
+    Players = game:GetService("Players"),
+    ReplicatedStorage = game:GetService("ReplicatedStorage"),
+    RunService = game:GetService("RunService"),
+    UserInputService = game:GetService("UserInputService"),
+    StarterGui = game:GetService("StarterGui"),
+    CoreGui = game:GetService("CoreGui"),
+    Workspace = game:GetService("Workspace"),
+    TweenService = game:GetService("TweenService"),
+    SoundService = game:GetService("SoundService")
+}
+
+local LocalPlayer = Services.Players.LocalPlayer
+
+local __PCLR = Color3.new
+local __RGB = Color3.fromRGB
+local __UD2 = UDim2.new
+local __UD = UDim.new
+local __V2 = Vector2.new
+
+local function getfserv(s)
+    local ok, svc = pcall(function() return game:GetService(s) end)
+    if ok and svc then return svc end
+    ok, svc = pcall(function() return game:FindService(s) end)
+    if ok and svc then return svc end
+    return game[s]
+end
+
+local __RS   = getfserv("RunService")
+local __UIS  = getfserv("UserInputService")
+local __PLRS = getfserv("Players")
+local __TS   = getfserv("TweenService")
+
+local BBSystem = {Buttons = {}, Connections = {}}
+
+local function bb_safecallback(callback)
+    if not callback then return end
+    local ok, err = xpcall(callback, function(e) return debug.traceback(e) end)
+    if not ok then warn("[BB ERROR] " .. tostring(err)) end
+end
+
+local function BB_GetStorage()
+    local parent = gethui and gethui()
+    if not parent or typeof(parent) ~= "Instance" then
+        parent = getfserv("CoreGui")
+    end
+    if not parent or typeof(parent) ~= "Instance" then
+        parent = __PLRS.LocalPlayer:WaitForChild("PlayerGui", 5)
+    end
+    if typeof(parent) ~= "Instance" then
+        parent = __PLRS.LocalPlayer:WaitForChild("PlayerGui")
+    end
+
+    local sg = parent:FindFirstChild("@odh_bjp_bigstorage")
+    if not sg then
+        sg = Instance.new("ScreenGui")
+        sg.Name = "@odh_bjp_bigstorage"
+        sg.ResetOnSpawn = false
+        sg.IgnoreGuiInset = true
+        pcall(function() sg.ScreenInsets = Enum.ScreenInsets.None end)
+        sg.Parent = parent
+    end
+    return sg
+end
+
+local __BB_GRAD_SEQ = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,    __PCLR(0.0784314, 0.0784314, 0.0784314)),
+    ColorSequenceKeypoint.new(0.75, __PCLR(0.0784314, 0.0784314, 0.54902)),
+    ColorSequenceKeypoint.new(1,    __PCLR(0.470588,  0.156863,  0.470588))
+})
+
+local function BB_MakeDraggable(gui, func, ripple, sound)
+    local dragging, dragInput, dragStart, startPos
+    local hasMoved = false
+    local tInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local normalSize    = __UD2(0, 200, 0, 75)
+    local normalTxtSize = 24
+    local bigSize       = __UD2(0, 220, 0, 82.5)
+    local bigTxtSize    = 26.4
+
+    ODHX.Connect(gui.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging  = true
+            hasMoved  = false
+            dragStart = input.Position
+            startPos  = gui.Position
+            __TS:Create(gui, tInfo, {Size = bigSize, TextSize = bigTxtSize}):Play()
+            local absPos = gui.AbsolutePosition
+            ripple.Position = __UD2(0, input.Position.X - absPos.X, 0, input.Position.Y - absPos.Y)
+            ripple.Size = __UD2(0, 0, 0, 0)
+            ripple.BackgroundTransparency = 0.5
+            ripple.Visible = true
+            sound:Play()
+            __TS:Create(ripple, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Size = __UD2(0, 300, 0, 300),
+                BackgroundTransparency = 1
+            }):Play()
+            local rel
+            rel = ODHX.Connect(__UIS.InputEnded, function(endInput)
+                if endInput.UserInputType == input.UserInputType then
+                    dragging = false
+                    __TS:Create(gui, tInfo, {Size = normalSize, TextSize = normalTxtSize}):Play()
+                    if not hasMoved then bb_safecallback(func) end
+                    rel:Disconnect()
+                end
+            end)
+        end
+    end)
+    ODHX.Connect(gui.InputChanged, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    ODHX.Connect(__UIS.InputChanged, function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 7 then hasMoved = true end
+            gui.Position = __UD2(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+local BindableButtons
+local muteButtonSounds = false
+
+local function UpdateAllButtonSounds()
+    local volume = muteButtonSounds and 0 or 0.5
+    for id, btn in pairs(BBSystem.Buttons) do
+        local sound = btn:FindFirstChild("Sound")
+        if sound then
+            sound.Volume = volume
+        end
+    end
+    for id, btn in pairs(BindableButtons.Buttons) do
+        local sound = btn:FindFirstChild("Sound")
+        if sound then
+            sound.Volume = volume
+        end
+    end
+end
+
+local function AddBigButton(id, text, func, isGold, customSize)
+    if BBSystem.Buttons[id] then return end
+    local storage = BB_GetStorage()
+    local bb = Instance.new("TextButton")
+    bb.Name = id
+    bb.Size = customSize or __UD2(0, 200, 0, 75)
+    bb.Position = __UD2(0.5, 0, 0.5, 0)
+    bb.AnchorPoint = __V2(0.5, 0.5)
+    bb.BackgroundColor3 = __RGB(255, 255, 255)
+    bb.BackgroundTransparency = 0.9
+    bb.BorderSizePixel = 0
+    bb.Font = Enum.Font.Jura
+    bb.Text = text
+    bb.TextSize = 24
+    bb.TextColor3 = __RGB(255, 255, 255)
+    bb.TextWrapped = true
+    bb.ClipsDescendants = true
+    bb.AutoButtonColor = false
+    bb.ZIndex = 5
+    bb.Parent = storage
+
+    Instance.new("UICorner", bb).CornerRadius = __UD(0, 5)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = __RGB(255, 255, 255)
+    stroke.Thickness = 1.5
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = bb
+    local gradient = Instance.new("UIGradient")
+    
+    if isGold then
+        gradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0,    __RGB(255, 215, 0)),
+            ColorSequenceKeypoint.new(0.5,  __RGB(255, 140, 0)),
+            ColorSequenceKeypoint.new(1,    __RGB(184, 134, 11))
+        })
+    else
+        gradient.Color = __BB_GRAD_SEQ
+    end
+    gradient.Parent = stroke
+
+    local ripple = Instance.new("Frame")
+    ripple.Name = "@ripple"
+    ripple.BackgroundColor3 = isGold and __RGB(255, 215, 0) or __RGB(0, 155, 255)
+    ripple.BackgroundTransparency = 0.5
+    ripple.ZIndex = 4
+    ripple.Size = __UD2(0, 0, 0, 0)
+    ripple.AnchorPoint = __V2(0.5, 0.5)
+    ripple.Visible = false
+    ripple.Parent = bb
+    Instance.new("UICorner", ripple).CornerRadius = __UD(1, 0)
+
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://3868133279"
+    sound.Volume = muteButtonSounds and 0 or 0.5
+    sound.Parent = bb
+
+    BB_MakeDraggable(bb, func, ripple, sound)
+    BBSystem.Connections[id] = ODHX.Connect(__RS.RenderStepped, function()
+        gradient.Rotation = (gradient.Rotation + 1) % 360
+    end)
+    BBSystem.Buttons[id] = bb
+    return bb
+end
+
+local function DeleteBigButton(id)
+    if BBSystem.Buttons[id] then
+        if BBSystem.Connections[id] then
+            BBSystem.Connections[id]:Disconnect()
+            BBSystem.Connections[id] = nil
+        end
+        BBSystem.Buttons[id]:Destroy()
+        BBSystem.Buttons[id] = nil
+    end
+end
+
+BindableButtons = {Buttons = {}, Maids = {}, Count = 0}
+
+local __SHAPES = {
+    [0] = "rbxassetid://86221076925479",
+    [1] = "rbxassetid://96242665417546",
+    [2] = "rbxassetid://97129189935336",
+    [3] = "rbxassetid://76165862027868",
+    [4] = "rbxassetid://125868092127496"
+}
+
+local __NORMAL_COLOR = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   __PCLR(0.133333, 0.827451, 0.494118)),
+    ColorSequenceKeypoint.new(0.6, __PCLR(0.231373, 0.509804, 0.498039)),
+    ColorSequenceKeypoint.new(1,   __PCLR(0.501961, 0.501961, 0.501961))
+})
+
+local __WAIT_COLOR = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   __PCLR(0.827451, 0.133333, 0.133333)),
+    ColorSequenceKeypoint.new(0.6, __PCLR(0.509804, 0.231373, 0.231373)),
+    ColorSequenceKeypoint.new(1,   __PCLR(0.501961, 0.501961, 0.501961))
+})
+
+local __GOLD_NORMAL_COLOR = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   __RGB(255, 215, 0)),
+    ColorSequenceKeypoint.new(0.6, __RGB(255, 140, 0)),
+    ColorSequenceKeypoint.new(1,   __RGB(184, 134, 11))
+})
+
+local __GOLD_WAIT_COLOR = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   __RGB(255, 69, 0)),
+    ColorSequenceKeypoint.new(0.6, __RGB(139, 69, 19)),
+    ColorSequenceKeypoint.new(1,   __RGB(160, 82, 45))
+})
+
+local function bind_safecallback(callback)
+    if not callback then return end
+    local ok, err = xpcall(callback, function(e) return debug.traceback(e) end)
+    if not ok then warn("[BIND ERROR] " .. tostring(err)) end
+end
+
+local function Bind_GetStorage()
+    local parent = gethui and gethui()
+    if not parent or typeof(parent) ~= "Instance" then
+        parent = getfserv("CoreGui")
+    end
+    if not parent or typeof(parent) ~= "Instance" then
+        parent = __PLRS.LocalPlayer:WaitForChild("PlayerGui", 5)
+    end
+    if typeof(parent) ~= "Instance" then
+        parent = __PLRS.LocalPlayer:WaitForChild("PlayerGui")
+    end
+
+    local sg = parent:FindFirstChild("@odh_bjp_bindstorage")
+    if not sg then
+        sg = Instance.new("ScreenGui")
+        sg.Name = "@odh_bjp_bindstorage"
+        sg.ResetOnSpawn = false
+        sg.IgnoreGuiInset = true
+        pcall(function() sg.ScreenInsets = Enum.ScreenInsets.None end)
+        sg.Parent = parent
+    end
+    return sg
+end
+
+local function Bind_MakeDraggable(gui, maid, ripple, sound, clickFunc)
+    local dragging, dragInput, dragStart, startPos
+    local hasMoved = false
+    
+    maid:GiveTask(ODHX.Connect(gui.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging, dragStart, startPos = true, input.Position, gui.Position
+            hasMoved = false
+            sound:Play()
+            local absPos = gui.AbsolutePosition
+            ripple.Position = __UD2(0, input.Position.X - absPos.X, 0, input.Position.Y - absPos.Y)
+            ripple.Size = __UD2(0, 0, 0, 0)
+            ripple.BackgroundTransparency = 0.5
+            ripple.Visible = true
+            __TS:Create(ripple, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Size = __UD2(0, 45, 0, 45),
+                BackgroundTransparency = 1
+            }):Play()
+
+            local rel
+            rel = ODHX.Connect(__UIS.InputEnded, function(endInput)
+                if endInput.UserInputType == input.UserInputType then
+                    dragging = false
+                    if not hasMoved then
+                        bind_safecallback(clickFunc)
+                    end
+                    rel:Disconnect()
+                end
+            end)
+        end
+    end))
+    
+    maid:GiveTask(ODHX.Connect(gui.InputChanged, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end))
+    
+    maid:GiveTask(ODHX.Connect(__UIS.InputChanged, function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 7 then hasMoved = true end
+            local screen = gui.Parent.AbsoluteSize
+            gui.Position = __UD2(startPos.X.Scale + (delta.X / screen.X), 0, startPos.Y.Scale + (delta.Y / screen.Y), 0)
+        end
+    end))
+end
+
+function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
+    if BindableButtons.Buttons[id] then return end
+    
+    local buttonMaid = Maid.new()
+    local camera = workspace.CurrentCamera
+    local screen = camera.ViewportSize
+    local buttonSizeY = customSize or 0.11
+    local widthScale = buttonSizeY * (screen.Y / screen.X)
+    local xPos = 0.1 + ((BindableButtons.Count % 8) * (widthScale + 0.005))
+    local yPos = 0.9 - (math.floor(BindableButtons.Count / 8) * (buttonSizeY + 0.015))
+
+    local ImageButton = Instance.new("ImageButton")
+    ImageButton.Name = id
+    ImageButton.Size = __UD2(widthScale, 0, buttonSizeY, 0)
+    ImageButton.Position = __UD2(xPos, 0, yPos, 0)
+    ImageButton.AnchorPoint = __V2(0.5, 0.5)
+    ImageButton.Image = __SHAPES[0]
+    ImageButton.BackgroundTransparency = 1
+    ImageButton.BorderSizePixel = 0
+    ImageButton.ClipsDescendants = false
+    ImageButton.AutoButtonColor = false
+    ImageButton.Parent = Bind_GetStorage()
+    buttonMaid:GiveTask(ImageButton)
+
+    local TextLabel = Instance.new("TextLabel", ImageButton)
+    TextLabel.Name = "@Text"
+    TextLabel.Size = __UD2(0.8, 0, 0.8, 0)
+    TextLabel.Position = __UD2(0.5, 0, 0.5, 0)
+    TextLabel.AnchorPoint = __V2(0.5, 0.5)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.Font = Enum.Font.Jura
+    TextLabel.Text = text
+    TextLabel.TextColor3 = __PCLR(1, 1, 1)
+    TextLabel.TextSize = math.floor(buttonSizeY * 90)
+    TextLabel.TextWrapped = true
+    TextLabel.ZIndex = 3
+
+    local Aspect = Instance.new("UIAspectRatioConstraint", ImageButton)
+    Aspect.AspectRatio = 1
+    Aspect.AspectType = Enum.AspectType.ScaleWithParentSize
+
+    local Stroke = Instance.new("UIGradient", ImageButton)
+    Stroke.Name = "@Stroke"
+    if isGold then
+        Stroke.Color = __GOLD_NORMAL_COLOR
+    else
+        Stroke.Color = __NORMAL_COLOR
+    end
+
+    local ripple = Instance.new("Frame")
+    ripple.Name = "@ripple"
+    ripple.BackgroundColor3 = isGold and __RGB(255, 215, 0) or __RGB(0, 155, 255)
+    ripple.BackgroundTransparency = 0.5
+    ripple.Size = __UD2(0, 0, 0, 0)
+    ripple.AnchorPoint = __V2(0.5, 0.5)
+    ripple.Visible = false
+    ripple.ZIndex = 2
+    ripple.Parent = ImageButton
+    Instance.new("UICorner", ripple).CornerRadius = __UD(1, 0)
+
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://3868133279"
+    sound.Volume = muteButtonSounds and 0 or 0.5
+    sound.Parent = ImageButton
+
+    Bind_MakeDraggable(ImageButton, buttonMaid, ripple, sound, clickFunc)
+    buttonMaid:GiveTask(ODHX.Connect(__RS.RenderStepped, function()
+        Stroke.Rotation = (Stroke.Rotation + 1) % 360
+    end))
+
+    BindableButtons.Buttons[id] = ImageButton
+    BindableButtons.Maids[id] = buttonMaid
+    BindableButtons.Count = BindableButtons.Count + 1
+    return ImageButton
+end
+
+function BindableButtons.DeleteBButton(id)
+    if BindableButtons.Maids[id] then
+        BindableButtons.Maids[id]:Destroy()
+        BindableButtons.Maids[id] = nil
+        BindableButtons.Buttons[id] = nil
+    end
+end
+
+function BindableButtons.UpdateBButtonText(id, text, isWaiting, isGold)
+    local btn = BindableButtons.Buttons[id]
+    if not btn then return end
+    
+    local textLabel = btn:FindFirstChild("@Text")
+    if textLabel then
+        textLabel.Text = text
+    end
+    
+    local stroke = btn:FindFirstChild("@Stroke")
+    if stroke then
+        if isGold then
+            stroke.Color = isWaiting and __GOLD_WAIT_COLOR or __GOLD_NORMAL_COLOR
+        else
+            stroke.Color = isWaiting and __WAIT_COLOR or __NORMAL_COLOR
+        end
+    end
+end
+
+local function GetSafeGuiRoot()
+    local success, result = pcall(function() 
+        return gethui() 
+    end)
+    if success and result and typeof(result) == "Instance" then
+        return result
+    end
+    return Services.CoreGui
+end
+
+local hiddenGui = Instance.new("ScreenGui")
+hiddenGui.Name = "HiddenGui"
+hiddenGui.ResetOnSpawn = false
+hiddenGui.IgnoreGuiInset = true
+hiddenGui.Parent = GetSafeGuiRoot()
+RootMaid:GiveTask(hiddenGui)
+
+local _game = shared.game_name
+if not _game and (game.PlaceId == 142823291 or game.GameId == 66654135) then _game = "Murder Mystery 2" end
+
+if _game == "Murder Mystery 2" or _game == "Murder Mystery Modded" then
+
+local aboutSection = shared.AddSection("About")
+
+aboutSection:AddParagraph("Bomb Jump+", "Plugin Made by @lzzzx")
+
+aboutSection:AddToggle("Mute Button SFX", function(bool)
+    muteButtonSounds = bool
+    UpdateAllButtonSounds()
+end)
+
+shared.Notify("Bomb Jump+ Successfully Loaded", 5)
+
+-- ============================================
+-- УЛУЧШЕННАЯ СИСТЕМА ДЛЯ РАБОТЫ С БОМБАМИ
+-- ============================================
+
+local CONFIG = {
+    CooldownTime = 22.0,
+    LaunchPower = 58,
+    MinSize = 50,
+    MaxSize = 300,
+    DefaultSize = 90,
+    BindDefaultSize = 0.11
+}
+
+-- Расширенный список имен бомб для MM2
+local BOMB_NAMES = {
+    "FakeBomb", 
+    "Bomb", 
+    "GiftBomb", 
+    "PresentBomb",
+    "Snowball",  -- Для зимних событий
+    "CandyBomb"  -- Для хэллоуинских событий
+}
+
+-- Конфигурация для разных типов бомб
+local BOMB_CONFIGS = {
+    FakeBomb = {
+        Cooldown = 22,
+        Power = 58,
+        IsGold = false,
+        RemotePath = "Remote",
+        DisplayName = "Bomb Jump"
+    },
+    GoldBomb = {
+        Cooldown = 4,
+        Power = 65,
+        IsGold = true,
+        RemotePath = "Remote",
+        DisplayName = "Gold Bomb Jump"
+    }
+}
+
+-- ============================================
+-- УНИВЕРСАЛЬНАЯ СИСТЕМА BOMB JUMP
+-- ============================================
+
+local function CreateBombJumpSystem(config)
+    -- config = {
+    --     bombType = "FakeBomb" или "GoldBomb",
+    --     section = shared.AddSection(...),
+    --     defaultEnabled = false,
+    --     defaultAutoGet = false,
+    --     defaultBigButton = false,
+    --     defaultBindButton = false,
+    --     bigButtonSize = 200,
+    --     bindButtonSize = 0.11,
+    --     keybind = "E"
+    -- }
+    
+    local bombConfig = BOMB_CONFIGS[config.bombType]
+    if not bombConfig then return nil end
+    
+    local isGold = bombConfig.IsGold
+    local bombName = config.bombType
+    local cooldownTime = bombConfig.Cooldown
+    local launchPower = bombConfig.Power
+    local displayName = config.displayName or bombConfig.DisplayName
+    
+    -- Состояние системы
+    local state = {
+        enabled = false,
+        onCooldown = false,
+        debounce = false,
+        autoGetBomb = false,
+        justRespawned = false,
+        bigButtonSize = config.bigButtonSize or 200,
+        bindButtonSize = config.bindButtonSize or 0.11,
+        bigBtnExists = false,
+        bindBtnExists = false,
+        bindButton = nil,
+        activeTouches = {}
+    }
+    
+    -- Maid для очистки
+    local systemMaid = Maid.new()
+    RootMaid:GiveTask(systemMaid)
+    
+    -- Звуки
+    local Sounds = {
+        Click = Instance.new("Sound"),
+        Cooldown = Instance.new("Sound")
+    }
+    Sounds.Click.SoundId = "rbxassetid://6895079853"
+    Sounds.Click.Volume = 1.0
+    Sounds.Cooldown.SoundId = "rbxassetid://138090596"
+    Sounds.Cooldown.Volume = 1.0
+    
+    local function PlaySound(snd)
+        pcall(function()
+            if snd then
+                Services.SoundService:PlayLocalSound(snd)
+            end
+        end)
+    end
+    
+    -- Вспомогательные функции
+    local function IsPlayerInAir()
+        local character = LocalPlayer.Character
+        if not character then return false end
+        
+        local humanoid = character:FindFirstChild("Humanoid")
+        if not humanoid then return false end
+        
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then return false end
+        
+        local state = humanoid:GetState()
+        if state == Enum.HumanoidStateType.Jumping or 
+           state == Enum.HumanoidStateType.FallingDown or
+           state == Enum.HumanoidStateType.Freefall then
+            return true
+        end
+        
+        local velocityY = rootPart.Velocity.Y
+        return math.abs(velocityY) > 0.5
+    end
+    
+    local function ResetCooldown()
+        state.onCooldown = false
+        local bigBtn = BBSystem.Buttons[config.bigButtonId]
+        if bigBtn then bigBtn.Text = displayName end
+        if state.bindButton then
+            BindableButtons.UpdateBButtonText(config.bindButtonId, 
+                isGold and "GBJ" or "BJ", false, isGold)
+        end
+    end
+    
+    local function StartCooldown()
+        state.onCooldown = true
+        state.debounce = false
+        local bigBtn = BBSystem.Buttons[config.bigButtonId]
+        if bigBtn then bigBtn.Text = "Wait" end
+        if state.bindButton then
+            BindableButtons.UpdateBButtonText(config.bindButtonId, 
+                "Wait", true, isGold)
+        end
+        
+        task.spawn(function()
+            for i = cooldownTime, 1, -1 do
+                if not state.onCooldown then break end
+                local bigBtn = BBSystem.Buttons[config.bigButtonId]
+                if bigBtn then bigBtn.Text = tostring(i) end
+                if state.bindButton then
+                    BindableButtons.UpdateBButtonText(config.bindButtonId, 
+                        tostring(i), true, isGold)
+                end
+                task.wait(1)
+            end
+            if state.onCooldown then ResetCooldown() end
+        end)
+    end
+    
+    local function GetCenterPosition()
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local root = character.HumanoidRootPart
+            -- Кидаем бомбу под ноги для максимальной эффективности
+            local lookDir = Services.Workspace.CurrentCamera.CFrame.LookVector
+            return root.Position + (lookDir * 3) + Vector3.new(0, -2, 0)
+        end
+        return nil
+    end
+    
+    local function MakeCharacterJump()
+        local character = LocalPlayer.Character
+        if character then
+            local humanoid = character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
+    end
+    
+    local function UnequipBomb(bombName)
+        task.spawn(function()
+            task.wait(0.5)
+            local character = LocalPlayer.Character
+            if character then
+                local bomb = character:FindFirstChild(bombName)
+                if bomb then
+                    bomb.Parent = LocalPlayer.Backpack or character
+                end
+            end
+        end)
+    end
+    
+    local function GetAnyBomb(bombName)
+        local character = LocalPlayer.Character
+        if not character then return false, nil end
+        
+        -- Проверяем все возможные имена бомб
+        local bombNamesToCheck = {bombName}
+        if bombName == "FakeBomb" then
+            -- Для обычной бомбы проверяем все возможные имена
+            bombNamesToCheck = BOMB_NAMES
+        end
+        
+        for _, name in ipairs(bombNamesToCheck) do
+            local bomb = character:FindFirstChild(name)
+            if bomb then return true, bomb end
+        end
+        
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+        if backpack then
+            for _, name in ipairs(bombNamesToCheck) do
+                local bomb = backpack:FindFirstChild(name)
+                if bomb then
+                    bomb.Parent = character
+                    return true, bomb
+                end
+            end
+        end
+        
+        -- Пытаемся получить бомбу через Remote с таймаутом
+        local success = false
+        local attempts = 0
+        while not success and attempts < 3 do
+            attempts = attempts + 1
+            local ok = pcall(function()
+                Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName)
+            end)
+            if ok then 
+                success = true
+                break
+            end
+            task.wait(0.1)
+        end
+        
+        if success then
+            for _ = 1, 5 do
+                for _, name in ipairs(bombNamesToCheck) do
+                    local bomb = character:FindFirstChild(name)
+                    if bomb then return true, bomb end
+                    if backpack then
+                        bomb = backpack:FindFirstChild(name)
+                        if bomb then
+                            bomb.Parent = character
+                            return true, bomb
+                        end
+                    end
+                end
+                task.wait(0.05)
+            end
+        end
+        
+        return false, nil
+    end
+    
+    local function IsHoldingBomb(bombName)
+        local character = LocalPlayer.Character
+        if not character then return false end
+        
+        local bombNamesToCheck = {bombName}
+        if bombName == "FakeBomb" then
+            bombNamesToCheck = BOMB_NAMES
+        end
+        
+        for _, name in ipairs(bombNamesToCheck) do
+            if character:FindFirstChild(name) then
+                return true
+            end
+        end
+        return false
+    end
+    
+    -- Основная функция прыжка
+    local function FastBombJump()
+        if not IsPlayerInAir() then return end
+        if state.onCooldown or state.debounce or state.justRespawned then return end
+        state.debounce = true
+        
+        local success, bomb = GetAnyBomb(bombName)
+        
+        if success and bomb then
+            local position = GetCenterPosition()
+            if position then
+                local remote = bomb:FindFirstChild("Remote")
+                if remote then
+                    PlaySound(Sounds.Click)
+                    pcall(function()
+                        remote:FireServer(CFrame.new(position), 50)
+                    end)
+                end
+                
+                local char = LocalPlayer.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local currentVelocity = root.AssemblyLinearVelocity
+                    -- Добавляем к текущей скорости, а не заменяем
+                    root.AssemblyLinearVelocity = Vector3.new(
+                        currentVelocity.X, 
+                        currentVelocity.Y + launchPower, 
+                        currentVelocity.Z
+                    )
+                end
+                
+                MakeCharacterJump()
+                UnequipBomb(bomb.Name)
+                
+                task.spawn(function()
+                    task.wait(0.1)
+                    StartCooldown()
+                end)
+            end
+        end
+        
+        task.spawn(function()
+            task.wait(0.5)
+            state.debounce = false
+        end)
+    end
+    
+    -- Настройка UI
+    local section = config.section
+    
+    section:AddLabel(displayName .. " Options")
+    section:AddToggle("Enable Auto " .. displayName, function(bool) 
+        state.enabled = bool 
+    end)
+    
+    section:AddToggle("Auto-Get " .. bombName, function(bool)
+        state.autoGetBomb = bool
+        if bool then
+            pcall(function() 
+                Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName) 
+            end)
+        end
+    end)
+    
+    section:AddToggle("Enable " .. displayName .. " Big Button", function(e)
+        state.bigBtnExists = e
+        if e then
+            local size = __UD2(0, state.bigButtonSize, 0, state.bigButtonSize * 0.375)
+            AddBigButton(config.bigButtonId, displayName, FastBombJump, isGold, size)
+        else
+            DeleteBigButton(config.bigButtonId)
+        end
+    end)
+    
+    section:AddSlider(displayName .. " Big Button Size", 50, 300, state.bigButtonSize, function(value)
+        state.bigButtonSize = value
+        local btn = BBSystem.Buttons[config.bigButtonId]
+        if btn then
+            btn.Size = __UD2(0, state.bigButtonSize, 0, state.bigButtonSize * 0.375)
+        end
+    end)
+    
+    section:AddToggle("Enable " .. displayName .. " Bind Button", function(e)
+        state.bindBtnExists = e
+        if e then
+            local shortName = isGold and "GBJ" or "BJ"
+            BindableButtons.AddBButton(config.bindButtonId, shortName, FastBombJump, isGold, state.bindButtonSize)
+            state.bindButton = BindableButtons.Buttons[config.bindButtonId]
+            if state.bindButton then
+                local screen = Services.Workspace.CurrentCamera.ViewportSize
+                state.bindButton.Size = __UD2(state.bindButtonSize * (screen.Y / screen.X), 0, state.bindButtonSize, 0)
+                BindableButtons.UpdateBButtonText(config.bindButtonId, 
+                    state.onCooldown and "Wait" or shortName, state.onCooldown, isGold)
+            end
+        else
+            BindableButtons.DeleteBButton(config.bindButtonId)
+            state.bindButton = nil
+        end
+    end)
+    
+    section:AddSlider(displayName .. " Bind Button Size", 5, 25, state.bindButtonSize * 100, function(value)
+        state.bindButtonSize = value / 100
+        if state.bindButton then
+            local screen = Services.Workspace.CurrentCamera.ViewportSize
+            state.bindButton.Size = __UD2(state.bindButtonSize * (screen.Y / screen.X), 0, state.bindButtonSize, 0)
+        end
+    end)
+    
+    section:AddKeybind(displayName .. " Keybind", config.keybind, FastBombJump)
+    
+    -- Обработка ввода
+    local TAP_MOVEMENT_THRESHOLD = 10
+    local TAP_TIME_THRESHOLD = 0.3
+    
+    systemMaid:GiveTasks(
+        ODHX.Connect(Services.UserInputService.InputBegan, function(input, gp)
+            if gp then return end
+            if input.UserInputType == Enum.UserInputType.Touch or 
+               input.UserInputType == Enum.UserInputType.MouseButton1 then
+                state.activeTouches[input] = {
+                    startPosition = input.Position, 
+                    startTime = tick(), 
+                    moved = false
+                }
+            end
+        end),
+        ODHX.Connect(Services.UserInputService.InputChanged, function(input)
+            local data = state.activeTouches[input]
+            if data and (input.Position - data.startPosition).Magnitude > TAP_MOVEMENT_THRESHOLD then
+                data.moved = true
+            end
+        end),
+        ODHX.Connect(Services.UserInputService.InputEnded, function(input, gp)
+            if gp then 
+                state.activeTouches[input] = nil 
+                return 
+            end
+            local data = state.activeTouches[input]
+            if data and not data.moved and tick() - data.startTime <= TAP_TIME_THRESHOLD then
+                if state.enabled and not state.onCooldown and not state.debounce then
+                    if IsHoldingBomb(bombName) and IsPlayerInAir() then
+                        FastBombJump()
+                    end
+                end
+            end
+            state.activeTouches[input] = nil
+        end),
+        ODHX.Connect(LocalPlayer.CharacterAdded, function()
+            ResetCooldown()
+            state.activeTouches = {}
+            state.justRespawned = true
+            task.wait(1)
+            state.justRespawned = false
+            if state.autoGetBomb then
+                task.wait(0.2)
+                pcall(function() 
+                    Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName) 
+                end)
+            end
+        end)
+    )
+    
+    ODHX.Bind(section.Name, "Enable Auto " .. displayName, "Toggle", function() return state.enabled end)
+    ODHX.Bind(section.Name, "Auto-Get " .. bombName, "Toggle", function() return state.autoGetBomb end)
+    ODHX.Bind(section.Name, "Enable " .. displayName .. " Big Button", "Toggle", function() return state.bigBtnExists end)
+    ODHX.Bind(section.Name, "Enable " .. displayName .. " Bind Button", "Toggle", function() return state.bindBtnExists end)
+    ODHX.Bind(section.Name, displayName .. " Big Button Size", "Slider", function() return state.bigButtonSize end)
+    ODHX.Bind(section.Name, displayName .. " Bind Button Size", "Slider", function() return state.bindButtonSize * 100 end)
+    -- Возвращаем управление
+    return {
+        GetState = function() return state end,
+        FastBombJump = FastBombJump,
+        ResetCooldown = ResetCooldown,
+        SetEnabled = function(bool) state.enabled = bool end,
+        SetAutoGet = function(bool) 
+            state.autoGetBomb = bool
+            if bool then
+                pcall(function() 
+                    Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName) 
+                end)
+            end
+        end
+    }
+end
+
+-- ============================================
+-- СОЗДАНИЕ СИСТЕМ
+-- ============================================
+
+local section = shared.AddSection("Bomb Jump+")
+
+-- Обычная бомба
+local bombJumpSystem = CreateBombJumpSystem({
+    bombType = "FakeBomb",
+    section = section,
+    displayName = "Bomb Jump",
+    defaultEnabled = false,
+    defaultAutoGet = false,
+    defaultBigButton = false,
+    defaultBindButton = false,
+    bigButtonSize = 90,
+    bindButtonSize = 0.11,
+    keybind = "E",
+    bigButtonId = "bombjump_big",
+    bindButtonId = "bombjump_bind"
+})
+
+-- Золотая бомба (только для модов)
+if _game == "Murder Mystery Modded" then
+    local gbjSection = shared.AddSection("Gold Bomb Jump+")
+    
+    local goldBombJumpSystem = CreateBombJumpSystem({
+        bombType = "GoldBomb",
+        section = gbjSection,
+        displayName = "Gold Bomb Jump",
+        defaultEnabled = false,
+        defaultAutoGet = false,
+        defaultBigButton = false,
+        defaultBindButton = false,
+        bigButtonSize = 200,
+        bindButtonSize = 0.11,
+        keybind = "G",
+        bigButtonId = "goldbombjump_big",
+        bindButtonId = "goldbombjump_bind"
+    })
+end
+
+ODHX.Bind("About", "Mute Button SFX", "Toggle", function() return muteButtonSounds end)
+
+end
+
+ODHX.cleanup=function()
+    RootMaid:DoCleaning()
+    for id in pairs(BBSystem.Buttons) do DeleteBigButton(id) end
+    for id in pairs(BindableButtons.Buttons) do BindableButtons.DeleteBButton(id) end
+end
+ODHX.Finish()
+
+    end
+    -- ================================================================
+    -- EMBEDDED PLUGIN: unlimit.lua.txt
+    do
+-- Inventory Unlimiter V5: current ODH plugin API + durable preferences.
+-- Changes CLIENT-side values only; server-side limits are not bypassed by this file.
+local shared = odh_shared_plugins
+if not shared or type(shared.CreateTab) ~= "function" then
+    warn("[Inventory Unlimiter] Load through the current Overdrive H plugin menu.")
+    return
+end
+
+local KEY = "ODH_InventoryUnlimiterRuntime"
+local previous = _G[KEY]
+if type(previous) == "table" and type(previous.Cleanup) == "function" then
+    local ok, restored = pcall(previous.Cleanup)
+    if not ok or restored == false then
+        warn("[Inventory Unlimiter] Could not restore the previous instance; reload cancelled.")
+        return
+    end
+end
+
+local runtime = { alive=true, initializing=true, values={enabled=false, maxItems=9999}, generation=0 }
+local warnings = {}
+local function Notify(text, duration)
+    if type(shared.Notify) == "function" then pcall(shared.Notify, text, duration or 3) end
+end
+local function WarnOnce(key, text)
+    if warnings[key] then return end
+    warnings[key] = true
+    warn("[Inventory Unlimiter] " .. text)
+    Notify("Inventory Unlimiter: " .. text, 5)
+end
+local function Finite(value)
+    return type(value)=="number" and value==value and value>-math.huge and value<math.huge
+end
+local function ClampItems(value)
+    if not Finite(value) then return nil end
+    return math.clamp(math.floor(value+0.5),2,9999)
+end
+
+-- File APIs are executor-provided, not part of odh_shared_plugins.
+local environment = {}
+if type(getgenv)=="function" then
+    local ok, result=pcall(getgenv)
+    if ok and type(result)=="table" then environment=result end
+end
+local fileRead = type(readfile)=="function" and readfile or environment.readfile
+local fileWrite = type(writefile)=="function" and writefile or environment.writefile
+local fileExists = type(isfile)=="function" and isfile or environment.isfile
+local FILE = "ODH_InventoryUnlimiter_settings.json"
+local httpOK, HttpService = pcall(function() return game:GetService("HttpService") end)
+local canPersist = type(fileRead)=="function" and type(fileWrite)=="function" and httpOK and HttpService~=nil
+runtime.settingsFile=FILE
+runtime.saveStatus="Not saved"
+
+local function LoadSettings()
+    if not canPersist then
+        runtime.saveStatus="Unavailable"
+        WarnOnce("filesystem","readfile/writefile unavailable; settings cannot survive rejoining.")
+        return
+    end
+    if type(fileExists)=="function" then
+        local ok, exists=pcall(fileExists,FILE)
+        if ok and not exists then return end
+    end
+    local ok,text=pcall(fileRead,FILE)
+    if not ok then
+        if type(fileExists)=="function" then
+            runtime.saveStatus="Read error"
+            WarnOnce("read","Cannot read settings: " .. tostring(text))
+        end
+        return
+    end
+    local decoded,data=pcall(function() return HttpService:JSONDecode(text) end)
+    if not decoded or type(data)~="table" or data.version~=1 or type(data.values)~="table" then
+        runtime.saveStatus="Invalid file"
+        WarnOnce("read","Invalid settings file. Kept unchanged until you change a setting.")
+        return
+    end
+    if type(data.values.enabled)=="boolean" then runtime.values.enabled=data.values.enabled end
+    runtime.values.maxItems=ClampItems(data.values.maxItems) or 9999
+    runtime.saveStatus="Loaded"
+end
+local function SaveSettings()
+    if not runtime.alive or runtime.initializing or not canPersist then return false end
+    local ok,err=pcall(function()
+        fileWrite(FILE,HttpService:JSONEncode({version=1,values={
+            enabled=runtime.values.enabled,maxItems=runtime.values.maxItems,
+        }}))
+    end)
+    if not ok then
+        runtime.saveStatus="Write error"
+        WarnOnce("write","Cannot save settings: " .. tostring(err))
+        return false
+    end
+    warnings.write=nil
+    runtime.saveStatus="Saved"
+    return true
+end
+LoadSettings()
+
+-- The original plugin's target heuristics are retained. No globals are patched.
+local debugLibrary = type(debug)=="table" and debug or {}
+local function Resolve(primary, fallback, external)
+    if type(primary)=="function" then return primary end
+    if type(fallback)=="function" then return fallback end
+    if type(external)=="function" then return external end
+end
+local getGC = Resolve(getgc, environment.getgc)
+local readUpvalues = Resolve(debugLibrary.getupvalues, getupvalues, environment.getupvalues)
+local writeUpvalue = Resolve(debugLibrary.setupvalue, setupvalue, environment.setupvalue)
+local readInfo = Resolve(debugLibrary.getinfo, getinfo, environment.getinfo)
+local readConstants = Resolve(debugLibrary.getconstants, getconstants, environment.getconstants)
+local readName = Resolve(debugLibrary.info)
+
+local changed = {} -- [function][numeric upvalue index] = {original=..., last=...}
+local connection
+local statusLabel
+local function Status(text)
+    runtime.status=text
+    if statusLabel then pcall(function() statusLabel:SetValue(text) end) end
+end
+local function IsTarget(fn)
+    local name
+    if readInfo then
+        local ok,info=pcall(readInfo,fn)
+        if ok and type(info)=="table" then name=info.name end
+    elseif readName then
+        local ok,value=pcall(readName,fn,"n")
+        if ok then name=value end
+    end
+    if name=="updateItemFrame" or name=="onItemEquipped" then return true end
+    if readConstants then
+        local ok,constants=pcall(readConstants,fn)
+        if ok and type(constants)=="table" then
+            local touch,equip=false,false
+            for _,value in pairs(constants) do
+                if value=="TouchBinding" then touch=true end
+                if value=="EquipButton" then equip=true end
+            end
+            return touch and equip
+        end
+    end
+    return false
+end
+local function WriteAndVerify(fn,index,value)
+    local ok,err=pcall(writeUpvalue,fn,index,value)
+    if not ok then return false,tostring(err) end
+    local readable,values=pcall(readUpvalues,fn)
+    if not readable or type(values)~="table" or values[index]~=value then
+        return false,"upvalue verification failed"
+    end
+    return true
+end
+local function RestoreOriginals()
+    local allRestored=true
+    for fn,slots in pairs(changed) do
+        local readable,values=pcall(readUpvalues,fn)
+        if not readable or type(values)~="table" then
+            allRestored=false
+            WarnOnce("restore-read","Could not inspect previously changed values; restoration is pending.")
+        else
+            for index,saved in pairs(slots) do
+                local current=values[index]
+                if current==saved.original then
+                    slots[index]=nil
+                elseif current~=saved.last then
+                    -- Another script/game update owns the current value. Do not overwrite it.
+                    WarnOnce("conflict","A value changed elsewhere; left it untouched.")
+                    slots[index]=nil
+                else
+                    local ok,err=WriteAndVerify(fn,index,saved.original)
+                    if ok then slots[index]=nil
+                    else
+                        allRestored=false
+                        WarnOnce("restore-write","Cannot restore an original limit: " .. tostring(err))
+                    end
+                end
+            end
+        end
+        if next(slots)==nil then changed[fn]=nil end
+    end
+    return allRestored
+end
+local function ApplyLimit()
+    if not (getGC and readUpvalues and writeUpvalue and (readInfo or readName or readConstants)) then
+        Status("UNSUPPORTED: required executor debug functions are missing")
+        WarnOnce("debug","Required debug functions are unavailable (getgc/getupvalues/setupvalue and target identification).")
+        return 0
+    end
+    local ok,objects=pcall(getGC)
+    if not ok or type(objects)~="table" then
+        Status("ERROR: getgc failed")
+        WarnOnce("scan","getgc failed: " .. tostring(objects))
+        return 0
+    end
+    local target=runtime.values.maxItems
+    local count=0
+    for _,fn in pairs(objects) do
+        if type(fn)=="function" and (changed[fn] or IsTarget(fn)) then
+            local readable,values=pcall(readUpvalues,fn)
+            if readable and type(values)=="table" then
+                for index,value in pairs(values) do
+                    if type(index)=="number" and index>=1 and index%1==0 and type(value)=="number" then
+                        local slots=changed[fn]
+                        local saved=slots and slots[index]
+                        -- Existing tracked values remain targets after any Max Items change.
+                        if saved or value==10 or value==3 then
+                            if not saved then
+                                slots=slots or {};changed[fn]=slots
+                                saved={original=value,last=value};slots[index]=saved
+                            end
+                            if value==target then
+                                saved.last=target;count=count+1
+                            elseif value==saved.last or value==saved.original then
+                                -- Record intent before writing, so cleanup can recover even
+                                -- if the executor writes but verification subsequently fails.
+                                saved.last=target
+                                local applied,err=WriteAndVerify(fn,index,target)
+                                if applied then count=count+1
+                                else WarnOnce("apply","Cannot write/verify a target limit: " .. tostring(err)) end
+                            else
+                                WarnOnce("conflict","A value changed elsewhere; left it untouched.")
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if count>0 then Status("ON | Max Items: " .. target .. " | verified values: " .. count)
+    else Status("WAITING | Inventory functions not found or not writable") end
+    return count
+end
+local function RequestApply()
+    runtime.generation=runtime.generation+1
+    local token=runtime.generation
+    if not runtime.values.enabled then
+        local restored=RestoreOriginals()
+        Status(restored and "OFF | Original values restored" or "OFF | Restoration pending; press Reapply / Retry")
+        return
+    end
+    Status("Applying saved/current limit...")
+    -- Bounded retries, not a continuous getgc loop. Old requests are cancelled
+    -- by any new setting change, disable, reload, or respawn.
+    task.spawn(function()
+        for _,delay in ipairs({0.2,0.8,2.0}) do
+            task.wait(delay)
+            if not runtime.alive or runtime.generation~=token or not runtime.values.enabled then return end
+            ApplyLimit()
+        end
+    end)
+end
+runtime.Cleanup=function()
+    runtime.alive=false
+    runtime.generation=runtime.generation+1
+    if connection then connection:Disconnect();connection=nil end
+    return RestoreOriginals() -- do not persist OFF merely because the runtime is unloading
+end
+runtime.SaveSettings=SaveSettings
+
+-- UI: CreateTab uses a GitHub path without domain and without .png.
+local UI_VERSION=5
+local ui
+if type(previous)=="table" and type(previous.ui)=="table"
+    and previous.ui.owner==shared and previous.ui.version==UI_VERSION and previous.ui.complete then
+    ui=previous.ui
+else
+    local ok,result=pcall(function()
+        local tab=shared.CreateTab("Inventory Unlimiter", "/mellnikovden968-web/CFG_PM2/refs/heads/main/icon")
+        return {owner=shared,version=UI_VERSION,tab=tab,
+            section=tab:AddSection("Inventory Unlimiter V5","Client-side limit • Saved preferences"),visual=false}
+    end)
+    if not ok then warn("[Inventory Unlimiter] UI failed: " .. tostring(result));return end
+    ui=result
+end
+runtime.ui=ui
+ui.runtime=runtime
+_G[KEY]=runtime
+runtime.SetEnabled=function(state)
+    runtime.values.enabled=state==true
+    SaveSettings()
+    RequestApply()
+end
+runtime.SetMaxItems=function(value)
+    local number=ClampItems(value)
+    if not number then return end
+    runtime.values.maxItems=number
+    SaveSettings()
+    if runtime.values.enabled then RequestApply() end
+end
+runtime.Reapply=RequestApply
+
+if not ui.complete then
+    local ok,err=pcall(function()
+        ui.section:AddParagraph("Persistence", "Toggle and Max Items are saved on change. Load this plugin again after joining; saved preferences restore automatically.")
+        ui.toggle=ui.section:AddToggle("Unlimit Inventory",function(value)
+            ui.visual=value==true
+            local active=ui.runtime
+            if active and active.alive and not active.initializing then active.SetEnabled(value) end
+        end)
+        assert(type(ui.toggle)=="function","AddToggle must return a closure")
+        ui.slider=ui.section:AddSlider("Max Items",2,9999,runtime.values.maxItems,function(value)
+            local active=ui.runtime
+            if active and active.alive and not active.initializing then active.SetMaxItems(value) end
+        end)
+        ui.status=ui.section:AddLabel("Initializing...",true)
+        ui.section:AddButton("Reapply / Retry",function()
+            local active=ui.runtime
+            if active and active.alive and not active.initializing then active.Reapply() end
+        end)
+    end)
+    if not ok then runtime.Cleanup();warn("[Inventory Unlimiter] UI controls failed: " .. tostring(err));return end
+    ui.complete=true
+end
+statusLabel=ui.status
+local synced,err=pcall(function()
+    ui.slider:SetValue(runtime.values.maxItems)
+    if ui.visual~=runtime.values.enabled then ui.toggle() end
+    assert(ui.visual==runtime.values.enabled,"toggle state mismatch")
+end)
+if not synced then runtime.Cleanup();warn("[Inventory Unlimiter] UI sync failed: " .. tostring(err));return end
+runtime.initializing=false
+
+local LocalPlayer=game:GetService("Players").LocalPlayer
+if LocalPlayer then
+    connection=LocalPlayer.CharacterAdded:Connect(function()
+        if runtime.alive and runtime.values.enabled then RequestApply() end
+    end)
+end
+RequestApply()
+print("[Inventory Unlimiter V5] Loaded | Settings: " .. FILE .. " | " .. runtime.saveStatus)
+
+    end
+    -- ================================================================
+    -- EMBEDDED PLUGIN: Pm-Wallhop.lua.txt
+    do
+-- ODH 2026 adapter. Embedded in every plugin; no downloads/dependencies.
+local ODHX = (function()
+    local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
+    X.id, X.title, X.file = "Pm-Wallhop", "Pm-WallHop", "ODH_Pm-Wallhop_settings.json"
+    local host = odh_shared_plugins
+    assert(host and type(host.CreateTab)=="function", X.title .. ": load through the current Overdrive H plugin menu")
+    local env = {}
+    if type(getgenv)=="function" then local ok,g=pcall(getgenv); if ok and type(g)=="table" then env=g end end
+    local rd = type(readfile)=="function" and readfile or env.readfile
+    local wr = type(writefile)=="function" and writefile or env.writefile
+    local exists = type(isfile)=="function" and isfile or env.isfile
+    local http = game:GetService("HttpService")
+    local reported = {}
+    local function report(message)
+        if reported[message] then return end
+        reported[message]=true
+        warn("[" .. X.title .. "] " .. message)
+        if type(host.Notify)=="function" then pcall(host.Notify, X.title .. ": " .. message, 5) end
+    end
+    X.Report = report
+    local function finite(v) return type(v)=="number" and v==v and math.abs(v)<math.huge end
+    local function encode(v, depth)
+        depth=depth or 0
+        if depth>20 then error("settings nesting too deep") end
+        if typeof(v)=="Color3" then return {__odhColor={v.R,v.G,v.B}} end
+        local t=type(v)
+        if t=="boolean" or t=="string" then return v end
+        if t=="number" then if finite(v) then return v end; return nil end
+        if t=="table" then
+            local result={}
+            for k,item in pairs(v) do
+                if type(k)=="string" or type(k)=="number" then result[k]=encode(item,depth+1) end
+            end
+            return result
+        end
+        return nil -- never serialize Instances, connections, functions or players
+    end
+    local function decode(v, depth)
+        depth=depth or 0
+        if depth>20 then error("settings nesting too deep") end
+        if type(v)~="table" then return v end
+        if v.__odhColor then
+            local c=v.__odhColor
+            assert(type(c)=="table" and finite(c[1]) and finite(c[2]) and finite(c[3]),"invalid color")
+            return Color3.new(math.clamp(c[1],0,1),math.clamp(c[2],0,1),math.clamp(c[3],0,1))
+        end
+        local result={}
+        for k,item in pairs(v) do result[k]=decode(item,depth+1) end
+        return result
+    end
+    X.Encode, X.Decode = encode, decode
+    if not X.external then
+        if type(rd)=="function" and type(wr)=="function" then
+            local present=true
+            if type(exists)=="function" then local ok,v=pcall(exists,X.file); if ok then present=v end end
+            if present then
+                local ok,text=pcall(rd,X.file)
+                if ok then
+                    local good,data=pcall(function() return decode(http:JSONDecode(text)) end)
+                    if good and type(data)=="table" and data.version==1 and type(data.controls)=="table" then X.data=data
+                    else X.badFile=true; report("Invalid settings file; defaults loaded. A manual change will replace it.") end
+                elseif type(exists)=="function" then report("Could not read settings file: " .. tostring(text)); X.badFile=true end
+            end
+        else report("readfile/writefile unavailable; settings last only for this session.") end
+    end
+    local tab
+    X.shared=setmetatable({}, {__index=host}) -- never mutate the host API
+    X.shared.Notify=function(text,seconds)
+        if X.restoring then return end
+        if type(host.Notify)=="function" then return host.Notify(text,seconds or 3) end
+    end
+    local function key(section,name,kind) return section .. " / " .. kind .. " / " .. name end
+    local function safeValue(r,v)
+        if r.kind=="Toggle" then if type(v)=="boolean" then return v end
+        elseif r.kind=="Slider" then if finite(v) then return math.clamp(v,r.min,r.max) end
+        elseif r.kind=="Colorpicker" then if typeof(v)=="Color3" then return v end
+        elseif r.kind=="Dropdown" then
+            for _,item in ipairs(r.items) do if v==item then return v end end
+        end
+        return nil
+    end
+    local function show(r,v)
+        if v==nil or r.shown==v then return end
+        local prior=X.silent; X.silent=true
+        local ok,err=pcall(function()
+            if r.kind=="Toggle" then
+                if r.visual~=v then assert(type(r.handle)=="function","AddToggle must return a closure"); r.handle() end
+            elseif r.kind=="Slider" then r.handle:SetValue(v)
+            elseif r.kind=="Colorpicker" then r.handle:SetRGBValue(v)
+            elseif r.kind=="Dropdown" then r.handle:Select(v) end
+        end)
+        X.silent=prior
+        if ok then r.shown=v else report("UI sync failed: " .. r.name .. ": " .. tostring(err)) end
+    end
+    function X.Bind(section,name,kind,getter)
+        local r=X.byKey[key(section,name,kind)]
+        assert(r,"Unknown binding " .. section .. " / " .. name)
+        r.get=getter
+    end
+    function X.Sync()
+        for _,r in ipairs(X.records) do
+            if r.get then
+                local ok,v=pcall(r.get)
+                if ok then
+                    v=safeValue(r,v)
+                    if v~=nil then
+                        r.value=v
+                        if not r.exclude then X.data.controls[r.key]=v end
+                        show(r,v)
+                    end
+                end
+            end
+        end
+    end
+    function X.Commit()
+        if not X.ready or X.silent or X.restoring or X.stopped or X.committing then return end
+        X.committing=true
+        local ok,err=pcall(function()
+            X.Sync()
+            if X.capture then X.data.snapshot=X.capture() end
+            if X.external then
+                if not X.backend or not X.backend(X.data) then error("native settings file could not be saved") end
+            elseif type(wr)=="function" then
+                wr(X.file,http:JSONEncode(encode(X.data)))
+            end
+        end)
+        X.committing=false
+        if not ok then report("Settings save failed: " .. tostring(err)) end
+    end
+    function X.Restore()
+        X.restoring=true
+        -- Options before enabling modules. Actions and player selections are never replayed.
+        for _,togglePass in ipairs({false,true}) do
+            for _,r in ipairs(X.records) do
+                if not r.exclude and ((r.kind=="Toggle")==togglePass) then
+                    local v=safeValue(r,X.data.controls[r.key])
+                    if v==nil and r.get then local ok,x=pcall(r.get); if ok then v=safeValue(r,x) end end
+                    if v==nil then v=r.default end
+                    if v~=nil then
+                        show(r,v)
+                        local ok,err=pcall(r.callback,v)
+                        if not ok then report("Restore failed: " .. r.name .. ": " .. tostring(err)) end
+                        r.value=v; X.data.controls[r.key]=v
+                    end
+                end
+            end
+        end
+        X.restoring=false
+    end
+    function X.Finish()
+        if X.replay then X.Restore() else X.Sync() end
+        X.ready=true
+        if not X.badFile then X.Commit() end
+    end
+    function X.Set(section,name,kind,v,apply)
+        local r=X.byKey[key(section,name,kind)]
+        if not r then return end
+        v=safeValue(r,v); if v==nil then return end
+        show(r,v); r.value=v; X.data.controls[r.key]=v
+        if apply then r.callback(v) end
+    end
+    function X.ResetControls()
+        X.data.controls={}
+        for _,r in ipairs(X.records) do
+            if r.kind=="Toggle" and not r.exclude then X.Set(r.section,r.name,r.kind,false,true) end
+        end
+    end
+    function X.shared.AddSection(name,subtitle)
+        if not tab then tab=host.CreateTab(X.title,"/mellnikovden968-web/CFG_PM2/refs/heads/main/icon") end
+        local raw=tab:AddSection(name,subtitle or "")
+        local section={Name=name,Raw=raw}
+        local function register(kind,label,callback,default,min,max,items)
+            local r={section=name,name=label,kind=kind,callback=callback,default=default,min=min,max=max,items=items,visual=false}
+            r.key=key(name,label,kind)
+            r.exclude=(name=="🔑 Keys") -- key-capture toggles are actions, not enabled modes
+            X.records[#X.records+1]=r; X.byKey[r.key]=r
+            local function changed(v)
+                if kind=="Toggle" then r.visual=(v==true) end
+                if not X.ready or X.silent or X.restoring or X.stopped then return end
+                v=safeValue(r,v); if v==nil then return end
+                r.shown=v
+                local ok,err=pcall(callback,v)
+                if ok then
+                    r.value=v
+                    if not r.exclude then X.data.controls[r.key]=v end
+                    X.Commit()
+                else report("Callback failed: " .. label .. ": " .. tostring(err)) end
+            end
+            if kind=="Toggle" then r.handle=raw:AddToggle(label,changed)
+            elseif kind=="Slider" then r.handle=raw:AddSlider(label,min,max,default,changed)
+            elseif kind=="Colorpicker" then r.handle=raw:AddColorpicker(label,default,changed)
+            elseif kind=="Dropdown" then r.handle=raw:AddDropdown(label,items,changed) end
+            return r.handle
+        end
+        function section:AddToggle(label,cb) return register("Toggle",label,cb,false) end
+        function section:AddSlider(label,min,max,default,cb) return register("Slider",label,cb,default,min,max) end
+        function section:AddColorpicker(label,default,cb) return register("Colorpicker",label,cb,default) end
+        function section:AddDropdown(label,items,cb) return register("Dropdown",label,cb,items[1],nil,nil,items) end
+        local function action(cb)
+            return function(...)
+                if not X.ready or X.stopped then return end
+                local ok,err=pcall(cb,...)
+                if not ok then report("Action failed: " .. tostring(err)) end
+                X.Commit()
+            end
+        end
+        function section:AddButton(label,cb) return raw:AddButton(label,action(cb)) end
+        function section:AddKeybind(label,default,cb) return raw:AddKeybind(label,default,action(cb)) end
+        function section:AddPlayerDropdown(label,cb) return raw:AddPlayerDropdown(label,action(cb)) end
+        function section:AddTextBox(label,cb) return raw:AddTextBox(label,action(cb)) end
+        function section:AddLabel(...) return raw:AddLabel(...) end
+        function section:AddParagraph(...) return raw:AddParagraph(...) end
+        return section
+    end
+    -- Stable GUI paths, never serialized Instances. Player name is session-independent.
+    function X.Path(object)
+        local parts={}
+        local player=game:GetService("Players").LocalPlayer
+        while object and object~=game do
+            table.insert(parts,1,object==player and "$LocalPlayer" or object.Name)
+            object=object.Parent
+            if #parts>32 then return nil end
+        end
+        if object~=game then return nil end
+        return parts
+    end
+    function X.Resolve(parts)
+        if type(parts)~="table" then return nil end
+        local object=game
+        for _,name in ipairs(parts) do
+            if name=="$LocalPlayer" then object=game:GetService("Players").LocalPlayer
+            elseif type(name)=="string" and object then object=object:FindFirstChild(name)
+            else return nil end
+        end
+        return object
+    end
+    X.connections={}
+    function X.Connect(signal,callback)
+        local c=signal:Connect(function(...) if not X.stopped then return callback(...) end end)
+        X.connections[#X.connections+1]=c
+        return c
+    end
+    function X.Stop()
+        if X.stopped then return end
+        X.Commit()
+        X.stopped=true
+        for _,c in ipairs(X.connections) do pcall(function() c:Disconnect() end) end
+        if X.cleanup then pcall(X.cleanup) end
+    end
+    local registry=rawget(_G,"ODH_2026_PluginRuntimes")
+    if type(registry)~="table" then registry={}; rawset(_G,"ODH_2026_PluginRuntimes",registry) end
+    local previous=registry[X.id]
+    if previous and type(previous.Stop)=="function" then pcall(previous.Stop) end
+    registry[X.id]=X
+    return X
+end)()
+-- END ODH 2026 ADAPTER
+
+local shared = ODHX.shared
+local UpdateWallhopButtonState, performVideoFlick, performWallhop
+local wallhopButtonSize = 0.11
+
+-- Создаем секцию для нашего плагина
+local wallhop_section = shared.AddSection("Pm-WallHop")
+
+-- Добавляем информацию
+wallhop_section:AddLabel("Pm-WallHop Script by @Phemtom (Improved)")
+wallhop_section:AddParagraph("Pm-WallHop", "Флинг при прыжке возле стыка стен")
+
+-- Основной переключатель (ТОГГЛ)
+local isWallHopEnabled = false
+wallhop_section:AddToggle("Включить WallHop", function(bool)
+    isWallHopEnabled = bool
+    if bool then
+        shared.Notify("Pm-WallHop включен", 2)
+    else
+        shared.Notify("Pm-WallHop выключен", 2)
+    end
+    UpdateWallhopButtonState()
+end)
+
+-- Кнопка ВКЛ/ВЫКЛ (дополнительная)
+wallhop_section:AddButton("Вкл/Выкл WallHop", function()
+    isWallHopEnabled = not isWallHopEnabled
+    shared.Notify(isWallHopEnabled and "Pm-WallHop включен" or "Pm-WallHop выключен", 2)
+    UpdateWallhopButtonState()
+end)
+
+-- Настройка чувствительности (дистанция обнаружения стены)
+local detectionDistance = 3
+wallhop_section:AddSlider("Дистанция обнаружения", 1, 6, 3, function(int)
+    detectionDistance = int
+    shared.Notify("Дистанция: " .. int, 2)
+end)
+
+-- Настройка силы флинга
+local flickPower = 50
+wallhop_section:AddSlider("Сила флинга", 20, 100, 50, function(int)
+    flickPower = int
+    shared.Notify("Сила: " .. int, 2)
+end)
+
+-- Кнопка для ручного флинга (тест)
+wallhop_section:AddButton("Тестовый флинг", function()
+    if isWallHopEnabled then
+        performVideoFlick()
+    else
+        shared.Notify("Сначала включите WallHop!", 2)
+    end
+end)
+
+-- Клавиша для быстрого включения/выключения
+wallhop_section:AddKeybind("Toggle Keybind", "F", function()
+    isWallHopEnabled = not isWallHopEnabled
+    shared.Notify(isWallHopEnabled and "Pm-WallHop включен" or "Pm-WallHop выключен", 2)
+    UpdateWallhopButtonState()
+end)
+
+-- Клавиша для ручного WallHop
+wallhop_section:AddKeybind("WallHop Jump Key", "J", function()
+    if isWallHopEnabled then
+        performWallhop()
+    else
+        shared.Notify("WallHop выключен! Нажмите F или кнопку в меню", 2)
+    end
+end)
+
+-- === Плавающая кнопка (как в Aimlock) ===
+local WallhopBindableButtons = {Buttons = {}, Maids = {}, Count = 0}
+
+local __SHAPES = {
+    [0] = "rbxassetid://86221076925479",
+    [1] = "rbxassetid://96242665417546",
+    [2] = "rbxassetid://97129189935336",
+    [3] = "rbxassetid://76165862027868",
+    [4] = "rbxassetid://125868092127496"
+}
+
+local __NORMAL_COLOR = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.new(0.133333, 0.827451, 0.494118)),
+    ColorSequenceKeypoint.new(0.6, Color3.new(0.231373, 0.509804, 0.498039)),
+    ColorSequenceKeypoint.new(1, Color3.new(0.501961, 0.501961, 0.501961))
+})
+
+local __ACTIVE_COLOR = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.new(0.0, 0.8, 0.4)),
+    ColorSequenceKeypoint.new(0.6, Color3.new(0.0, 0.5, 0.3)),
+    ColorSequenceKeypoint.new(1, Color3.new(0.2, 0.8, 0.6))
+})
+
+local function safecallback(callback)
+    if not callback then return end
+    local ok, err = xpcall(callback, function(e) return debug.traceback(e) end)
+    if not ok then warn("[BIND ERROR] " .. tostring(err)) end
+end
+
+local function GetStorage()
+    local parent = gethui and gethui()
+    if not parent or typeof(parent) ~= "Instance" then parent = game:GetService("CoreGui") end
+    if not parent or typeof(parent) ~= "Instance" then
+        parent = game.Players.LocalPlayer:WaitForChild("PlayerGui", 5)
+    end
+    if typeof(parent) ~= "Instance" then
+        parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    end
+    local sg = parent:FindFirstChild("@wallhopstorage")
+    if not sg then
+        sg = Instance.new("ScreenGui")
+        sg.Name = "@wallhopstorage"
+        sg.ResetOnSpawn = false
+        sg.IgnoreGuiInset = true
+        pcall(function() sg.ScreenInsets = Enum.ScreenInsets.None end)
+        sg.Parent = parent
+    end
+    return sg
+end
+
+local function MakeDraggable(gui, maid, ripple, sound, clickFunc)
+    local dragging, dragInput, dragStart, startPos
+    local hasMoved = false
+
+    maid:GiveTask(ODHX.Connect(gui.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging, dragStart, startPos = true, input.Position, gui.Position
+            hasMoved = false
+
+            sound:Play()
+            local absPos = gui.AbsolutePosition
+            ripple.Position = UDim2.new(0, input.Position.X - absPos.X, 0, input.Position.Y - absPos.Y)
+            ripple.Size = UDim2.new(0, 0, 0, 0)
+            ripple.BackgroundTransparency = 0.5
+            ripple.Visible = true
+
+            game:GetService("TweenService"):Create(ripple, TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                Size = UDim2.new(0, 45, 0, 45),
+                BackgroundTransparency = 1
+            }):Play()
+
+            local releaseConn
+            releaseConn = ODHX.Connect(game:GetService("UserInputService").InputEnded, function(endInput)
+                if endInput.UserInputType == input.UserInputType then
+                    dragging = false
+                    if not hasMoved then
+                        clickFunc()
+                    end
+                    releaseConn:Disconnect()
+                end
+            end)
+        end
+    end))
+
+    maid:GiveTask(ODHX.Connect(gui.InputChanged, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end))
+
+    maid:GiveTask(ODHX.Connect(game:GetService("UserInputService").InputChanged, function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+            if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then hasMoved = true end
+            local screen = gui.Parent.AbsoluteSize
+            gui.Position = UDim2.new(startPos.X.Scale + (delta.X / screen.X), 0, startPos.Y.Scale + (delta.Y / screen.Y), 0)
+        end
+    end))
+end
+
+function WallhopBindableButtons.AddBButton(id, text, onFunc, offFunc)
+    if WallhopBindableButtons.Buttons[id] then return WallhopBindableButtons.Buttons[id]:FindFirstChild("BindValue") end
+
+    local buttonMaid = {}
+    function buttonMaid:GiveTask(task)
+        table.insert(buttonMaid._tasks or {}, task)
+        return task
+    end
+    function buttonMaid:Destroy()
+        if buttonMaid._tasks then
+            for _, t in pairs(buttonMaid._tasks) do
+                if typeof(t) == "RBXScriptConnection" then t:Disconnect()
+                elseif typeof(t) == "Instance" then t:Destroy()
+                elseif type(t) == "function" then t()
+                end
+            end
+        end
+    end
+    buttonMaid._tasks = {}
+
+    local screen = workspace.CurrentCamera.ViewportSize
+    local buttonSizeY = 0.11
+    local widthScale = buttonSizeY * (screen.Y / screen.X)
+
+    local xPos = 0.1 + ((WallhopBindableButtons.Count % 8) * (widthScale + 0.005))
+    local yPos = 0.7 - (math.floor(WallhopBindableButtons.Count / 8) * (buttonSizeY + 0.015))
+
+    local ImageButton = Instance.new("ImageButton")
+    ImageButton.Name = id
+    ImageButton.Size = UDim2.new(widthScale, 0, buttonSizeY, 0)
+    ImageButton.Position = UDim2.new(xPos, 0, yPos, 0)
+    ImageButton.AnchorPoint = Vector2.new(0.5, 0.5)
+    ImageButton.Image = __SHAPES[0]
+    ImageButton.BackgroundTransparency = 1
+    ImageButton.BorderSizePixel = 0
+    ImageButton.ClipsDescendants = false
+    ImageButton.AutoButtonColor = false
+    ImageButton.Parent = GetStorage()
+    buttonMaid:GiveTask(ImageButton)
+
+    local BindValue = Instance.new("BoolValue", ImageButton)
+    BindValue.Name = "BindValue"
+
+    local TextLabel = Instance.new("TextLabel", ImageButton)
+    TextLabel.Name = "@Text"
+    TextLabel.Size = UDim2.new(0.8, 0, 0.8, 0)
+    TextLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
+    TextLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.Font = Enum.Font.Jura
+    TextLabel.Text = text
+    TextLabel.TextColor3 = Color3.new(1, 1, 1)
+    TextLabel.TextSize = 10
+    TextLabel.TextWrapped = true
+    TextLabel.ZIndex = 3
+
+    local Aspect = Instance.new("UIAspectRatioConstraint", ImageButton)
+    Aspect.AspectRatio = 1
+    Aspect.AspectType = Enum.AspectType.ScaleWithParentSize
+
+    local Gradient = Instance.new("UIGradient", ImageButton)
+    Gradient.Name = "@Stroke"
+    Gradient.Color = __NORMAL_COLOR
+
+    local ripple = Instance.new("Frame")
+    ripple.Name = "@ripple"
+    ripple.BackgroundColor3 = Color3.fromRGB(0, 155, 255)
+    ripple.BackgroundTransparency = 0.5
+    ripple.Size = UDim2.new(0, 0, 0, 0)
+    ripple.AnchorPoint = Vector2.new(0.5, 0.5)
+    ripple.Visible = false
+    ripple.ZIndex = 2
+    ripple.Parent = ImageButton
+    Instance.new("UICorner", ripple).CornerRadius = UDim.new(1, 0)
+
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://3868133279"
+    sound.Volume = 0.5
+    sound.Parent = ImageButton
+
+    local debounce = false
+    local tInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+
+    local function onClick()
+        if debounce then return end
+        debounce = true
+        local fOut = game:GetService("TweenService"):Create(ImageButton, tInfo, {ImageTransparency = 1})
+        fOut:Play()
+        fOut.Completed:Wait()
+
+        BindValue.Value = not BindValue.Value
+        Gradient.Color = BindValue.Value and __ACTIVE_COLOR or __NORMAL_COLOR
+        if BindValue.Value then safecallback(onFunc) else safecallback(offFunc) end
+
+        local fIn = game:GetService("TweenService"):Create(ImageButton, tInfo, {ImageTransparency = 0})
+        fIn:Play()
+        fIn.Completed:Wait()
+        debounce = false
+    end
+
+    MakeDraggable(ImageButton, buttonMaid, ripple, sound, onClick)
+    buttonMaid:GiveTask(ODHX.Connect(game:GetService("RunService").RenderStepped, function()
+        Gradient.Rotation = (Gradient.Rotation + 1) % 360
+    end))
+
+    WallhopBindableButtons.Buttons[id] = ImageButton
+    WallhopBindableButtons.Maids[id] = buttonMaid
+    WallhopBindableButtons.Count = WallhopBindableButtons.Count + 1
+    return BindValue
+end
+
+function WallhopBindableButtons.DeleteBButton(id)
+    if WallhopBindableButtons.Maids[id] then
+        WallhopBindableButtons.Maids[id]:Destroy()
+        WallhopBindableButtons.Maids[id] = nil
+    end
+    if WallhopBindableButtons.Buttons[id] then
+        WallhopBindableButtons.Buttons[id]:Destroy()
+        WallhopBindableButtons.Buttons[id] = nil
+    end
+end
+
+-- Обновление состояния кнопки
+UpdateWallhopButtonState = function()
+    ODHX.Commit()
+    local btn = WallhopBindableButtons.Buttons["wallhop_toggle"]
+    if not btn then return end
+    local value=btn:FindFirstChild("BindValue")
+    if value then value.Value=isWallHopEnabled end
+    local textLabel = btn:FindFirstChild("@Text")
+    if textLabel then
+        textLabel.Text = isWallHopEnabled and "ON" or "OFF"
+    end
+    local gradient = btn:FindFirstChild("@Stroke")
+    if gradient then
+        gradient.Color = isWallHopEnabled and __ACTIVE_COLOR or __NORMAL_COLOR
+    end
+end
+
+-- Переключение видимости кнопки
+local showWallhopButton = true
+
+local function ToggleWallhopButtonVisibility()
+    local btn = WallhopBindableButtons.Buttons["wallhop_toggle"]
+    if btn then
+        btn.Visible = showWallhopButton
+    end
+end
+
+-- Создание кнопки
+local function CreateWallhopBindButton()
+    if WallhopBindableButtons.Buttons["wallhop_toggle"] then return end
+
+    WallhopBindableButtons.AddBButton("wallhop_toggle", "WH", function()
+        isWallHopEnabled = true
+        shared.Notify("Pm-WallHop включен", 2)
+        UpdateWallhopButtonState()
+    end, function()
+        isWallHopEnabled = false
+        shared.Notify("Pm-WallHop выключен", 2)
+        UpdateWallhopButtonState()
+    end)
+
+    UpdateWallhopButtonState()
+    ToggleWallhopButtonVisibility()
+end
+
+-- Добавляем настройки для кнопки
+wallhop_section:AddToggle("📱 Показать кнопку на экране", function(b)
+    showWallhopButton = b
+    ToggleWallhopButtonVisibility()
+end)
+
+wallhop_section:AddSlider("🔘 Размер кнопки (%)", 5, 25, 11, function(value)
+    local btnSize = value / 100
+    wallhopButtonSize = btnSize
+    local btn = WallhopBindableButtons.Buttons["wallhop_toggle"]
+    if btn then
+        local screen = workspace.CurrentCamera.ViewportSize
+        btn.Size = UDim2.new(btnSize * (screen.Y / screen.X), 0, btnSize, 0)
+    end
+end)
+
+-- Создаем кнопку
+CreateWallhopBindButton()
+
+-- --- Основная логика ---
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+-- --- Переменные ---
+local isFlicking = false
+local lastFlickTime = 0
+local isJumpKeyPressed = false
+local Camera = workspace.CurrentCamera
+local wallDetectionCooldown = 0
+
+-- --- Raycast параметры для WallHop ---
+local wallRaycastParams = RaycastParams.new()
+wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+-- --- Функция проверки, является ли объект игроком ---
+local function isPlayerCharacter(instance)
+    if not instance then return false end
+    local current = instance
+    while current do
+        if current:IsA("Model") and current:FindFirstChildOfClass("Humanoid") then
+            local players = Players:GetPlayers()
+            for _, player in ipairs(players) do
+                if player.Character == current then
+                    return true
+                end
+            end
+        end
+        current = current.Parent
+    end
+    return false
+end
+
+-- --- Функция проверки, является ли объект стеной ---
+local function isWall(instance)
+    if not instance or not instance.IsA then return false end
+    
+    -- Игнорируем игроков
+    if instance:IsA("Part") and instance.Parent and instance.Parent:IsA("Model") and instance.Parent:FindFirstChild("Humanoid") then
+        return false
+    end
+    
+    -- Проверяем все родительские объекты на принадлежность игроку
+    local current = instance
+    while current do
+        if isPlayerCharacter(current) then
+            return false
+        end
+        current = current.Parent
+    end
+    
+    -- Проверяем, что это часть с коллизией
+    if not instance:IsA("BasePart") and not instance:IsA("Terrain") then
+        return false
+    end
+    
+    -- Проверяем CanCollide
+    if instance:IsA("BasePart") and not instance.CanCollide then
+        return false
+    end
+    
+    return true
+end
+
+-- --- Функция получения результата Raycast для стены ---
+local function getWallRaycastResult()
+    local character = LocalPlayer.Character
+    if not character then return nil end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
+    -- Добавляем в черный список персонажи других игроков
+    local players = Players:GetPlayers()
+    local blacklist = {character}
+    for _, player in ipairs(players) do
+        if player ~= LocalPlayer and player.Character then
+            table.insert(blacklist, player.Character)
+        end
+    end
+    wallRaycastParams.FilterDescendantsInstances = blacklist
+    
+    local closestHit, minDistance = nil, detectionDistance
+    local hrpCF = hrp.CFrame
+    for i = 0,7 do
+        local angle = math.rad(i*45)
+        local dir = (hrpCF * CFrame.Angles(0, angle, 0)).LookVector
+        local ray = workspace:Raycast(hrp.Position, dir * detectionDistance, wallRaycastParams)
+        if ray and ray.Instance and ray.Distance < minDistance then
+            local hitInstance = ray.Instance
+            if isWall(hitInstance) then
+                minDistance = ray.Distance
+                closestHit = ray
+            end
+        end
+    end
+    return closestHit
+end
+
+-- --- Флинг (Видео флинг) ---
+performVideoFlick = function()
+    if not isWallHopEnabled then return end
+    if isFlicking then return end
+    isFlicking = true
+    
+    local char = LocalPlayer.Character
+    if not char then isFlicking = false return end
+    
+    local hum = char:FindFirstChild("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp then isFlicking = false return end
+    
+    -- Проверяем, жив ли игрок
+    if hum.Health <= 0 then isFlicking = false return end
+    
+    -- Сохраняем текущее состояние
+    local currentVel = hrp.Velocity
+    
+    -- Выполняем флинг
+    hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    hrp.Velocity = Vector3.new(currentVel.X, flickPower, currentVel.Z)
+    
+    -- Разворот камеры
+    local startCFrame = Camera.CFrame
+    Camera.CFrame = startCFrame * CFrame.Angles(0, math.rad(180), 0)
+    
+    task.wait(0.01)
+    Camera.CFrame = startCFrame
+    
+    isFlicking = false
+end
+
+-- --- Wallhop (Новая версия) ---
+performWallhop = function()
+    if not isWallHopEnabled then return end
+    
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not (humanoid and rootPart and humanoid:GetState() ~= Enum.HumanoidStateType.Dead) then return end
+    
+    local wall = getWallRaycastResult()
+    if not wall then return end
+
+    -- Поворачиваем игрока к стене
+    rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + wall.Normal)
+    RunService.Heartbeat:Wait()
+    
+    if humanoid:GetState() ~= Enum.HumanoidStateType.Dead then
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        task.wait(0.1)
+    end
+end
+
+-- --- Обнаружение стыков стен (Видео флинг) ---
+local lastHitInstance = nil
+local currentHitInstance = nil
+
+ODHX.Connect(RunService.Heartbeat, function()
+    if not isWallHopEnabled or isFlicking then return end
+    
+    local char = LocalPlayer.Character
+    if not char then 
+        lastHitInstance = nil
+        return 
+    end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not hrp or not hum or hum.Health <= 0 then 
+        lastHitInstance = nil
+        return 
+    end
+    
+    -- Проверяем, зажат ли пробел
+    if not isJumpKeyPressed then 
+        lastHitInstance = nil
+        return 
+    end
+    
+    -- Создаем Raycast с улучшенной фильтрацией
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {char}
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.IgnoreWater = true
+    
+    -- Пускаем луч в направлении камеры
+    local direction = Camera.CFrame.LookVector * detectionDistance
+    local result = workspace:Raycast(hrp.Position, direction, raycastParams)
+    
+    currentHitInstance = nil
+    
+    if result then
+        local hitInstance = result.Instance
+        
+        -- Проверяем, является ли объект стеной
+        if isWall(hitInstance) then
+            currentHitInstance = hitInstance
+            
+            -- Проверяем смену стены (стык)
+            if lastHitInstance and lastHitInstance ~= currentHitInstance then
+                local currentTime = os.clock()
+                if currentTime - lastFlickTime > 0.1 then
+                    lastFlickTime = currentTime
+                    performVideoFlick()
+                end
+            end
+        end
+    end
+    
+    lastHitInstance = currentHitInstance
+end)
+
+-- --- Автоматический Wallhop при прыжке (только если включен) ---
+ODHX.Connect(UserInputService.JumpRequest, function()
+    if isWallHopEnabled then
+        performWallhop()
+    end
+end)
+
+-- --- Отслеживание нажатия на прыжок ---
+ODHX.Connect(UserInputService.InputBegan, function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.Space then
+        isJumpKeyPressed = true
+    end
+end)
+
+ODHX.Connect(UserInputService.InputEnded, function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.Space then
+        isJumpKeyPressed = false
+        -- Сбрасываем детекцию при отпускании пробела
+        lastHitInstance = nil
+    end
+end)
+
+-- --- Сброс состояния при респавне ---
+ODHX.Connect(LocalPlayer.CharacterAdded, function(character)
+    lastHitInstance = nil
+    currentHitInstance = nil
+    isFlicking = false
+end)
+
+-- --- Дополнительно: сброс при потере фокуса ---
+ODHX.Connect(UserInputService.WindowFocused, function()
+    -- Если окно потеряло фокус, сбрасываем состояние прыжка
+    isJumpKeyPressed = false
+    lastHitInstance = nil
+end)
+
+ODHX.Bind("Pm-WallHop", "Включить WallHop", "Toggle", function() return isWallHopEnabled end)
+ODHX.Bind("Pm-WallHop", "Дистанция обнаружения", "Slider", function() return detectionDistance end)
+ODHX.Bind("Pm-WallHop", "Сила флинга", "Slider", function() return flickPower end)
+ODHX.Bind("Pm-WallHop", "📱 Показать кнопку на экране", "Toggle", function() return showWallhopButton end)
+ODHX.Bind("Pm-WallHop", "🔘 Размер кнопки (%)", "Slider", function() return wallhopButtonSize * 100 end)
+ODHX.cleanup=function()
+    for id in pairs(WallhopBindableButtons.Buttons) do WallhopBindableButtons.DeleteBButton(id) end
+end
+ODHX.Finish()
+
+    end
+end
+
