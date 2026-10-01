@@ -437,7 +437,7 @@ local playerText = text(playerCard, "0", 42, UDim2.fromOffset(22, 50)); playerTe
 local infoCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 332), Size = UDim2.new(1, 0, 1, -348), BackgroundColor3 = C.panel, BackgroundTransparency = .3 })
 corner(infoCard, 18); stroke(infoCard, C.border, .5)
 text(infoCard, "QUICK START", 18, UDim2.fromOffset(24, 22))
-text(infoCard, "Open Combat for silent aim, World for gun & fling tools, Visuals for ESP.", 14, UDim2.fromOffset(25, 54), true)
+text(infoCard, "Open Main for player tools, World for gun & fling tools, Visuals for ESP.", 14, UDim2.fromOffset(25, 54), true)
 text(infoCard, "Settings are saved automatically to NOIR.CONFIG.", 14, UDim2.fromOffset(25, 78), true)
 local frameCounter, lastFps = 0, os.clock()
 RunService.RenderStepped:Connect(function()
@@ -616,16 +616,14 @@ function host.Notify(title, duration)
 end
 function host.CreateTab()
     local tab = {}
-    function tab:AddSection(name, description, forcedColumn)
+    function tab:AddSection(name, description)
         local isVisual = name == "Visuals" or name == "Object ESP" or string.find(name, "VISUAL", 1, true) == 1
         local isMain = string.sub(name, 1, 5) == "MAIN "
         local isWorld = string.sub(name, 1, 6) == "WORLD "
         local col, page = nil, "aim"
-        local requestedColumn = tonumber(forcedColumn)
         if isVisual then visualSectionCount += 1; col = visualCols[(visualSectionCount - 1) % 2 + 1]; page = "visual"
         elseif isMain then mainSectionCount += 1; col = mainCols[(mainSectionCount - 1) % 2 + 1]; page = "main"
         elseif isWorld then worldSectionCount += 1; col = worldCols[(worldSectionCount - 1) % 2 + 1]; page = "world"
-        elseif requestedColumn == 1 or requestedColumn == 2 then col = cols[requestedColumn]
         else sectionCount += 1; col = cols[(sectionCount - 1) % 2 + 1] end
         local panel = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
             BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
@@ -2984,158 +2982,7 @@ flingSettings:AddToggle("Anti Fling", function(v) utility.antiFling = v end)
 flingSettings:AddSlider("Fling Duration", 1, 5, 2, function(v) utility.flingDuration = v end)
 flingSettings:AddSlider("Fling Power", 1, 3, 1, function(v) utility.flingPower = v end)
 
--- Silent Aim
-local mirrorSyncing = false
-local function requestAimMirrorSync()
-    if mirrorSyncing or type(syncRevertControls) ~= "function" then return end
-    task.defer(function()
-        if mirrorSyncing or type(syncRevertControls) ~= "function" then return end
-        mirrorSyncing = true
-        pcall(syncRevertControls)
-        mirrorSyncing = false
-    end)
-end
-local function addNoirMirrorToggle(section, key, label, callback)
-    local initializing = true
-    local control = section:AddToggle(label, function(value)
-        if not initializing then callback(value); requestAimMirrorSync() end
-    end)
-    initializing = false
-    noirMirrorControls[key] = control
-    return control
-end
-local function addNoirMirrorSlider(section, key, label, minimum, maximum, default, callback)
-    local initializing = true
-    local control = section:AddSlider(label, minimum, maximum, default, function(value)
-        if not initializing then callback(tonumber(value) or default); requestAimMirrorSync() end
-    end)
-    initializing = false
-    noirMirrorControls[key] = control
-    return control
-end
-
-function addAimTrackedToggle(section, key, label, callback)
-    local control = section:AddToggle(label, function(value)
-        revertToggleStates[key] = value
-        callback(value)
-        requestAimMirrorSync()
-    end)
-    revertControls[key] = control
-    return control
-end
-function addAimTrackedSlider(section, key, label, minimum, maximum, default, callback)
-    local control = section:AddSlider(label, minimum, maximum, default, function(value)
-        callback(tonumber(value) or default)
-        requestAimMirrorSync()
-    end)
-    revertControls[key] = control
-    return control
-end
-
-local main = tab:AddSection("Silent Aim", "Gun aim assist")
-main:AddParagraph("GUN SILENT AIM", "Independent gun prediction profile for Gun.Shoot and the equipped weapon remote.")
-main:AddToggle("Enabled", toggle)
-main:AddDropdown("Shot Method", { "Remote", "CFrame" }, function(v)
-    config.shotMethod = (v == "CFrame") and "CFrame" or "Remote"
-end)
-main:AddKeybind("Aim Key", "None", function(k) config.aimKey = k; aimHeld = (k == "None") end)
-main:AddKeybind("Toggle Key", "None", function(k) config.toggleKey = k end)
-main:AddToggle("Wall Check", function(v) config.wallCheck = v end)
-main:AddToggle("Show Shoot Murder Button", setShootButtonVisible)
-main:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton = v end)
-addAimTrackedToggle(main, "prioritizePing", "Prioritize Ping (Gun)", function(value) config.prioritizePing = value end)
-addAimTrackedToggle(main, "predictJump", "Predict Jump (Gun)", function(value) config.predictJump = value end)
-addAimTrackedToggle(main, "predictLag", "Predict Lag (Gun)", function(value) config.predictLag = value end)
-addAimTrackedToggle(main, "adaptive", "Adaptive Lead (Gun)", function(value) config.adaptive = value end)
-addAimTrackedSlider(main, "fixedLeadMs", "Fixed Lead (Gun, ms)", 20, 500, math.floor(config.fixedLead * 1000 + 0.5), function(value) config.fixedLead = value / 1000 end)
-addAimTrackedSlider(main, "extraLeadMs", "Extra Lead (Gun, ms)", 0, 300, math.floor(config.extraLead * 1000 + 0.5), function(value) config.extraLead = value / 1000 end)
-addAimTrackedSlider(main, "maxLeadMs", "Maximum Lead (Gun, ms)", 20, 1000, math.floor(config.maxLead * 1000 + 0.5), function(value) config.maxLead = value / 1000 end)
-addAimTrackedSlider(main, "maxSimulationMs", "Prediction Max Simulation (Gun, ms)", 20, 300, config.maxSimulationMs, function(value) config.maxSimulationMs = value end)
-addAimTrackedSlider(main, "predictionIntervalMs", "Prediction Interval (Gun, ms)", 1, 100, config.predictionIntervalMs, function(value) config.predictionIntervalMs = value end)
-addAimTrackedSlider(main, "manualPingMs", "Prediction Ping (Gun, ms)", 10, 350, config.manualPingMs, function(value) config.manualPingMs = value end)
-addAimTrackedSlider(main, "offsetX", "X Position Offset (Gun, %)", -100, 100, config.offsetX, function(value) config.offsetX = value end)
-addAimTrackedSlider(main, "offsetY", "Y Position Offset (Gun, %)", -100, 100, config.offsetY, function(value) config.offsetY = value end)
-addAimTrackedSlider(main, "offsetZ", "Z Position Offset (Gun, %)", -100, 100, config.offsetZ, function(value) config.offsetZ = value end)
-addAimTrackedSlider(main, "horizontalMultiplier", "Horizontal Multiplier (Gun, %)", 0, 400, config.horizontalMultiplier, function(value) config.horizontalMultiplier = value end)
-addAimTrackedSlider(main, "verticalMultiplier", "Vertical Multiplier (Gun, %)", 0, 400, config.verticalMultiplier, function(value) config.verticalMultiplier = value end)
-
--- NOIR CONFIG • GUN
--- This panel is deliberately pinned to the left column, directly below the
--- Gun Silent Aim section.  Presets contain both independent profiles.
-local gunConfig = tab:AddSection("NOIR CONFIG • GUN", "Gun preset storage and mirrored Gun Silent Aim controls", 1)
-presetDropdown = gunConfig:AddDropdown("Your Presets", presetNames(), function(value) presetName = cleanPresetName(value) end)
-gunConfig:AddTextBox("Preset Name", function(value) presetName = cleanPresetName(value) end)
-gunConfig:AddButton("Save Preset", savePreset)
-gunConfig:AddButton("Load Preset", loadPreset)
-gunConfig:AddButton("Refresh Presets", function()
-    if presetDropdown and presetDropdown.Refresh then presetDropdown:Refresh(presetNames(), cleanPresetName(presetName)) end
-end)
-gunConfig:AddParagraph("GUN SILENT AIM", "Mirror of the controls from the Silent Aim section.")
-addNoirMirrorToggle(gunConfig, "prioritizePing", "Prioritize Ping (Gun)", function(value) config.prioritizePing = value end)
-addNoirMirrorToggle(gunConfig, "predictJump", "Predict Jump (Gun)", function(value) config.predictJump = value end)
-addNoirMirrorToggle(gunConfig, "predictLag", "Predict Lag (Gun)", function(value) config.predictLag = value end)
-addNoirMirrorToggle(gunConfig, "adaptive", "Adaptive Lead (Gun)", function(value) config.adaptive = value end)
-addNoirMirrorSlider(gunConfig, "fixedLeadMs", "Fixed Lead (Gun, ms)", 20, 500, math.floor(config.fixedLead * 1000 + 0.5), function(value) config.fixedLead = value / 1000 end)
-addNoirMirrorSlider(gunConfig, "extraLeadMs", "Extra Lead (Gun, ms)", 0, 300, math.floor(config.extraLead * 1000 + 0.5), function(value) config.extraLead = value / 1000 end)
-addNoirMirrorSlider(gunConfig, "maxLeadMs", "Maximum Lead (Gun, ms)", 20, 1000, math.floor(config.maxLead * 1000 + 0.5), function(value) config.maxLead = value / 1000 end)
-addNoirMirrorSlider(gunConfig, "maxSimulationMs", "Prediction Max Simulation (Gun, ms)", 20, 300, config.maxSimulationMs, function(value) config.maxSimulationMs = value end)
-addNoirMirrorSlider(gunConfig, "predictionIntervalMs", "Prediction Interval (Gun, ms)", 1, 100, config.predictionIntervalMs, function(value) config.predictionIntervalMs = value end)
-addNoirMirrorSlider(gunConfig, "manualPingMs", "Prediction Ping (Gun, ms)", 10, 350, config.manualPingMs, function(value) config.manualPingMs = value end)
-addNoirMirrorSlider(gunConfig, "offsetX", "X Position Offset (Gun, %)", -100, 100, config.offsetX, function(value) config.offsetX = value end)
-addNoirMirrorSlider(gunConfig, "offsetY", "Y Position Offset (Gun, %)", -100, 100, config.offsetY, function(value) config.offsetY = value end)
-addNoirMirrorSlider(gunConfig, "offsetZ", "Z Position Offset (Gun, %)", -100, 100, config.offsetZ, function(value) config.offsetZ = value end)
-addNoirMirrorSlider(gunConfig, "horizontalMultiplier", "Horizontal Multiplier (Gun, %)", 0, 400, config.horizontalMultiplier, function(value) config.horizontalMultiplier = value end)
-addNoirMirrorSlider(gunConfig, "verticalMultiplier", "Vertical Multiplier (Gun, %)", 0, 400, config.verticalMultiplier, function(value) config.verticalMultiplier = value end)
-
--- Knife Silent Aim
-local knifeSection = tab:AddSection("Knife Silent Aim", "Knife throw / stab aim assist")
-knifeSection:AddParagraph("KNIFE SILENT AIM", "Independent knife prediction profile for the KnifeThrown two-CFrame remote.")
-knifeSection:AddToggle("Knife Silent Aim", function(v)
-    config.knifeEnabled = v
-    if v then
-        installHook()
-        task.spawn(refreshTarget)
-    end
-end)
-knifeSection:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck = v end)
-knifeSection:AddToggle("Prioritize Sheriff", function(v) config.knifePrioritizeSheriff = v end)
-knifeSection:AddToggle("Auto Throw Knife", function(v) config.knifeAutoThrow = v end)
-addAimTrackedToggle(knifeSection, "knifePrioritizePing", "Prioritize Ping (Knife)", function(value) config.knifeAim.prioritizePing = value end)
-addAimTrackedToggle(knifeSection, "knifePredictJump", "Predict Jump (Knife)", function(value) config.knifeAim.predictJump = value end)
-addAimTrackedToggle(knifeSection, "knifePredictLag", "Predict Lag (Knife)", function(value) config.knifeAim.predictLag = value end)
-addAimTrackedToggle(knifeSection, "knifeAdaptive", "Adaptive Lead (Knife)", function(value) config.knifeAim.adaptive = value end)
-addAimTrackedSlider(knifeSection, "knifeFixedLeadMs", "Fixed Lead (Knife, ms)", 20, 500, math.floor(config.knifeAim.fixedLead * 1000 + 0.5), function(value) config.knifeAim.fixedLead = value / 1000 end)
-addAimTrackedSlider(knifeSection, "knifeExtraLeadMs", "Extra Lead (Knife, ms)", 0, 300, math.floor(config.knifeAim.extraLead * 1000 + 0.5), function(value) config.knifeAim.extraLead = value / 1000 end)
-addAimTrackedSlider(knifeSection, "knifeMaxLeadMs", "Maximum Lead (Knife, ms)", 20, 1000, math.floor(config.knifeAim.maxLead * 1000 + 0.5), function(value) config.knifeAim.maxLead = value / 1000 end)
-addAimTrackedSlider(knifeSection, "knifeMaxSimulationMs", "Prediction Max Simulation (Knife, ms)", 20, 300, config.knifeAim.maxSimulationMs, function(value) config.knifeAim.maxSimulationMs = value end)
-addAimTrackedSlider(knifeSection, "knifePredictionIntervalMs", "Prediction Interval (Knife, ms)", 1, 100, config.knifeAim.predictionIntervalMs, function(value) config.knifeAim.predictionIntervalMs = value end)
-addAimTrackedSlider(knifeSection, "knifeManualPingMs", "Prediction Ping (Knife, ms)", 10, 350, config.knifeAim.manualPingMs, function(value) config.knifeAim.manualPingMs = value end)
-addAimTrackedSlider(knifeSection, "knifeOffsetX", "X Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetX, function(value) config.knifeAim.offsetX = value end)
-addAimTrackedSlider(knifeSection, "knifeOffsetY", "Y Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetY, function(value) config.knifeAim.offsetY = value end)
-addAimTrackedSlider(knifeSection, "knifeOffsetZ", "Z Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetZ, function(value) config.knifeAim.offsetZ = value end)
-addAimTrackedSlider(knifeSection, "knifeHorizontalMultiplier", "Horizontal Multiplier (Knife, %)", 0, 400, config.knifeAim.horizontalMultiplier, function(value) config.knifeAim.horizontalMultiplier = value end)
-addAimTrackedSlider(knifeSection, "knifeVerticalMultiplier", "Vertical Multiplier (Knife, %)", 0, 400, config.knifeAim.verticalMultiplier, function(value) config.knifeAim.verticalMultiplier = value end)
-
--- NOIR CONFIG • KNIFE
--- This panel is deliberately pinned to the right column, directly below the
--- Knife Silent Aim section.  It never shares Gun controls or storage keys.
-local knifeConfig = tab:AddSection("NOIR CONFIG • KNIFE", "Mirrored Knife Silent Aim controls", 2)
-knifeConfig:AddParagraph("KNIFE SILENT AIM", "Mirror of the controls from the Knife Silent Aim section.")
-addNoirMirrorToggle(knifeConfig, "knifePrioritizePing", "Prioritize Ping (Knife)", function(value) config.knifeAim.prioritizePing = value end)
-addNoirMirrorToggle(knifeConfig, "knifePredictJump", "Predict Jump (Knife)", function(value) config.knifeAim.predictJump = value end)
-addNoirMirrorToggle(knifeConfig, "knifePredictLag", "Predict Lag (Knife)", function(value) config.knifeAim.predictLag = value end)
-addNoirMirrorToggle(knifeConfig, "knifeAdaptive", "Adaptive Lead (Knife)", function(value) config.knifeAim.adaptive = value end)
-addNoirMirrorSlider(knifeConfig, "knifeFixedLeadMs", "Fixed Lead (Knife, ms)", 20, 500, math.floor(config.knifeAim.fixedLead * 1000 + 0.5), function(value) config.knifeAim.fixedLead = value / 1000 end)
-addNoirMirrorSlider(knifeConfig, "knifeExtraLeadMs", "Extra Lead (Knife, ms)", 0, 300, math.floor(config.knifeAim.extraLead * 1000 + 0.5), function(value) config.knifeAim.extraLead = value / 1000 end)
-addNoirMirrorSlider(knifeConfig, "knifeMaxLeadMs", "Maximum Lead (Knife, ms)", 20, 1000, math.floor(config.knifeAim.maxLead * 1000 + 0.5), function(value) config.knifeAim.maxLead = value / 1000 end)
-addNoirMirrorSlider(knifeConfig, "knifeMaxSimulationMs", "Prediction Max Simulation (Knife, ms)", 20, 300, config.knifeAim.maxSimulationMs, function(value) config.knifeAim.maxSimulationMs = value end)
-addNoirMirrorSlider(knifeConfig, "knifePredictionIntervalMs", "Prediction Interval (Knife, ms)", 1, 100, config.knifeAim.predictionIntervalMs, function(value) config.knifeAim.predictionIntervalMs = value end)
-addNoirMirrorSlider(knifeConfig, "knifeManualPingMs", "Prediction Ping (Knife, ms)", 10, 350, config.knifeAim.manualPingMs, function(value) config.knifeAim.manualPingMs = value end)
-addNoirMirrorSlider(knifeConfig, "knifeOffsetX", "X Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetX, function(value) config.knifeAim.offsetX = value end)
-addNoirMirrorSlider(knifeConfig, "knifeOffsetY", "Y Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetY, function(value) config.knifeAim.offsetY = value end)
-addNoirMirrorSlider(knifeConfig, "knifeOffsetZ", "Z Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetZ, function(value) config.knifeAim.offsetZ = value end)
-addNoirMirrorSlider(knifeConfig, "knifeHorizontalMultiplier", "Horizontal Multiplier (Knife, %)", 0, 400, config.knifeAim.horizontalMultiplier, function(value) config.knifeAim.horizontalMultiplier = value end)
-addNoirMirrorSlider(knifeConfig, "knifeVerticalMultiplier", "Vertical Multiplier (Knife, %)", 0, 400, config.knifeAim.verticalMultiplier, function(value) config.knifeAim.verticalMultiplier = value end)
+-- Combat UI intentionally contains no sections.
 
 -- VISUAL • PLAYER OUTLINE
 local playerOutline = tab:AddSection("VISUAL \u{2022} PLAYER OUTLINE", "Role-colored silhouettes")
@@ -3171,58 +3018,6 @@ objectBox:AddToggle("Dropped Gun", function(v) config.boxDroppedGun = v; refresh
 objectBox:AddToggle("Traps", function(v) config.boxTraps = v; refreshObjectESP() end)
 objectBox:AddToggle("Throwing Knives", function(v) config.boxThrowingKnives = v; refreshObjectESP() end)
 objectBox:AddToggle("Coins", function(v) config.boxCoins = v; refreshObjectESP() end)
-
--- NOIR CONFIG panels are placed next to their corresponding aim sections above.
-
-syncRevertControls = function(syncToggles)
-    if syncToggles ~= false then
-        for _, item in ipairs({
-            { "prioritizePing", config.prioritizePing }, { "predictJump", config.predictJump },
-            { "predictLag", config.predictLag }, { "adaptive", config.adaptive },
-            { "knifePrioritizePing", config.knifeAim.prioritizePing }, { "knifePredictJump", config.knifeAim.predictJump },
-            { "knifePredictLag", config.knifeAim.predictLag }, { "knifeAdaptive", config.knifeAim.adaptive },
-        }) do
-            local key, desired = item[1], item[2] == true
-            local toggleControl = revertControls[key]
-            if type(toggleControl) == "function" and revertToggleStates[key] ~= desired then pcall(toggleControl) end
-        end
-    end
-    local sliderValues = {
-        maxSimulationMs = config.maxSimulationMs, predictionIntervalMs = config.predictionIntervalMs,
-        manualPingMs = config.manualPingMs, offsetX = config.offsetX, offsetY = config.offsetY,
-        offsetZ = config.offsetZ, horizontalMultiplier = config.horizontalMultiplier,
-        verticalMultiplier = config.verticalMultiplier, fixedLeadMs = config.fixedLead * 1000,
-        extraLeadMs = config.extraLead * 1000, maxLeadMs = config.maxLead * 1000,
-        knifeMaxSimulationMs = config.knifeAim.maxSimulationMs, knifePredictionIntervalMs = config.knifeAim.predictionIntervalMs,
-        knifeManualPingMs = config.knifeAim.manualPingMs, knifeOffsetX = config.knifeAim.offsetX,
-        knifeOffsetY = config.knifeAim.offsetY, knifeOffsetZ = config.knifeAim.offsetZ,
-        knifeHorizontalMultiplier = config.knifeAim.horizontalMultiplier,
-        knifeVerticalMultiplier = config.knifeAim.verticalMultiplier,
-        knifeFixedLeadMs = config.knifeAim.fixedLead * 1000,
-        knifeExtraLeadMs = config.knifeAim.extraLead * 1000, knifeMaxLeadMs = config.knifeAim.maxLead * 1000,
-    }
-    for key, value in pairs(sliderValues) do
-        local control = revertControls[key]
-        if type(control) == "table" and type(control.SetValue) == "function" then pcall(control.SetValue, control, value)
-        elseif type(control) == "function" then pcall(control, value) end
-        local mirror = noirMirrorControls[key]
-        if type(mirror) == "table" and type(mirror.SetValue) == "function" then pcall(mirror.SetValue, mirror, value)
-        elseif type(mirror) == "function" then pcall(mirror, value) end
-    end
-    local mirrorToggles = {
-        prioritizePing = config.prioritizePing, predictJump = config.predictJump,
-        predictLag = config.predictLag, adaptive = config.adaptive,
-        knifePrioritizePing = config.knifeAim.prioritizePing, knifePredictJump = config.knifeAim.predictJump,
-        knifePredictLag = config.knifeAim.predictLag, knifeAdaptive = config.knifeAim.adaptive,
-    }
-    for key, value in pairs(mirrorToggles) do
-        local mirror = noirMirrorControls[key]
-        if type(mirror) == "function" then pcall(mirror, value) end
-    end
-end
-mirrorSyncing = true
-syncRevertControls()
-mirrorSyncing = false
 
 --===================================================== EVENT CONNECTIONS
 local remoteConnections = {}
