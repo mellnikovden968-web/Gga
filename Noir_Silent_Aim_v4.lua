@@ -900,9 +900,11 @@ local redirected = 0
 local hooked = false
 local running = true
 local shootButton, shootGui, shootBusy = nil, nil, false
+local buttonShotActive, buttonShotTarget = false, nil
 local presetName = "default"
 local PRESET_FOLDER = "NOIR.CONFIG"
 local revertControls, revertToggleStates, syncRevertControls = {}, {}, nil
+local noirMirrorControls = {}
 local presetDropdown
 local motionPart, motionPosition, motionTime
 local measuredVelocity = Vector3.zero
@@ -1795,6 +1797,9 @@ local function syncAutoPing(settings, controlKey, pingMs)
         local control = revertControls[controlKey]
         if type(control) == "table" and type(control.SetValue) == "function" then pcall(control.SetValue, control, pingMs)
         elseif type(control) == "function" then pcall(control, pingMs) end
+        local mirror = noirMirrorControls[controlKey]
+        if type(mirror) == "table" and type(mirror.SetValue) == "function" then pcall(mirror.SetValue, mirror, pingMs)
+        elseif type(mirror) == "function" then pcall(mirror, pingMs) end
     end
 end
 function autoTuneForPing()
@@ -1940,7 +1945,7 @@ local function remoteBelongsToLocalGun(remote)
         or (backpackGun and remote:IsDescendantOf(backpackGun))
 end
 function shotRemote(remote, args)
-    if not config.enabled or args.n < 1 then return false end
+    if not (config.enabled or buttonShotActive) or args.n < 1 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     -- Prefer the documented Shoot child in Backpack/Character. This client also
     -- has an equipped-Gun variant whose firing RemoteEvent is obfuscated and
@@ -1971,11 +1976,12 @@ end
 function redirect(remote, args)
     local part, useWallCheck, isKnife = nil, false, false
     if shotRemote(remote, args) then
-        if config.aimKey ~= "None" and not aimHeld then return end
+        if not buttonShotActive and config.aimKey ~= "None" and not aimHeld then return end
         -- CFrame mode intentionally only rewrites the CFrame protocol. Remote
         -- mode supports both the current Vector3 protocol and old CFrame pairs.
         if config.shotMethod == "CFrame" and not hasCFrameArgument(args) then return end
-        part = targetPart(); useWallCheck = config.wallCheck
+        part = (buttonShotActive and buttonShotTarget and getAimPart(buttonShotTarget)) or targetPart()
+        useWallCheck = config.wallCheck
     elseif knifeRemote(remote, args) then
         part = knifeTargetPart(); useWallCheck = config.knifeWallCheck; isKnife = true
     else
@@ -2117,41 +2123,42 @@ function fireGunAt(player)
     pcall(function()
         if not validTarget(player) then return end
         local part = getAimPart(player)
-        local camera = Workspace.CurrentCamera
         local character = LocalPlayer.Character
         local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
         local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-        if not part or not camera or not character or not humanoid then return end
+        if not part or not character or not humanoid then return end
         if config.wallCheck and not targetVisible(part) then return end
         local autoEquipped = false
         local gun = character:FindFirstChild("Gun")
         if not gun and backpack then
             gun = backpack:FindFirstChild("Gun")
-            if gun then humanoid:EquipTool(gun); autoEquipped = true; task.wait(0.08) end
+            if gun then humanoid:EquipTool(gun); autoEquipped = true; task.wait(0.12) end
         end
-        local remote = findGunRemote()
-        if not remote then if autoEquipped then humanoid:UnequipTools() end; return end
-        if not config.enabled then
-            sampleMotion(part)
-            task.wait(math.clamp(config.predictionIntervalMs / 1000, 0.025, 0.07))
-            sampleMotion(part)
+        if not gun or not gun:IsA("Tool") then
+            if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
+            return
         end
-        local aim = calculateAim(part)
-        local handle = gun and gun:FindFirstChild("Handle", true)
-        local origin = handle and handle.Position or camera.CFrame.Position
-        -- Shoot Murder uses Gun.Shoot when present. The captured equipped
-        -- client also exposes an obfuscated Gun remote with the verified
-        -- two-CFrame protocol, so use that protocol automatically for the
-        -- fallback instead of sending Vector3 values to a CFrame remote.
-        local equippedGunProtocol = remote.Name ~= "Shoot" and remoteBelongsToLocalGun(remote)
-        if config.shotMethod == "CFrame" or equippedGunProtocol then
-            remote:FireServer(CFrame.lookAt(origin, aim), CFrame.new(aim))
-        else
-            remote:FireServer(origin, aim)
+        -- Do not guess the remote signature. Activate the real Tool so its
+        -- LocalScript supplies the valid string/CFrame protocol; the installed
+        -- hook retargets that genuine outgoing weapon remote call.
+        if not installHook() then
+            if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
+            return
         end
-        success = true
-        if autoEquipped then task.wait(0.12); if humanoid.Parent then humanoid:UnequipTools() end end
+        buttonShotTarget = player
+        buttonShotActive = true
+        local activated = pcall(function() gun:Activate() end)
+        task.wait(0.20)
+        buttonShotActive = false
+        buttonShotTarget = nil
+        success = activated
+        if autoEquipped and humanoid.Parent then
+            task.wait(0.08)
+            humanoid:UnequipTools()
+        end
     end)
+    buttonShotActive = false
+    buttonShotTarget = nil
     shootBusy = false
     return success
 end
@@ -2290,78 +2297,20 @@ end
 
 --======================================================= ROUND TIMER
 local roundTimerGui
--- MM2 has shipped several HUD variants: some use 1:23, some use 83s,
--- and some put a plain number inside a TextLabel named Timer.  Normalize all
--- of them here instead of relying on one exact GUI hierarchy or format.
-local function parseTimerText(value, nameHint)
-    local raw = tostring(value or ""):gsub("<.->", "")
-    raw = raw:gsub("[%c]+", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-    if raw == "" then return nil end
-    local name = string.lower(tostring(nameHint or ""))
-    local namedTimer = string.find(name, "timer", 1, true)
-        or string.find(name, "clock", 1, true)
-        or string.find(name, "countdown", 1, true)
-        or string.find(name, "round", 1, true)
-        or string.find(name, "timeleft", 1, true)
-        or string.find(name, "time", 1, true)
-    local minutes, seconds = raw:match("^(%d+)%s*[:%.]%s*(%d%d)$")
-    if not minutes then minutes, seconds = raw:match("(%d+)%s*[:%.]%s*(%d%d)") end
-    if minutes and seconds then
-        local total = tonumber(minutes) * 60 + tonumber(seconds)
-        return string.format("%dm %02ds", math.floor(total / 60), total % 60), total, 125
-    end
-    minutes, seconds = raw:match("^(%d+)%s*[mM]%s*[, ]*%s*(%d+)%s*[sS]$")
-    if minutes and seconds then
-        local total = tonumber(minutes) * 60 + tonumber(seconds)
-        return string.format("%dm %02ds", math.floor(total / 60), total % 60), total, 120
-    end
-    seconds = raw:match("^(%d+)%s*[sS]$")
-    if seconds then
-        local total = tonumber(seconds)
-        return string.format("%dm %02ds", math.floor(total / 60), total % 60), total, 115
-    end
-    if namedTimer then
-        seconds = raw:match("^(%d+)$")
-        if seconds and tonumber(seconds) <= 600 then
-            local total = tonumber(seconds)
-            return string.format("%dm %02ds", math.floor(total / 60), total % 60), total, 105
-        end
-    end
-    return nil
+local function formatRoundTime(seconds)
+    seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+    return string.format("%02d:%02d", math.floor(seconds / 60), seconds % 60)
 end
--- Decode every shape observed from the supplied Extras.GetTimer RemoteFunction.
--- Some builds return a number, others a formatted string or a small table.
-local function decodeTimerResult(value)
-    if typeof(value) == "number" then
-        local seconds = math.max(0, math.floor(value + .5))
-        return seconds > 0 and string.format("%dm %02ds", math.floor(seconds / 60), seconds % 60) or nil, seconds, nil
-    end
-    if typeof(value) == "string" then
-        local text, seconds, score = parseTimerText(value, "GetTimer")
-        if text then return text, seconds, nil end
-        local phase = string.lower(value)
-        if phase == "waiting" or phase == "lobby" or phase == "ended" or phase == "gameover" or phase == "victory" then
-            return nil, 0, phase
-        end
-        return nil
-    end
+local function roundLengthFromEvent(value)
+    local direct = tonumber(value)
+    if direct and direct > 0 then return math.clamp(math.floor(direct + 0.5), 1, 600) end
     if typeof(value) == "table" then
-        local phase = value.Phase or value.phase or value.State or value.state or value.Status or value.status
-        local phaseName = string.lower(tostring(phase or ""))
-        if phaseName == "waiting" or phaseName == "lobby" or phaseName == "ended" or phaseName == "gameover" or phaseName == "victory" then
-            return nil, 0, phaseName
-        end
-        local keys = { "Time", "time", "Timer", "timer", "TimeLeft", "timeLeft", "Remaining", "remaining", "Seconds", "seconds", "Value", "value" }
-        for _, key in ipairs(keys) do
-            local text, seconds = decodeTimerResult(value[key])
-            if text or seconds then return text, seconds, phaseName end
-        end
-        for _, item in pairs(value) do
-            local text, seconds = decodeTimerResult(item)
-            if text or seconds then return text, seconds, phaseName end
+        for _, key in ipairs({ "Time", "time", "Timer", "timer", "TimeLeft", "timeLeft", "Remaining", "remaining", "Seconds", "seconds", "Value", "value" }) do
+            local nested = tonumber(value[key])
+            if nested and nested > 0 then return math.clamp(math.floor(nested + 0.5), 1, 600) end
         end
     end
-    return nil
+    return 180
 end
 local function resetRoundTimer()
     roundResetToken += 1
@@ -2375,8 +2324,9 @@ local function beginRoundTimer(roundLength)
     roundResetToken += 1
     roundState = "playing"
     roundPendingStart = nil
-    roundLength = math.clamp(tonumber(roundLength) or 180, 1, 600)
+    roundLength = roundLengthFromEvent(roundLength)
     roundTimerEndsAt = os.clock() + roundLength
+    if roundTimerGui and roundTimerGui.Parent then roundTimerGui.Text = formatRoundTime(roundLength) end
 end
 function setRoundTimerVisible(value)
     if not value then
@@ -2393,8 +2343,6 @@ function setRoundTimerVisible(value)
     roundTimerGui.BackgroundColor3 = C.panel
     roundTimerGui.BackgroundTransparency = .12
     roundTimerGui.TextColor3 = C.text
-    -- Never leave a stale STARTING placeholder on creation; the loop below
-    -- replaces it with the actual seconds as soon as the client exposes them.
     roundTimerGui.Text = "WAITING"
     roundTimerGui.TextSize = 20
     roundTimerGui.Font = Enum.Font.GothamBold
@@ -2402,106 +2350,19 @@ function setRoundTimerVisible(value)
     corner(roundTimerGui, 15); stroke(roundTimerGui, C.border, .15)
     local thisGui = roundTimerGui
     task.spawn(function()
-        local getTimer
         while roundTimerGui == thisGui and thisGui.Parent do
-            local found, bestScore, phase, discoveredSeconds
-            local explicitStarting = false
-            local activeRound = roundState ~= "waiting" or (os.clock() - lastRoundResetAt > 1)
-
-            -- Do not read stale GetTimer/UI values while the round is over.
-            -- The old implementation did exactly that, so the previous round's
-            -- number immediately reappeared after GameOver/VictoryScreen.
-            if activeRound then
-                if not (getTimer and getTimer.Parent) then
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    local extras = remotes and remotes:FindFirstChild("Extras")
-                    getTimer = (extras and extras:FindFirstChild("GetTimer")) or ReplicatedStorage:FindFirstChild("GetTimer", true)
-                end
-                if getTimer and getTimer:IsA("RemoteFunction") then
-                    local ok, res = pcall(function() return getTimer:InvokeServer() end)
-                    if ok and res ~= nil then
-                        local timerText, timerSeconds, timerPhase = decodeTimerResult(res)
-                        phase = timerPhase ~= "" and timerPhase or phase
-                        if timerPhase == "waiting" or timerPhase == "lobby" or timerPhase == "ended" or timerPhase == "gameover" or timerPhase == "victory" then
-                            resetRoundTimer()
-                        elseif timerText and timerSeconds and timerSeconds > 0 then
-                            found, bestScore, discoveredSeconds = timerText, 200, timerSeconds
-                        elseif timerSeconds == 0 and (roundState == "starting" or roundState == "playing") then
-                            resetRoundTimer()
-                        end
-                    end
-                end
-
-                -- Fallback: scan PlayerGui during an active/starting round.
-                -- activeRound also remains true a moment after a reset, so this
-                -- can discover the next round even when RoundStart is absent or
-                -- the remote is created after this script starts.
-                if found and roundState == "playing" then
-                    -- An authoritative remote value already won; do not replace
-                    -- it with a decorative label from PlayerGui.
-                else
-                    local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-                    if pg and activeRound then
-                        for _, v in ipairs(pg:GetDescendants()) do
-                            if (v:IsA("TextLabel") or v:IsA("TextButton") or v:IsA("TextBox")) and v ~= thisGui then
-                                local lowerName = string.lower(v.Name)
-                                local parentName = v.Parent and string.lower(v.Parent.Name) or ""
-                                local hint = lowerName .. " " .. parentName
-                                local rawLabel = string.lower(tostring(v.Text or ""))
-                                if string.find(rawLabel, "starting", 1, true) or string.find(rawLabel, "countdown", 1, true) then
-                                    explicitStarting = true
-                                end
-                                local timerText, timerSeconds, score = parseTimerText(v.Text, hint)
-                                if timerText and timerSeconds and timerSeconds > 0 and (not bestScore or score > bestScore) then
-                                    found, bestScore, discoveredSeconds = timerText, score, timerSeconds
-                                end
-                            end
-                        end
-                    end
-                    if explicitStarting and (roundState == "unknown" or roundState == "waiting") then
-                        -- The HUD explicitly says STARTING: keep alive players
-                        -- role-coloured until RoundStart arrives.
-                        roundState = "starting"
-                    elseif found and (roundState == "unknown" or roundState == "waiting") then
-                        -- A positive timer is authoritative. Do not infer a
-                        -- separate STARTING state from a small number unless the
-                        -- HUD explicitly reports that phase.
-                        roundState = "playing"
-                    end
-                    if discoveredSeconds and (roundState == "starting" or roundState == "playing") and not roundTimerEndsAt then
-                        roundTimerEndsAt = os.clock() + discoveredSeconds
-                    end
-                    if explicitStarting and not found then found = "STARTING" end
-                end
-            end
-
-            if roundState == "starting" and roundPendingStart then
-                local pre = math.ceil(roundPendingStart - os.clock())
-                if pre > 0 then
-                    found = "Starts in " .. tostring(pre)
-                else
-                    roundPendingStart = nil
-                    beginRoundTimer()
-                    found = "3m 00s"
-                end
-            elseif (roundState == "starting" or roundState == "playing") and roundTimerEndsAt then
-                local left = math.max(0, math.floor(roundTimerEndsAt - os.clock() + .5))
+            if roundState == "playing" and roundTimerEndsAt then
+                local left = math.ceil(roundTimerEndsAt - os.clock())
                 if left > 0 then
-                    if not found then found = string.format("%dm %02ds", math.floor(left / 60), left % 60) end
+                    thisGui.Text = formatRoundTime(left)
                 else
                     resetRoundTimer()
-                    found = "WAITING"
+                    thisGui.Text = "WAITING"
                 end
-            end
-
-            if roundState == "waiting" then
-                thisGui.Text = "WAITING"
-            elseif roundState == "starting" then
-                thisGui.Text = found or "STARTING"
             else
-                thisGui.Text = phase and (string.upper(tostring(phase)) .. "  " .. (found or "")) or (found or "WAITING")
+                thisGui.Text = "WAITING"
             end
-            task.wait(.2)
+            task.wait(.25)
         end
     end)
 end
@@ -3238,6 +3099,60 @@ revert:AddButton("Refresh Presets", function()
     if presetDropdown and presetDropdown.Refresh then presetDropdown:Refresh(presetNames(), cleanPresetName(presetName)) end
 end)
 
+-- NOIR CONFIG also contains mirrors of the same separate profiles. The
+-- controls in Silent Aim / Knife Silent Aim remain the primary controls; these
+-- mirrors write to the exact same gun/knife values and are kept synchronized.
+local function addNoirMirrorToggle(key, label, callback)
+    local initializing = true
+    local control = revert:AddToggle(label, function(value)
+        if not initializing then callback(value) end
+    end)
+    initializing = false
+    noirMirrorControls[key] = control
+    return control
+end
+local function addNoirMirrorSlider(key, label, minimum, maximum, default, callback)
+    local initializing = true
+    local control = revert:AddSlider(label, minimum, maximum, default, function(value)
+        if not initializing then callback(tonumber(value) or default) end
+    end)
+    initializing = false
+    noirMirrorControls[key] = control
+    return control
+end
+revert:AddParagraph("GUN SILENT AIM", "Mirror of the controls from the Silent Aim section.")
+addNoirMirrorToggle("prioritizePing", "Prioritize Ping (Gun)", function(value) config.prioritizePing = value end)
+addNoirMirrorToggle("predictJump", "Predict Jump (Gun)", function(value) config.predictJump = value end)
+addNoirMirrorToggle("predictLag", "Predict Lag (Gun)", function(value) config.predictLag = value end)
+addNoirMirrorToggle("adaptive", "Adaptive Lead (Gun)", function(value) config.adaptive = value end)
+addNoirMirrorSlider("fixedLeadMs", "Fixed Lead (Gun, ms)", 20, 500, math.floor(config.fixedLead * 1000 + 0.5), function(value) config.fixedLead = value / 1000 end)
+addNoirMirrorSlider("extraLeadMs", "Extra Lead (Gun, ms)", 0, 300, math.floor(config.extraLead * 1000 + 0.5), function(value) config.extraLead = value / 1000 end)
+addNoirMirrorSlider("maxLeadMs", "Maximum Lead (Gun, ms)", 20, 1000, math.floor(config.maxLead * 1000 + 0.5), function(value) config.maxLead = value / 1000 end)
+addNoirMirrorSlider("maxSimulationMs", "Prediction Max Simulation (Gun, ms)", 20, 300, config.maxSimulationMs, function(value) config.maxSimulationMs = value end)
+addNoirMirrorSlider("predictionIntervalMs", "Prediction Interval (Gun, ms)", 1, 100, config.predictionIntervalMs, function(value) config.predictionIntervalMs = value end)
+addNoirMirrorSlider("manualPingMs", "Prediction Ping (Gun, ms)", 10, 350, config.manualPingMs, function(value) config.manualPingMs = value end)
+addNoirMirrorSlider("offsetX", "X Position Offset (Gun, %)", -100, 100, config.offsetX, function(value) config.offsetX = value end)
+addNoirMirrorSlider("offsetY", "Y Position Offset (Gun, %)", -100, 100, config.offsetY, function(value) config.offsetY = value end)
+addNoirMirrorSlider("offsetZ", "Z Position Offset (Gun, %)", -100, 100, config.offsetZ, function(value) config.offsetZ = value end)
+addNoirMirrorSlider("horizontalMultiplier", "Horizontal Multiplier (Gun, %)", 0, 400, config.horizontalMultiplier, function(value) config.horizontalMultiplier = value end)
+addNoirMirrorSlider("verticalMultiplier", "Vertical Multiplier (Gun, %)", 0, 400, config.verticalMultiplier, function(value) config.verticalMultiplier = value end)
+revert:AddParagraph("KNIFE SILENT AIM", "Mirror of the controls from the Knife Silent Aim section.")
+addNoirMirrorToggle("knifePrioritizePing", "Prioritize Ping (Knife)", function(value) config.knifeAim.prioritizePing = value end)
+addNoirMirrorToggle("knifePredictJump", "Predict Jump (Knife)", function(value) config.knifeAim.predictJump = value end)
+addNoirMirrorToggle("knifePredictLag", "Predict Lag (Knife)", function(value) config.knifeAim.predictLag = value end)
+addNoirMirrorToggle("knifeAdaptive", "Adaptive Lead (Knife)", function(value) config.knifeAim.adaptive = value end)
+addNoirMirrorSlider("knifeFixedLeadMs", "Fixed Lead (Knife, ms)", 20, 500, math.floor(config.knifeAim.fixedLead * 1000 + 0.5), function(value) config.knifeAim.fixedLead = value / 1000 end)
+addNoirMirrorSlider("knifeExtraLeadMs", "Extra Lead (Knife, ms)", 0, 300, math.floor(config.knifeAim.extraLead * 1000 + 0.5), function(value) config.knifeAim.extraLead = value / 1000 end)
+addNoirMirrorSlider("knifeMaxLeadMs", "Maximum Lead (Knife, ms)", 20, 1000, math.floor(config.knifeAim.maxLead * 1000 + 0.5), function(value) config.knifeAim.maxLead = value / 1000 end)
+addNoirMirrorSlider("knifeMaxSimulationMs", "Prediction Max Simulation (Knife, ms)", 20, 300, config.knifeAim.maxSimulationMs, function(value) config.knifeAim.maxSimulationMs = value end)
+addNoirMirrorSlider("knifePredictionIntervalMs", "Prediction Interval (Knife, ms)", 1, 100, config.knifeAim.predictionIntervalMs, function(value) config.knifeAim.predictionIntervalMs = value end)
+addNoirMirrorSlider("knifeManualPingMs", "Prediction Ping (Knife, ms)", 10, 350, config.knifeAim.manualPingMs, function(value) config.knifeAim.manualPingMs = value end)
+addNoirMirrorSlider("knifeOffsetX", "X Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetX, function(value) config.knifeAim.offsetX = value end)
+addNoirMirrorSlider("knifeOffsetY", "Y Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetY, function(value) config.knifeAim.offsetY = value end)
+addNoirMirrorSlider("knifeOffsetZ", "Z Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetZ, function(value) config.knifeAim.offsetZ = value end)
+addNoirMirrorSlider("knifeHorizontalMultiplier", "Horizontal Multiplier (Knife, %)", 0, 400, config.knifeAim.horizontalMultiplier, function(value) config.knifeAim.horizontalMultiplier = value end)
+addNoirMirrorSlider("knifeVerticalMultiplier", "Vertical Multiplier (Knife, %)", 0, 400, config.knifeAim.verticalMultiplier, function(value) config.knifeAim.verticalMultiplier = value end)
+
 syncRevertControls = function(syncToggles)
     if syncToggles ~= false then
         for _, item in ipairs({
@@ -3269,8 +3184,22 @@ syncRevertControls = function(syncToggles)
         local control = revertControls[key]
         if type(control) == "table" and type(control.SetValue) == "function" then pcall(control.SetValue, control, value)
         elseif type(control) == "function" then pcall(control, value) end
+        local mirror = noirMirrorControls[key]
+        if type(mirror) == "table" and type(mirror.SetValue) == "function" then pcall(mirror.SetValue, mirror, value)
+        elseif type(mirror) == "function" then pcall(mirror, value) end
+    end
+    local mirrorToggles = {
+        prioritizePing = config.prioritizePing, predictJump = config.predictJump,
+        predictLag = config.predictLag, adaptive = config.adaptive,
+        knifePrioritizePing = config.knifeAim.prioritizePing, knifePredictJump = config.knifeAim.predictJump,
+        knifePredictLag = config.knifeAim.predictLag, knifeAdaptive = config.knifeAim.adaptive,
+    }
+    for key, value in pairs(mirrorToggles) do
+        local mirror = noirMirrorControls[key]
+        if type(mirror) == "function" then pcall(mirror, value) end
     end
 end
+syncRevertControls()
 
 --===================================================== EVENT CONNECTIONS
 local remoteConnections = {}
@@ -3293,12 +3222,7 @@ end
 
 connectRemote("PlayerDataChanged", function(data) consumeData(data) end)
 connectRemote("RoundStart", function(timerValue)
-    local roundLength = tonumber(timerValue)
-    if not roundLength then
-        local _, discovered = decodeTimerResult(timerValue)
-        roundLength = discovered
-    end
-    beginRoundTimer(roundLength)
+    beginRoundTimer(timerValue)
     murderer, sheriff, hero = nil, nil, nil
     table.clear(roleCache); table.clear(announcedRoles)
     task.spawn(refreshTarget)
