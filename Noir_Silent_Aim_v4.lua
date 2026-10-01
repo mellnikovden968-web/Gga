@@ -858,6 +858,21 @@ local config = {
     manualPingMs = 80,
     offsetX = 0, offsetY = 0, offsetZ = 0,
     horizontalMultiplier = 100, verticalMultiplier = 100,
+    -- separate knife prediction profile; gun values above remain pistol-only
+    knifeAim = {
+        adaptive = true,
+        fixedLead = 0.075,
+        extraLead = 0.02,
+        maxLead = 0.18,
+        prioritizePing = true,
+        predictJump = false,
+        predictLag = true,
+        maxSimulationMs = 180,
+        predictionIntervalMs = 72,
+        manualPingMs = 80,
+        offsetX = 0, offsetY = 0, offsetZ = 0,
+        horizontalMultiplier = 100, verticalMultiplier = 100,
+    },
     -- knife
     knifeEnabled = false,
     knifeWallCheck = false,
@@ -1029,11 +1044,13 @@ end
 function playerESPInactive(player)
     local character = player and player.Character
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    -- Gray applies to the lobby/spectator player individually even while a
-    -- different player is still in an active round.
-    return playerIsInLobby(player)
-        or (roundState ~= "starting" and roundState ~= "playing")
-        or not humanoid or humanoid.Health <= 0
+    if not humanoid or humanoid.Health <= 0 then return true end
+    -- During the 10-second start countdown everyone alive stays role-coloured;
+    -- do not mix gray lobby flags into the starting state.
+    if roundState == "starting" then return false end
+    -- After the round starts, a player who is individually in the lobby or
+    -- spectating is gray even when other players remain in the round.
+    return roundState ~= "playing" or playerIsInLobby(player)
 end
 function playerESPColor(player, role)
     return playerESPInactive(player) and ESP_INACTIVE_COLOR or roleColor(role)
@@ -1771,41 +1788,47 @@ function interpolateProfile(ping)
         H = math.floor(mix("H") + 0.5), V = math.floor(mix("V") + 0.5),
         X = math.floor(mix("X") + 0.5), Y = math.floor(mix("Y") + 0.5), Z = math.floor(mix("Z") + 0.5) }
 end
-function autoTuneForPing()
-    if not config.prioritizePing then return end
-    local now = os.clock()
-    if now - lastAutoTune < 0.4 then return end
-    lastAutoTune = now
-    local pingMs = math.clamp(math.floor(cachedPing * 1000 + 0.5), 5, 350)
-    if config.manualPingMs ~= pingMs then
-        config.manualPingMs = pingMs
-        local control = revertControls.manualPingMs
+local function syncAutoPing(settings, controlKey, pingMs)
+    if not settings or not settings.prioritizePing then return end
+    if settings.manualPingMs ~= pingMs then
+        settings.manualPingMs = pingMs
+        local control = revertControls[controlKey]
         if type(control) == "table" and type(control.SetValue) == "function" then pcall(control.SetValue, control, pingMs)
         elseif type(control) == "function" then pcall(control, pingMs) end
     end
 end
-function leadTime()
+function autoTuneForPing()
+    local now = os.clock()
+    if now - lastAutoTune < 0.4 then return end
+    lastAutoTune = now
+    local pingMs = math.clamp(math.floor(cachedPing * 1000 + 0.5), 5, 350)
+    syncAutoPing(config, "manualPingMs", pingMs)
+    syncAutoPing(config.knifeAim, "knifeManualPingMs", pingMs)
+end
+function leadTime(profile)
+    local settings = profile == "knife" and config.knifeAim or config
     local prediction
-    if config.adaptive then
-        local ping = config.prioritizePing and cachedPing or (config.manualPingMs / 1000)
-        prediction = ping + config.extraLead
-        if config.predictLag then
-            local samplingDelay = math.clamp(config.predictionIntervalMs / 2000, 0, 0.05)
+    if settings.adaptive then
+        local ping = settings.prioritizePing and cachedPing or (settings.manualPingMs / 1000)
+        prediction = ping + settings.extraLead
+        if settings.predictLag then
+            local samplingDelay = math.clamp(settings.predictionIntervalMs / 2000, 0, 0.05)
             prediction = prediction + samplingDelay + math.max(0, ping - 0.10) * 0.15
         end
     else
-        prediction = config.fixedLead
+        prediction = settings.fixedLead
     end
-    return math.clamp(prediction, 0.02, math.min(config.maxLead, config.maxSimulationMs / 1000))
+    return math.clamp(prediction, 0.02, math.min(settings.maxLead, settings.maxSimulationMs / 1000))
 end
-function sampleMotion(part)
+function sampleMotion(part, settings)
+    settings = settings or config
     local now = os.clock()
     if motionPart ~= part then
         motionPart = part; motionSamples = {}; measuredVelocity = part.AssemblyLinearVelocity
         previousEstimatedVelocity = measuredVelocity; estimatedAcceleration = Vector3.zero
     end
     local last = motionSamples[#motionSamples]
-    if not last or now - last.time >= math.max(0.016, config.predictionIntervalMs / 1000) then
+    if not last or now - last.time >= math.max(0.016, settings.predictionIntervalMs / 1000) then
         motionSamples[#motionSamples + 1] = { position = part.Position, time = now }
         while #motionSamples > 8 or (#motionSamples > 2 and now - motionSamples[1].time > 0.35) do table.remove(motionSamples, 1) end
         if #motionSamples >= 2 then
@@ -1860,17 +1883,18 @@ function calculateAim(part)
     return part.Position + displacement + offset
 end
 function calculateKnifeAim(part, origin)
-    sampleMotion(part)
+    local settings = config.knifeAim
+    sampleMotion(part, settings)
     local assembly = part.AssemblyLinearVelocity
     local velocity = assembly
-    if config.predictLag and motionPart == part and #motionSamples >= 2 then velocity = assembly:Lerp(measuredVelocity, 0.65) end
-    local horizontal = config.horizontalMultiplier / 100
-    local vertical = config.verticalMultiplier / 100
-    local predictedVelocity = Vector3.new(velocity.X * horizontal, config.predictJump and velocity.Y * vertical or 0, velocity.Z * horizontal)
+    if settings.predictLag and motionPart == part and #motionSamples >= 2 then velocity = assembly:Lerp(measuredVelocity, 0.65) end
+    local horizontal = settings.horizontalMultiplier / 100
+    local vertical = settings.verticalMultiplier / 100
+    local predictedVelocity = Vector3.new(velocity.X * horizontal, settings.predictJump and velocity.Y * vertical or 0, velocity.Z * horizontal)
     local distance = (part.Position - origin).Magnitude
     local travelTime = math.clamp(distance / 125, 0, 0.55)
-    local time = math.clamp(leadTime() + travelTime, 0.03, 0.7)
-    local offset = Vector3.new(part.Size.X * config.offsetX / 100, part.Size.Y * config.offsetY / 100, part.Size.Z * config.offsetZ / 100)
+    local time = math.clamp(leadTime("knife") + travelTime, 0.03, 0.7)
+    local offset = Vector3.new(part.Size.X * settings.offsetX / 100, part.Size.Y * settings.offsetY / 100, part.Size.Z * settings.offsetZ / 100)
     return part.Position + predictedVelocity * time + offset
 end
 local wallCheckParams = RaycastParams.new()
@@ -1888,18 +1912,19 @@ end
 
 --=================================================== REMOTE MATCHERS
 function knifeRemote(remote, args)
-    -- MM2's working throw path sends two CFrames through KnifeThrown.
+    -- Confirmed client protocol from the captured call:
+    -- Workspace.<LocalPlayer>.Knife.Events.KnifeThrown:FireServer(CFrame, CFrame).
     if not config.knifeEnabled or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if remote.Name ~= "KnifeThrown" then return false end
     if typeof(args[1]) ~= "CFrame" or typeof(args[2]) ~= "CFrame" then return false end
     local character = LocalPlayer.Character
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
     local knife = character and character:FindFirstChild("Knife")
     if knife and remote:IsDescendantOf(knife) then return true end
     if character and remote:IsDescendantOf(character) then return true end
-    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-    local gameplay = remotes and remotes:FindFirstChild("Gameplay")
-    return gameplay ~= nil and remote:IsDescendantOf(gameplay)
+    if backpack and remote:IsDescendantOf(backpack) then return true end
+    return false
 end
 local function localGunTool()
     local character = LocalPlayer.Character
@@ -1917,10 +1942,12 @@ end
 function shotRemote(remote, args)
     if not config.enabled or args.n < 1 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
-    -- Exact current path: Players.LocalPlayer.Backpack/Character.Gun.Shoot.
-    -- Check both copies because the tool can move between Backpack and Character
-    -- during equip/unequip while the hook remains installed.
-    return remote.Name == "Shoot" and remoteBelongsToLocalGun(remote)
+    -- Prefer the documented Shoot child in Backpack/Character. This client also
+    -- has an equipped-Gun variant whose firing RemoteEvent is obfuscated and
+    -- sends exactly two CFrames; accept that verified fallback as well.
+    if not remoteBelongsToLocalGun(remote) then return false end
+    if remote.Name == "Shoot" then return true end
+    return args.n >= 2 and typeof(args[1]) == "CFrame" and typeof(args[2]) == "CFrame"
 end
 local function fallbackGunOrigin()
     local gun = localGunTool()
@@ -1954,8 +1981,22 @@ function redirect(remote, args)
     else
         return
     end
-    if not part then return end
+    if not part or typeof(part) ~= "Instance" or not part:IsA("BasePart") then return end
     if useWallCheck and not targetVisible(part, true) then return end
+
+    -- KnifeThrown in this client is a strict two-CFrame protocol. Handle it
+    -- separately so no string/bool/metadata argument can be mistaken for the
+    -- destination and so ShiftLock keeps a valid direction CFrame.
+    if isKnife then
+        local origin = args[1].Position
+        local aim = calculateKnifeAim(part, origin)
+        if config.alignDirection and (aim - origin).Magnitude > 0.01 then
+            args[1] = CFrame.lookAt(origin, aim)
+        end
+        args[2] = CFrame.new(aim)
+        redirected = redirected + 1
+        return
+    end
 
     -- The supplied Shoot remote is a Vector3 protocol in the current client,
     -- while older Gun tools used two CFrames. Find the origin/aim pair without
@@ -2098,9 +2139,12 @@ function fireGunAt(player)
         local aim = calculateAim(part)
         local handle = gun and gun:FindFirstChild("Handle", true)
         local origin = handle and handle.Position or camera.CFrame.Position
-        -- Shoot Murder uses the same Gun.Shoot remote as normal firing. Use
-        -- the selected protocol so the button and Silent Aim share one path.
-        if config.shotMethod == "CFrame" then
+        -- Shoot Murder uses Gun.Shoot when present. The captured equipped
+        -- client also exposes an obfuscated Gun remote with the verified
+        -- two-CFrame protocol, so use that protocol automatically for the
+        -- fallback instead of sending Vector3 values to a CFrame remote.
+        local equippedGunProtocol = remote.Name ~= "Shoot" and remoteBelongsToLocalGun(remote)
+        if config.shotMethod == "CFrame" or equippedGunProtocol then
             remote:FireServer(CFrame.lookAt(origin, aim), CFrame.new(aim))
         else
             remote:FireServer(origin, aim)
@@ -2349,7 +2393,9 @@ function setRoundTimerVisible(value)
     roundTimerGui.BackgroundColor3 = C.panel
     roundTimerGui.BackgroundTransparency = .12
     roundTimerGui.TextColor3 = C.text
-    roundTimerGui.Text = (roundState == "waiting" or roundState == "unknown") and "WAITING" or "STARTING"
+    -- Never leave a stale STARTING placeholder on creation; the loop below
+    -- replaces it with the actual seconds as soon as the client exposes them.
+    roundTimerGui.Text = "WAITING"
     roundTimerGui.TextSize = 20
     roundTimerGui.Font = Enum.Font.GothamBold
     roundTimerGui.ZIndex = 900
@@ -2359,6 +2405,7 @@ function setRoundTimerVisible(value)
         local getTimer
         while roundTimerGui == thisGui and thisGui.Parent do
             local found, bestScore, phase, discoveredSeconds
+            local explicitStarting = false
             local activeRound = roundState ~= "waiting" or (os.clock() - lastRoundResetAt > 1)
 
             -- Do not read stale GetTimer/UI values while the round is over.
@@ -2400,6 +2447,10 @@ function setRoundTimerVisible(value)
                                 local lowerName = string.lower(v.Name)
                                 local parentName = v.Parent and string.lower(v.Parent.Name) or ""
                                 local hint = lowerName .. " " .. parentName
+                                local rawLabel = string.lower(tostring(v.Text or ""))
+                                if string.find(rawLabel, "starting", 1, true) or string.find(rawLabel, "countdown", 1, true) then
+                                    explicitStarting = true
+                                end
                                 local timerText, timerSeconds, score = parseTimerText(v.Text, hint)
                                 if timerText and timerSeconds and timerSeconds > 0 and (not bestScore or score > bestScore) then
                                     found, bestScore, discoveredSeconds = timerText, score, timerSeconds
@@ -2407,17 +2458,20 @@ function setRoundTimerVisible(value)
                             end
                         end
                     end
-                    if found and (roundState == "unknown" or roundState == "waiting") then
-                        if discoveredSeconds and discoveredSeconds <= 15 then
-                            roundState = "starting"
-                            roundPendingStart = roundPendingStart or (os.clock() + discoveredSeconds)
-                        else
-                            roundState = "playing"
-                            if discoveredSeconds and not roundTimerEndsAt then
-                                roundTimerEndsAt = os.clock() + discoveredSeconds
-                            end
-                        end
+                    if explicitStarting and (roundState == "unknown" or roundState == "waiting") then
+                        -- The HUD explicitly says STARTING: keep alive players
+                        -- role-coloured until RoundStart arrives.
+                        roundState = "starting"
+                    elseif found and (roundState == "unknown" or roundState == "waiting") then
+                        -- A positive timer is authoritative. Do not infer a
+                        -- separate STARTING state from a small number unless the
+                        -- HUD explicitly reports that phase.
+                        roundState = "playing"
                     end
+                    if discoveredSeconds and (roundState == "starting" or roundState == "playing") and not roundTimerEndsAt then
+                        roundTimerEndsAt = os.clock() + discoveredSeconds
+                    end
+                    if explicitStarting and not found then found = "STARTING" end
                 end
             end
 
@@ -2430,7 +2484,7 @@ function setRoundTimerVisible(value)
                     beginRoundTimer()
                     found = "3m 00s"
                 end
-            elseif roundState == "playing" and roundTimerEndsAt then
+            elseif (roundState == "starting" or roundState == "playing") and roundTimerEndsAt then
                 local left = math.max(0, math.floor(roundTimerEndsAt - os.clock() + .5))
                 if left > 0 then
                     if not found then found = string.format("%dm %02ds", math.floor(left / 60), left % 60) end
@@ -2896,6 +2950,23 @@ function exportRevertConfig()
             maxLead = config.maxLead, alignDirection = config.alignDirection,
             knifeWallCheck = config.knifeWallCheck,
             knifePrioritizeSheriff = config.knifePrioritizeSheriff, knifeAutoThrow = config.knifeAutoThrow,
+            knifeAim = {
+                adaptive = config.knifeAim.adaptive,
+                fixedLead = config.knifeAim.fixedLead,
+                extraLead = config.knifeAim.extraLead,
+                maxLead = config.knifeAim.maxLead,
+                prioritizePing = config.knifeAim.prioritizePing,
+                predictJump = config.knifeAim.predictJump,
+                predictLag = config.knifeAim.predictLag,
+                maxSimulationMs = config.knifeAim.maxSimulationMs,
+                predictionIntervalMs = config.knifeAim.predictionIntervalMs,
+                manualPingMs = config.knifeAim.manualPingMs,
+                offsetX = config.knifeAim.offsetX,
+                offsetY = config.knifeAim.offsetY,
+                offsetZ = config.knifeAim.offsetZ,
+                horizontalMultiplier = config.knifeAim.horizontalMultiplier,
+                verticalMultiplier = config.knifeAim.verticalMultiplier,
+            },
         },
         author = LocalPlayer.Name,
         game = "Murder Mystery 2",
@@ -2932,6 +3003,15 @@ function applyRevertConfig(data)
         for _, key in ipairs({ "autoFire", "wallCheck", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
                                "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow" }) do
             if typeof(noir[key]) == "boolean" then config[key] = noir[key] end
+        end
+        local knifeAim = noir.knifeAim
+        if typeof(knifeAim) == "table" then
+            for _, key in ipairs({ "fixedLead", "extraLead", "maxLead", "maxSimulationMs", "predictionIntervalMs", "manualPingMs", "offsetX", "offsetY", "offsetZ", "horizontalMultiplier", "verticalMultiplier" }) do
+                if typeof(knifeAim[key]) == "number" then config.knifeAim[key] = knifeAim[key] end
+            end
+            for _, key in ipairs({ "adaptive", "prioritizePing", "predictJump", "predictLag" }) do
+                if typeof(knifeAim[key]) == "boolean" then config.knifeAim[key] = knifeAim[key] end
+            end
         end
     end
     return true
@@ -3041,7 +3121,24 @@ flingSettings:AddSlider("Fling Duration", 1, 5, 2, function(v) utility.flingDura
 flingSettings:AddSlider("Fling Power", 1, 3, 1, function(v) utility.flingPower = v end)
 
 -- Silent Aim
+function addAimTrackedToggle(section, key, label, callback)
+    local control = section:AddToggle(label, function(value)
+        revertToggleStates[key] = value
+        callback(value)
+    end)
+    revertControls[key] = control
+    return control
+end
+function addAimTrackedSlider(section, key, label, minimum, maximum, default, callback)
+    local control = section:AddSlider(label, minimum, maximum, default, function(value)
+        callback(tonumber(value) or default)
+    end)
+    revertControls[key] = control
+    return control
+end
+
 local main = tab:AddSection("Silent Aim", "Gun aim assist")
+main:AddParagraph("GUN SILENT AIM", "Independent gun prediction profile for Gun.Shoot and the equipped weapon remote.")
 main:AddToggle("Enabled", toggle)
 main:AddDropdown("Shot Method", { "Remote", "CFrame" }, function(v)
     config.shotMethod = (v == "CFrame") and "CFrame" or "Remote"
@@ -3051,9 +3148,25 @@ main:AddKeybind("Toggle Key", "None", function(k) config.toggleKey = k end)
 main:AddToggle("Wall Check", function(v) config.wallCheck = v end)
 main:AddToggle("Show Shoot Murder Button", setShootButtonVisible)
 main:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton = v end)
+addAimTrackedToggle(main, "prioritizePing", "Prioritize Ping (Gun)", function(value) config.prioritizePing = value end)
+addAimTrackedToggle(main, "predictJump", "Predict Jump (Gun)", function(value) config.predictJump = value end)
+addAimTrackedToggle(main, "predictLag", "Predict Lag (Gun)", function(value) config.predictLag = value end)
+addAimTrackedToggle(main, "adaptive", "Adaptive Lead (Gun)", function(value) config.adaptive = value end)
+addAimTrackedSlider(main, "fixedLeadMs", "Fixed Lead (Gun, ms)", 20, 500, math.floor(config.fixedLead * 1000 + 0.5), function(value) config.fixedLead = value / 1000 end)
+addAimTrackedSlider(main, "extraLeadMs", "Extra Lead (Gun, ms)", 0, 300, math.floor(config.extraLead * 1000 + 0.5), function(value) config.extraLead = value / 1000 end)
+addAimTrackedSlider(main, "maxLeadMs", "Maximum Lead (Gun, ms)", 20, 1000, math.floor(config.maxLead * 1000 + 0.5), function(value) config.maxLead = value / 1000 end)
+addAimTrackedSlider(main, "maxSimulationMs", "Prediction Max Simulation (Gun, ms)", 20, 300, config.maxSimulationMs, function(value) config.maxSimulationMs = value end)
+addAimTrackedSlider(main, "predictionIntervalMs", "Prediction Interval (Gun, ms)", 1, 100, config.predictionIntervalMs, function(value) config.predictionIntervalMs = value end)
+addAimTrackedSlider(main, "manualPingMs", "Prediction Ping (Gun, ms)", 10, 350, config.manualPingMs, function(value) config.manualPingMs = value end)
+addAimTrackedSlider(main, "offsetX", "X Position Offset (Gun, %)", -100, 100, config.offsetX, function(value) config.offsetX = value end)
+addAimTrackedSlider(main, "offsetY", "Y Position Offset (Gun, %)", -100, 100, config.offsetY, function(value) config.offsetY = value end)
+addAimTrackedSlider(main, "offsetZ", "Z Position Offset (Gun, %)", -100, 100, config.offsetZ, function(value) config.offsetZ = value end)
+addAimTrackedSlider(main, "horizontalMultiplier", "Horizontal Multiplier (Gun, %)", 0, 400, config.horizontalMultiplier, function(value) config.horizontalMultiplier = value end)
+addAimTrackedSlider(main, "verticalMultiplier", "Vertical Multiplier (Gun, %)", 0, 400, config.verticalMultiplier, function(value) config.verticalMultiplier = value end)
 
 -- Knife Silent Aim
 local knifeSection = tab:AddSection("Knife Silent Aim", "Knife throw / stab aim assist")
+knifeSection:AddParagraph("KNIFE SILENT AIM", "Independent knife prediction profile for the KnifeThrown two-CFrame remote.")
 knifeSection:AddToggle("Knife Silent Aim", function(v)
     config.knifeEnabled = v
     if v then
@@ -3064,6 +3177,21 @@ end)
 knifeSection:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck = v end)
 knifeSection:AddToggle("Prioritize Sheriff", function(v) config.knifePrioritizeSheriff = v end)
 knifeSection:AddToggle("Auto Throw Knife", function(v) config.knifeAutoThrow = v end)
+addAimTrackedToggle(knifeSection, "knifePrioritizePing", "Prioritize Ping (Knife)", function(value) config.knifeAim.prioritizePing = value end)
+addAimTrackedToggle(knifeSection, "knifePredictJump", "Predict Jump (Knife)", function(value) config.knifeAim.predictJump = value end)
+addAimTrackedToggle(knifeSection, "knifePredictLag", "Predict Lag (Knife)", function(value) config.knifeAim.predictLag = value end)
+addAimTrackedToggle(knifeSection, "knifeAdaptive", "Adaptive Lead (Knife)", function(value) config.knifeAim.adaptive = value end)
+addAimTrackedSlider(knifeSection, "knifeFixedLeadMs", "Fixed Lead (Knife, ms)", 20, 500, math.floor(config.knifeAim.fixedLead * 1000 + 0.5), function(value) config.knifeAim.fixedLead = value / 1000 end)
+addAimTrackedSlider(knifeSection, "knifeExtraLeadMs", "Extra Lead (Knife, ms)", 0, 300, math.floor(config.knifeAim.extraLead * 1000 + 0.5), function(value) config.knifeAim.extraLead = value / 1000 end)
+addAimTrackedSlider(knifeSection, "knifeMaxLeadMs", "Maximum Lead (Knife, ms)", 20, 1000, math.floor(config.knifeAim.maxLead * 1000 + 0.5), function(value) config.knifeAim.maxLead = value / 1000 end)
+addAimTrackedSlider(knifeSection, "knifeMaxSimulationMs", "Prediction Max Simulation (Knife, ms)", 20, 300, config.knifeAim.maxSimulationMs, function(value) config.knifeAim.maxSimulationMs = value end)
+addAimTrackedSlider(knifeSection, "knifePredictionIntervalMs", "Prediction Interval (Knife, ms)", 1, 100, config.knifeAim.predictionIntervalMs, function(value) config.knifeAim.predictionIntervalMs = value end)
+addAimTrackedSlider(knifeSection, "knifeManualPingMs", "Prediction Ping (Knife, ms)", 10, 350, config.knifeAim.manualPingMs, function(value) config.knifeAim.manualPingMs = value end)
+addAimTrackedSlider(knifeSection, "knifeOffsetX", "X Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetX, function(value) config.knifeAim.offsetX = value end)
+addAimTrackedSlider(knifeSection, "knifeOffsetY", "Y Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetY, function(value) config.knifeAim.offsetY = value end)
+addAimTrackedSlider(knifeSection, "knifeOffsetZ", "Z Position Offset (Knife, %)", -100, 100, config.knifeAim.offsetZ, function(value) config.knifeAim.offsetZ = value end)
+addAimTrackedSlider(knifeSection, "knifeHorizontalMultiplier", "Horizontal Multiplier (Knife, %)", 0, 400, config.knifeAim.horizontalMultiplier, function(value) config.knifeAim.horizontalMultiplier = value end)
+addAimTrackedSlider(knifeSection, "knifeVerticalMultiplier", "Vertical Multiplier (Knife, %)", 0, 400, config.knifeAim.verticalMultiplier, function(value) config.knifeAim.verticalMultiplier = value end)
 
 -- VISUAL • PLAYER OUTLINE
 local playerOutline = tab:AddSection("VISUAL \u{2022} PLAYER OUTLINE", "Role-colored silhouettes")
@@ -3101,7 +3229,7 @@ objectBox:AddToggle("Throwing Knives", function(v) config.boxThrowingKnives = v;
 objectBox:AddToggle("Coins", function(v) config.boxCoins = v; refreshObjectESP() end)
 
 -- NOIR CONFIG
-local revert = tab:AddSection("NOIR CONFIG", "Standalone Silent Aim settings; .preset-compatible")
+local revert = tab:AddSection("NOIR CONFIG", "Preset storage for the separate Gun and Knife Silent Aim profiles")
 presetDropdown = revert:AddDropdown("Your Presets", presetNames(), function(value) presetName = cleanPresetName(value) end)
 revert:AddTextBox("Preset Name", function(value) presetName = cleanPresetName(value) end)
 revert:AddButton("Save Preset", savePreset)
@@ -3110,47 +3238,37 @@ revert:AddButton("Refresh Presets", function()
     if presetDropdown and presetDropdown.Refresh then presetDropdown:Refresh(presetNames(), cleanPresetName(presetName)) end
 end)
 
-function addTrackedToggle(key, label, callback)
-    local control = revert:AddToggle(label, function(value)
-        revertToggleStates[key] = value
-        callback(value)
-    end)
-    revertControls[key] = control
-    return control
-end
-function addTrackedSlider(key, label, minimum, maximum, default, callback)
-    local control = revert:AddSlider(label, minimum, maximum, default, function(value)
-        callback(tonumber(value) or default)
-    end)
-    revertControls[key] = control
-    return control
-end
-
-addTrackedToggle("prioritizePing", "Prioritize Your Ping", function(value) config.prioritizePing = value end)
-addTrackedToggle("predictJump", "Predict Jump", function(value) config.predictJump = value end)
-addTrackedToggle("predictLag", "Predict Lag", function(value) config.predictLag = value end)
-addTrackedToggle("adaptive", "Adaptive Lead", function(value) config.adaptive = value end)
-addTrackedSlider("maxSimulationMs", "Prediction Max Simulation Time", 20, 300, 180, function(value) config.maxSimulationMs = value end)
-addTrackedSlider("predictionIntervalMs", "Prediction Interval", 1, 100, 72, function(value) config.predictionIntervalMs = value end)
-addTrackedSlider("manualPingMs", "Prediction Ping", 10, 350, 80, function(value) config.manualPingMs = value end)
-addTrackedSlider("offsetX", "X Position Offset (%)", -100, 100, 0, function(value) config.offsetX = value end)
-addTrackedSlider("offsetY", "Y Position Offset (%)", -100, 100, 0, function(value) config.offsetY = value end)
-addTrackedSlider("offsetZ", "Z Position Offset (%)", -100, 100, 0, function(value) config.offsetZ = value end)
-addTrackedSlider("horizontalMultiplier", "Prediction Horizontal Multiplier (%)", 0, 400, 100, function(value) config.horizontalMultiplier = value end)
-addTrackedSlider("verticalMultiplier", "Prediction Vertical Multiplier (%)", 0, 400, 100, function(value) config.verticalMultiplier = value end)
-
 syncRevertControls = function(syncToggles)
     if syncToggles ~= false then
-        for _, key in ipairs({ "prioritizePing", "predictJump", "predictLag", "adaptive" }) do
-            local desired = config[key] == true
+        for _, item in ipairs({
+            { "prioritizePing", config.prioritizePing }, { "predictJump", config.predictJump },
+            { "predictLag", config.predictLag }, { "adaptive", config.adaptive },
+            { "knifePrioritizePing", config.knifeAim.prioritizePing }, { "knifePredictJump", config.knifeAim.predictJump },
+            { "knifePredictLag", config.knifeAim.predictLag }, { "knifeAdaptive", config.knifeAim.adaptive },
+        }) do
+            local key, desired = item[1], item[2] == true
             local toggleControl = revertControls[key]
             if type(toggleControl) == "function" and revertToggleStates[key] ~= desired then pcall(toggleControl) end
         end
     end
-    for _, key in ipairs({ "maxSimulationMs", "predictionIntervalMs", "manualPingMs", "offsetX", "offsetY", "offsetZ", "horizontalMultiplier", "verticalMultiplier" }) do
+    local sliderValues = {
+        maxSimulationMs = config.maxSimulationMs, predictionIntervalMs = config.predictionIntervalMs,
+        manualPingMs = config.manualPingMs, offsetX = config.offsetX, offsetY = config.offsetY,
+        offsetZ = config.offsetZ, horizontalMultiplier = config.horizontalMultiplier,
+        verticalMultiplier = config.verticalMultiplier, fixedLeadMs = config.fixedLead * 1000,
+        extraLeadMs = config.extraLead * 1000, maxLeadMs = config.maxLead * 1000,
+        knifeMaxSimulationMs = config.knifeAim.maxSimulationMs, knifePredictionIntervalMs = config.knifeAim.predictionIntervalMs,
+        knifeManualPingMs = config.knifeAim.manualPingMs, knifeOffsetX = config.knifeAim.offsetX,
+        knifeOffsetY = config.knifeAim.offsetY, knifeOffsetZ = config.knifeAim.offsetZ,
+        knifeHorizontalMultiplier = config.knifeAim.horizontalMultiplier,
+        knifeVerticalMultiplier = config.knifeAim.verticalMultiplier,
+        knifeFixedLeadMs = config.knifeAim.fixedLead * 1000,
+        knifeExtraLeadMs = config.knifeAim.extraLead * 1000, knifeMaxLeadMs = config.knifeAim.maxLead * 1000,
+    }
+    for key, value in pairs(sliderValues) do
         local control = revertControls[key]
-        if type(control) == "table" and type(control.SetValue) == "function" then pcall(control.SetValue, control, config[key])
-        elseif type(control) == "function" then pcall(control, config[key]) end
+        if type(control) == "table" and type(control.SetValue) == "function" then pcall(control.SetValue, control, value)
+        elseif type(control) == "function" then pcall(control, value) end
     end
 end
 
@@ -3176,6 +3294,10 @@ end
 connectRemote("PlayerDataChanged", function(data) consumeData(data) end)
 connectRemote("RoundStart", function(timerValue)
     local roundLength = tonumber(timerValue)
+    if not roundLength then
+        local _, discovered = decodeTimerResult(timerValue)
+        roundLength = discovered
+    end
     beginRoundTimer(roundLength)
     murderer, sheriff, hero = nil, nil, nil
     table.clear(roleCache); table.clear(announcedRoles)
@@ -3219,7 +3341,8 @@ task.spawn(function()
         -- Only sample motion while an aim feature is active; run at ~30 Hz instead of every frame.
         if config.enabled or config.knifeEnabled then
             local part = targetPart()
-            if part then sampleMotion(part) end
+            local settings = config.enabled and config or config.knifeAim
+            if part then sampleMotion(part, settings) end
         end
         task.wait(1 / 30)
     end
