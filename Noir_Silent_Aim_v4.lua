@@ -180,6 +180,7 @@ text(sidebar, "R O B L O X   H U B", 10, UDim2.fromOffset(28, 76), true)
 do
     local navDefs = {
         { "home",   16898613509, Vector2.new(820, 147), "Home" },
+        { "main",   16898613509, Vector2.new(820, 147), "Main" },
         { "aim",    16898613777, Vector2.new(967, 759), "Combat" },
         { "world",  16898613509, Vector2.new(771, 563), "World" },
         { "visual", 16898613353, Vector2.new(771, 563), "Visuals" },
@@ -837,6 +838,7 @@ local config = {
     toggleKey = "None",
     autoFire = false,
     autoFireKey = "None",
+    shotMethod = "Remote",            -- Remote = Vector3/CFrame remote rewrite; CFrame = only CFrame protocol
     wallCheck = false,
     ignoreDead = true,
     ignoreFriends = false,
@@ -1647,6 +1649,7 @@ end
 function passesFilters(player)
     if player == nil or player == LocalPlayer then return false end
     if not validTarget(player) then return false end
+    if playerIsInLobby(player) then return false end
     if isFriend(player) then return false end
     if config.maxDistance > 0 and distanceTo(player) > config.maxDistance then return false end
     return true
@@ -1873,8 +1876,8 @@ end
 local wallCheckParams = RaycastParams.new()
 wallCheckParams.FilterType = Enum.RaycastFilterType.Exclude
 wallCheckParams.IgnoreWater = true
-function targetVisible(part)
-    if not config.wallCheck then return true end
+function targetVisible(part, forceWallCheck)
+    if not (forceWallCheck or config.wallCheck) then return true end
     local character = LocalPlayer.Character
     local originPart = character and (character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart"))
     if not originPart or not part then return false end
@@ -1892,20 +1895,59 @@ function knifeRemote(remote, args)
     if typeof(args[1]) ~= "CFrame" or typeof(args[2]) ~= "CFrame" then return false end
     local character = LocalPlayer.Character
     local knife = character and character:FindFirstChild("Knife")
-    return knife ~= nil and remote:IsDescendantOf(knife)
+    if knife and remote:IsDescendantOf(knife) then return true end
+    if character and remote:IsDescendantOf(character) then return true end
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    local gameplay = remotes and remotes:FindFirstChild("Gameplay")
+    return gameplay ~= nil and remote:IsDescendantOf(gameplay)
+end
+local function localGunTool()
+    local character = LocalPlayer.Character
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    return (character and character:FindFirstChild("Gun")) or (backpack and backpack:FindFirstChild("Gun"))
+end
+local function remoteBelongsToLocalGun(remote)
+    local character = LocalPlayer.Character
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local characterGun = character and character:FindFirstChild("Gun")
+    local backpackGun = backpack and backpack:FindFirstChild("Gun")
+    return (characterGun and remote:IsDescendantOf(characterGun))
+        or (backpackGun and remote:IsDescendantOf(backpackGun))
 end
 function shotRemote(remote, args)
-    if not config.enabled or args.n < 2 then return false end
+    if not config.enabled or args.n < 1 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
-    if typeof(args[1]) ~= "CFrame" or typeof(args[2]) ~= "CFrame" then return false end
+    -- Exact current path: Players.LocalPlayer.Backpack/Character.Gun.Shoot.
+    -- Check both copies because the tool can move between Backpack and Character
+    -- during equip/unequip while the hook remains installed.
+    return remote.Name == "Shoot" and remoteBelongsToLocalGun(remote)
+end
+local function fallbackGunOrigin()
+    local gun = localGunTool()
+    local handle = gun and gun:FindFirstChild("Handle", true)
+    if handle and handle:IsA("BasePart") then return handle.Position end
     local character = LocalPlayer.Character
-    local gun = character and character:FindFirstChild("Gun")
-    return gun ~= nil and remote:IsDescendantOf(gun)
+    local root = character and (character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart"))
+    return root and root.Position or nil
+end
+local function vectorOrCFramePosition(value)
+    if typeof(value) == "CFrame" then return value.Position end
+    if typeof(value) == "Vector3" then return value end
+    return nil
+end
+local function hasCFrameArgument(args)
+    for index = 1, args.n do
+        if typeof(args[index]) == "CFrame" then return true end
+    end
+    return false
 end
 function redirect(remote, args)
     local part, useWallCheck, isKnife = nil, false, false
     if shotRemote(remote, args) then
         if config.aimKey ~= "None" and not aimHeld then return end
+        -- CFrame mode intentionally only rewrites the CFrame protocol. Remote
+        -- mode supports both the current Vector3 protocol and old CFrame pairs.
+        if config.shotMethod == "CFrame" and not hasCFrameArgument(args) then return end
         part = targetPart(); useWallCheck = config.wallCheck
     elseif knifeRemote(remote, args) then
         part = knifeTargetPart(); useWallCheck = config.knifeWallCheck; isKnife = true
@@ -1913,21 +1955,85 @@ function redirect(remote, args)
         return
     end
     if not part then return end
-    if useWallCheck and not targetVisible(part) then return end
-    local origin = args[1].Position
-    local aim = isKnife and calculateKnifeAim(part, origin) or calculateAim(part)
-    if config.alignDirection and (aim - origin).Magnitude > 0.01 then
-        args[1] = CFrame.lookAt(origin, aim)
+    if useWallCheck and not targetVisible(part, true) then return end
+
+    -- The supplied Shoot remote is a Vector3 protocol in the current client,
+    -- while older Gun tools used two CFrames. Find the origin/aim pair without
+    -- disturbing Handle/target metadata arguments.
+    local numericIndices = {}
+    for index = 1, args.n do
+        if vectorOrCFramePosition(args[index]) then numericIndices[#numericIndices + 1] = index end
     end
-    args[2] = CFrame.new(aim)
+    if #numericIndices == 0 then return end
+    local originIndex = numericIndices[1]
+    local aimIndex = numericIndices[2]
+    local firstValue = args[originIndex]
+    local secondValue = aimIndex and args[aimIndex]
+    local fallbackOrigin = fallbackGunOrigin()
+    -- Also accept the alternate Vector3 order: direction, origin.
+    if aimIndex and typeof(firstValue) == "Vector3" and typeof(secondValue) == "Vector3" then
+        if firstValue.Magnitude <= 1.5 and secondValue.Magnitude > 1.5 then
+            originIndex, aimIndex = numericIndices[2], numericIndices[1]
+        elseif fallbackOrigin then
+            local firstDistance = (firstValue - fallbackOrigin).Magnitude
+            local secondDistance = (secondValue - fallbackOrigin).Magnitude
+            if secondDistance + 0.5 < firstDistance then
+                originIndex, aimIndex = numericIndices[2], numericIndices[1]
+            end
+        end
+    end
+    local origin = vectorOrCFramePosition(args[originIndex])
+    if not aimIndex then
+        aimIndex = originIndex
+        origin = fallbackOrigin or origin
+    end
+    if not origin then return end
+
+    local aim = isKnife and calculateKnifeAim(part, origin) or calculateAim(part)
+    local originalAim = args[aimIndex]
+    if typeof(originalAim) == "CFrame" then
+        args[aimIndex] = CFrame.new(aim)
+    elseif typeof(originalAim) == "Vector3" then
+        -- A few builds send a unit direction instead of a world-space hit
+        -- point. Preserve that protocol when the original vector is tiny.
+        if originalAim.Magnitude <= 1.5 and (aim - origin).Magnitude > 0.01 then
+            args[aimIndex] = (aim - origin).Unit
+        else
+            args[aimIndex] = aim
+        end
+    end
+    if config.alignDirection and typeof(args[originIndex]) == "CFrame" and (aim - origin).Magnitude > 0.01 then
+        args[originIndex] = CFrame.lookAt(origin, aim)
+    end
     redirected = redirected + 1
 end
 
 --======================================================== HOOK SETUP
 function installHook()
     if hooked then return true end
-    if type(hookfunction) ~= "function" then notify("hookfunction is unavailable", 6); return false end
     local wrap = type(newcclosure) == "function" and newcclosure or function(callback) return callback end
+
+    -- Prefer __namecall: this catches the exact Gun.Shoot:FireServer(...) call
+    -- even when the executor does not expose the RemoteEvent's C closure.
+    if type(hookmetamethod) == "function" and type(getnamecallmethod) == "function" then
+        local originalNamecall
+        local ok, err = pcall(function()
+            originalNamecall = hookmetamethod(game, "__namecall", wrap(function(self, ...)
+                local args = table.pack(...)
+                if getnamecallmethod() == "FireServer" then
+                    pcall(redirect, self, args)
+                end
+                return originalNamecall(self, table.unpack(args, 1, args.n))
+            end))
+        end)
+        if ok and type(originalNamecall) == "function" then
+            hooked = true
+            return true
+        end
+    end
+
+    -- Compatibility fallback for executors that only provide hookfunction.
+    if type(hookfunction) ~= "function" then notify("Remote hook is unavailable", 6); return false end
     local probe = Instance.new("RemoteEvent")
     local original
     local ok, err = pcall(function()
@@ -1955,9 +2061,10 @@ end
 
 --======================================================= FIRE GUN
 function findGunRemote()
-    local character = LocalPlayer.Character
-    local gun = character and character:FindFirstChild("Gun")
+    local gun = localGunTool()
     if not gun then return nil end
+    local shoot = gun:FindFirstChild("Shoot", true)
+    if shoot and shoot:IsA("RemoteEvent") then return shoot end
     for _, object in ipairs(gun:GetDescendants()) do
         if object:IsA("RemoteEvent") then return object end
     end
@@ -1989,9 +2096,15 @@ function fireGunAt(player)
             sampleMotion(part)
         end
         local aim = calculateAim(part)
-        local handle = gun and gun:FindFirstChild("Handle")
+        local handle = gun and gun:FindFirstChild("Handle", true)
         local origin = handle and handle.Position or camera.CFrame.Position
-        remote:FireServer(CFrame.lookAt(origin, aim), CFrame.new(aim))
+        -- Shoot Murder uses the same Gun.Shoot remote as normal firing. Use
+        -- the selected protocol so the button and Silent Aim share one path.
+        if config.shotMethod == "CFrame" then
+            remote:FireServer(CFrame.lookAt(origin, aim), CFrame.new(aim))
+        else
+            remote:FireServer(origin, aim)
+        end
         success = true
         if autoEquipped then task.wait(0.12); if humanoid.Parent then humanoid:UnequipTools() end end
     end)
@@ -2126,9 +2239,9 @@ local fovCircle = New("Frame", { Parent = gui, AnchorPoint = Vector2.new(.5, .5)
 New("UICorner", { Parent = fovCircle, CornerRadius = UDim.new(.5, 0) })
 local fovStroke = New("UIStroke", { Parent = fovCircle, Color = Color3.fromRGB(232,232,236), Thickness = 1.5, Transparency = .35 })
 function updateFovCircle()
-    local show = config.showFov and config.fovSize > 0
-    fovCircle.Visible = show
-    if show then fovCircle.Size = UDim2.fromOffset(config.fovSize, config.fovSize) end
+    -- FOV controls were removed from Silent Aim; keep the legacy object hidden
+    -- even when an old preset contains showFov/fovSize values.
+    fovCircle.Visible = false
 end
 
 --======================================================= ROUND TIMER
@@ -2777,7 +2890,7 @@ function exportRevertConfig()
         },
         noir = {
             targetMode = config.targetMode, hitPart = config.hitPart, fovSize = config.fovSize,
-            autoFire = config.autoFire, wallCheck = config.wallCheck, ignoreDead = config.ignoreDead,
+            shotMethod = config.shotMethod, autoFire = config.autoFire, wallCheck = config.wallCheck, ignoreDead = config.ignoreDead,
             ignoreFriends = config.ignoreFriends, maxDistance = config.maxDistance,
             adaptive = config.adaptive, fixedLead = config.fixedLead, extraLead = config.extraLead,
             maxLead = config.maxLead, alignDirection = config.alignDirection,
@@ -2809,6 +2922,9 @@ function applyRevertConfig(data)
     if typeof(noir) == "table" then
         for _, key in ipairs({ "targetMode", "hitPart" }) do
             if typeof(noir[key]) == "string" then config[key] = noir[key] end
+        end
+        if noir.shotMethod == "Remote" or noir.shotMethod == "CFrame" then
+            config.shotMethod = noir.shotMethod
         end
         for _, key in ipairs({ "fovSize", "maxDistance", "fixedLead", "extraLead", "maxLead" }) do
             if typeof(noir[key]) == "number" then config[key] = noir[key] end
@@ -2927,8 +3043,9 @@ flingSettings:AddSlider("Fling Power", 1, 3, 1, function(v) utility.flingPower =
 -- Silent Aim
 local main = tab:AddSection("Silent Aim", "Gun aim assist")
 main:AddToggle("Enabled", toggle)
-main:AddSlider("FOV Size", 0, 1000, 0, function(v) config.fovSize = v; updateFovCircle() end)
-main:AddToggle("Show FOV", function(v) config.showFov = v; updateFovCircle() end)
+main:AddDropdown("Shot Method", { "Remote", "CFrame" }, function(v)
+    config.shotMethod = (v == "CFrame") and "CFrame" or "Remote"
+end)
 main:AddKeybind("Aim Key", "None", function(k) config.aimKey = k; aimHeld = (k == "None") end)
 main:AddKeybind("Toggle Key", "None", function(k) config.toggleKey = k end)
 main:AddToggle("Wall Check", function(v) config.wallCheck = v end)
@@ -2937,7 +3054,13 @@ main:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton = 
 
 -- Knife Silent Aim
 local knifeSection = tab:AddSection("Knife Silent Aim", "Knife throw / stab aim assist")
-knifeSection:AddToggle("Knife Silent Aim", function(v) config.knifeEnabled = v; if v then installHook() end end)
+knifeSection:AddToggle("Knife Silent Aim", function(v)
+    config.knifeEnabled = v
+    if v then
+        installHook()
+        task.spawn(refreshTarget)
+    end
+end)
 knifeSection:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck = v end)
 knifeSection:AddToggle("Prioritize Sheriff", function(v) config.knifePrioritizeSheriff = v end)
 knifeSection:AddToggle("Auto Throw Knife", function(v) config.knifeAutoThrow = v end)
@@ -5200,14 +5323,6 @@ local function CreateBombJumpSystem(config)
         end
     end)
     
-    section:AddSlider(displayName .. " Big Button Size", 50, 300, state.bigButtonSize, function(value)
-        state.bigButtonSize = value
-        local btn = BBSystem.Buttons[config.bigButtonId]
-        if btn then
-            btn.Size = __UD2(0, state.bigButtonSize, 0, state.bigButtonSize * 0.375)
-        end
-    end)
-    
     section:AddToggle("Enable " .. displayName .. " Bind Button", function(e)
         state.bindBtnExists = e
         if e then
@@ -5291,7 +5406,6 @@ local function CreateBombJumpSystem(config)
     ODHX.Bind(section.Name, "Enable Auto " .. displayName, "Toggle", function() return state.enabled end)
     ODHX.Bind(section.Name, "Auto-Get " .. bombName, "Toggle", function() return state.autoGetBomb end)
     ODHX.Bind(section.Name, "Enable " .. displayName .. " Bind Button", "Toggle", function() return state.bindBtnExists end)
-    ODHX.Bind(section.Name, displayName .. " Big Button Size", "Slider", function() return state.bigButtonSize end)
     ODHX.Bind(section.Name, displayName .. " Bind Button Size", "Slider", function() return state.bindButtonSize * 100 end)
     -- Возвращаем управление
     return {
@@ -5973,7 +6087,6 @@ end)()
 
 local shared = ODHX.shared
 local UpdateWallhopButtonState, performVideoFlick, performWallhop
-local wallhopButtonSize = 0.11
 
 -- Создаем секцию для нашего плагина
 local wallhop_section = shared.AddSection("Pm-WallHop")
@@ -6296,47 +6409,7 @@ UpdateWallhopButtonState = function()
     end
 end
 
--- Переключение видимости кнопки
-local showWallhopButton = true
-
-local function ToggleWallhopButtonVisibility()
-    local btn = WallhopBindableButtons.Buttons["wallhop_toggle"]
-    if btn then
-        btn.Visible = showWallhopButton
-    end
-end
-
--- Создание кнопки
-local function CreateWallhopBindButton()
-    if WallhopBindableButtons.Buttons["wallhop_toggle"] then return end
-
-    WallhopBindableButtons.AddBButton("wallhop_toggle", "WH", function()
-        isWallHopEnabled = true
-        shared.Notify("Pm-WallHop включен", 2)
-        UpdateWallhopButtonState()
-    end, function()
-        isWallHopEnabled = false
-        shared.Notify("Pm-WallHop выключен", 2)
-        UpdateWallhopButtonState()
-    end)
-
-    UpdateWallhopButtonState()
-    ToggleWallhopButtonVisibility()
-end
-
--- Настройки размера кнопки WallHop
-wallhop_section:AddSlider("🔘 Размер кнопки (%)", 5, 25, 11, function(value)
-    local btnSize = value / 100
-    wallhopButtonSize = btnSize
-    local btn = WallhopBindableButtons.Buttons["wallhop_toggle"]
-    if btn then
-        local screen = workspace.CurrentCamera.ViewportSize
-        btn.Size = UDim2.new(btnSize * (screen.Y / screen.X), 0, btnSize, 0)
-    end
-end)
-
--- Создаем кнопку
-CreateWallhopBindButton()
+-- Экранная кнопка WallHop полностью отключена по запросу пользователя.
 
 -- --- Основная логика ---
 local Players = game:GetService("Players")
@@ -6595,7 +6668,6 @@ end)
 ODHX.Bind("Pm-WallHop", "Включить WallHop", "Toggle", function() return isWallHopEnabled end)
 ODHX.Bind("Pm-WallHop", "Дистанция обнаружения", "Slider", function() return detectionDistance end)
 ODHX.Bind("Pm-WallHop", "Сила флинга", "Slider", function() return flickPower end)
-ODHX.Bind("Pm-WallHop", "🔘 Размер кнопки (%)", "Slider", function() return wallhopButtonSize * 100 end)
 ODHX.cleanup=function()
     for id in pairs(WallhopBindableButtons.Buttons) do WallhopBindableButtons.DeleteBButton(id) end
 end
