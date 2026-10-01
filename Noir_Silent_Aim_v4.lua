@@ -4,10 +4,10 @@
     Base : "Noir_Silent_Aim_Identical_UI.lua"
     Notes: rewritten feature modules (gun, knife, ESP, roles, round timer,
            fling, misc) + new controls (keybinds, FOV, auto-fire, tracers,
-           skeleton, anti-afk, server hop, chat spam).
+           skeleton, anti-afk, chat spam).
     The Velvet UI look is preserved ("identical UI").
 
-    v4.1 — PERFORMANCE PASS (lag/freeze fixes):
+    v4.1 — CACHE/ESP PASS (lag/freeze fixes):
       * Object ESP no longer re-scans the whole Workspace on every
         DescendantAdded/Removing; it now adds/removes highlights
         incrementally (O(1)) and only does a full scan on a toggle change.
@@ -22,7 +22,6 @@
         remote, pickup remote, RaycastParams.
       * applyCharacterMods only runs when WalkSpeed/JumpPower is enabled.
       * Gradient stroke animation throttled to ~30 Hz.
-      * New "Performance Mode" toggle (MAIN > SELF MODS) for low-end devices.
 =======================================================================]]
 
 --============================================================ SERVICES
@@ -110,7 +109,6 @@ function New(class, props)
 end
 function corner(x, r) New("UICorner", { CornerRadius = UDim.new(0, r or 12), Parent = x }) end
 local gradientStrokes = {}
-local perfMode = false   -- user toggle: skips gradient animation + throttles ESP lines
 -- Gradient stroke: a 1px border whose colour sweeps transparent -> lit -> transparent, exactly
 -- like the reference cards. Each gradient is stored so the highlight can slowly travel the edge.
 function stroke(x, col, tr)
@@ -135,7 +133,7 @@ RunService.RenderStepped:Connect(function(dt)
     for i = #gradientStrokes, 1, -1 do
         local g = gradientStrokes[i]
         if g.Parent then
-            if not perfMode then g.Rotation = (g.Rotation + step) % 360 end
+            g.Rotation = (g.Rotation + step) % 360
         else
             table.remove(gradientStrokes, i)
         end
@@ -926,7 +924,7 @@ local playerData = {}
 local aimHeld = true
 local autoFireHeld = false
 
---===================================================== PERFORMANCE CACHE
+--===================================================== CACHED STATE
 -- Cached player list: avoids allocating a fresh table every frame in hot loops.
 local cachedPlayers = {}
 local function refreshPlayerCache() cachedPlayers = Players:GetPlayers() end
@@ -1363,16 +1361,10 @@ local function hideAllESP()
     end
 end
 
-local espLineAccum = 0
 RunService.RenderStepped:Connect(function(dt)
     local wantTracer = config.espTracer
     local wantSkeleton = config.espSkeleton and Drawing
     if not wantTracer and not wantSkeleton then hideAllESP() return end
-    if perfMode then
-        espLineAccum += dt
-        if espLineAccum < 0.033 then return end
-        espLineAccum = 0
-    end
     local cam = Workspace.CurrentCamera
     if not cam then return end
     local players = getPlayers()
@@ -2505,32 +2497,6 @@ function grabGun(silent)
     return pickedUp or attempted
 end
 
-function fpsBoost()
-    for _, object in ipairs(Workspace:GetDescendants()) do
-        if object:IsA("ParticleEmitter") or object:IsA("Trail") or object:IsA("Beam") or object:IsA("Smoke") or object:IsA("Fire") or object:IsA("Sparkles") then
-            object.Enabled = false
-        elseif object:IsA("Decal") or object:IsA("Texture") then
-            object.Transparency = 1
-        end
-    end
-    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
-end
-
-function lessLag()
-    for _, object in ipairs(Workspace:GetDescendants()) do
-        if object:IsA("BasePart") then object.Material = Enum.Material.SmoothPlastic; object.Reflectance = 0 end
-    end
-end
-
-function removeBarriers()
-    for _, object in ipairs(Workspace:GetDescendants()) do
-        local name = string.lower(object.Name)
-        if object:IsA("BasePart") and (string.find(name, "barrier", 1, true) or string.find(name, "invisiblewall", 1, true)) then
-            object.CanCollide = false; object.Transparency = 1
-        end
-    end
-end
-
 function nearestPlayer(maxDistance)
     local root = localRoot(); if not root then return nil end
     local best, bestDistance
@@ -2648,28 +2614,6 @@ function sendChat(message)
         end)
     end
     return sent
-end
-
-function serverHop()
-    local ok, err = pcall(function()
-        local teleport = game:GetService("TeleportService")
-        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-        local body = game:HttpGet(url)
-        local data = HttpService:JSONDecode(body)
-        local servers = data and data.data
-        if not servers or #servers == 0 then notify("No servers found", 4) return end
-        local target
-        for _, server in ipairs(servers) do
-            if server.id ~= game.JobId and (server.playing or 0) < (server.maxPlayers or 0) then target = server; break end
-        end
-        target = target or servers[1]
-        if target then teleport:TeleportToPlaceInstance(game.PlaceId, target.id, LocalPlayer) end
-    end)
-    if not ok then notify("Server hop failed: " .. tostring(err), 5) end
-end
-
-function rejoin()
-    pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer) end)
 end
 
 function showMurdererChance()
@@ -2930,12 +2874,6 @@ selfMods:AddSlider("WalkSpeed", 8, 100, 16, function(v) utility.walkSpeed = v; a
 selfMods:AddToggle("Enable JumpPower", function(v) utility.jumpEnabled = v; applyCharacterMods() end)
 selfMods:AddSlider("JumpPower", 25, 150, 50, function(v) utility.jumpPower = v; applyCharacterMods() end)
 selfMods:AddToggle("Anti AFK", function(v) utility.antiAfk = v end)
-selfMods:AddToggle("Performance Mode", function(v) perfMode = v; notify(v and "Performance mode ON" or "Performance mode OFF", 2) end)
-selfMods:AddButton("FPS Boost", fpsBoost)
-selfMods:AddButton("Less Lag", lessLag)
-selfMods:AddButton("Remove Barriers", removeBarriers)
-selfMods:AddButton("Rejoin Server", rejoin)
-selfMods:AddButton("Server Hop", serverHop)
 
 -- MAIN • SERVER
 local serverMods = tab:AddSection("MAIN \u{2022} SERVER", "MM2 round information")
@@ -5411,7 +5349,7 @@ runtime.saveStatus="Not saved"
 local function LoadSettings()
     if not canPersist then
         runtime.saveStatus="Unavailable"
-        WarnOnce("filesystem","readfile/writefile unavailable; settings cannot survive rejoining.")
+        WarnOnce("filesystem","readfile/writefile unavailable; settings cannot survive a new session.")
         return
     end
     if type(fileExists)=="function" then
