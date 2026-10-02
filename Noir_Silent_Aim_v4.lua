@@ -1929,12 +1929,13 @@ local function localGunTool()
     return (character and character:FindFirstChild("Gun")) or (backpack and backpack:FindFirstChild("Gun"))
 end
 local function remoteBelongsToLocalGun(remote)
-    local character = LocalPlayer.Character
-    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-    local characterGun = character and character:FindFirstChild("Gun")
-    local backpackGun = backpack and backpack:FindFirstChild("Gun")
-    return (characterGun and remote:IsDescendantOf(characterGun))
-        or (backpackGun and remote:IsDescendantOf(backpackGun))
+    local character=LocalPlayer.Character
+    local backpack=LocalPlayer:FindFirstChildOfClass("Backpack")
+    local tool=remote and remote:FindFirstAncestorOfClass("Tool")
+    if tool and tool.Name=="Gun" and ((character and tool:IsDescendantOf(character)) or (backpack and tool:IsDescendantOf(backpack))) then return true end
+    local characterGun=character and character:FindFirstChild("Gun")
+    local backpackGun=backpack and backpack:FindFirstChild("Gun")
+    return (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun))
 end
 function shotRemote(remote, args)
     if not (config.enabled or buttonShotActive) or args.n ~= 2 then return false end
@@ -2081,13 +2082,19 @@ end
 
 --======================================================= FIRE GUN
 function findGunRemote()
-    local gun = localGunTool()
+    local gun=localGunTool()
     if not gun then return nil end
-    local shoot = gun:FindFirstChild("Shoot", true)
-    if shoot and shoot:IsA("RemoteEvent") then return shoot end
-    for _, object in ipairs(gun:GetDescendants()) do
-        if object:IsA("RemoteEvent") then return object end
+    local best,bestScore
+    for _,object in ipairs(gun:GetDescendants()) do
+        if object:IsA("RemoteEvent") then
+            local name=object.Name
+            local score=#name
+            if name=="Shoot" then score+=50 end
+            if name=="GunFired" or name=="KnifeThrown" then score=-1 end
+            if score>=(bestScore or 0) then best,bestScore=object,score end
+        end
     end
+    return best
 end
 function fireGunAt(player)
     if shootBusy then return false end
@@ -2111,20 +2118,16 @@ function fireGunAt(player)
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        -- Do not guess the remote signature. Activate the real Tool so its
-        -- LocalScript supplies the valid string/CFrame protocol; the installed
-        -- hook retargets that genuine outgoing weapon remote call.
-        if not installHook() then
+        local remote=findGunRemote()
+        local handle=gun:FindFirstChild("Handle",true)
+        if not remote or not handle or not handle:IsA("BasePart") then
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        buttonShotTarget = player
-        buttonShotActive = true
-        local activated = pcall(function() gun:Activate() end)
-        task.wait(0.20)
-        buttonShotActive = false
-        buttonShotTarget = nil
-        success = activated
+        local aim=calculateAim(part)
+        local origin=handle.Position
+        success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
+        task.wait(0.16)
         if autoEquipped and humanoid.Parent then
             task.wait(0.08)
             humanoid:UnequipTools()
