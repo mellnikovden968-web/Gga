@@ -1933,9 +1933,11 @@ function knifeRemote(remote, args)
     local character = LocalPlayer.Character
     local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
     local knife = character and character:FindFirstChild("Knife")
+    local backpackKnife = backpack and backpack:FindFirstChild("Knife")
+    -- Only the actual local Knife tool is eligible. Never treat an arbitrary
+    -- character/backpack remote as KnifeThrown.
     if knife and remote:IsDescendantOf(knife) then return true end
-    if character and remote:IsDescendantOf(character) then return true end
-    if backpack and remote:IsDescendantOf(backpack) then return true end
+    if backpackKnife and remote:IsDescendantOf(backpackKnife) then return true end
     return false
 end
 local function localGunTool()
@@ -1953,13 +1955,12 @@ local function remoteBelongsToLocalGun(remote)
     if (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun)) then
         return true
     end
-    -- Some MM2 client revisions invoke the pistol's Shoot remote through a
-    -- different local reference, so it is not always an actual descendant of
-    -- the Tool at the moment FireServer is called. The combination of an active
-    -- local Gun + a remote named Shoot + a position-bearing argument pair is
-    -- specific enough for the gun path and prevents unrelated remotes from
-    -- being rewritten.
-    return remote and remote.Name == "Shoot" and localGunTool() ~= nil
+    -- IMPORTANT: do not use a loose `remote.Name == "Shoot"` fallback here.
+    -- Other MM2/local scripts can also expose a RemoteEvent with that name
+    -- (including utility/knife-related code). Rewriting those arguments causes
+    -- errors such as "argument #1 expects a string, but CFrame was passed".
+    -- The pistol remote must be physically attached to the local Gun tool.
+    return false
 end
 function shotRemote(remote, args)
     -- FIX: accept "at least two" args (args.n >= 2) exactly like the working
@@ -1969,15 +1970,13 @@ function shotRemote(remote, args)
     if not (config.enabled or buttonShotActive) or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if not remoteBelongsToLocalGun(remote) then return false end
-    -- The Shoot Murder button proves this client's Gun remote accepts a
-    -- two-CFrame (origin, aimPoint) call. Match that pair first; also accept the
-    -- legacy two-Vector3 pair that older Gun tools used.
+    -- Only rewrite shots when the live client actually supplies position-bearing
+    -- arguments. This prevents the hook from converting a string-based GunClient
+    -- protocol into CFrames. The current error log shows that this client expects
+    -- a string as argument #1, so those calls must pass through untouched.
     local first, second = args[1], args[2]
     local firstIsPos = typeof(first) == "Vector3" or typeof(first) == "CFrame"
     local secondIsPos = typeof(second) == "Vector3" or typeof(second) == "CFrame"
-    -- Mobile/desktop clients can arrive through slightly different local
-    -- firing paths, but the first two arguments remain the position-bearing
-    -- shot pair. Keep unrelated trailing arguments untouched.
     return firstIsPos and secondIsPos
 end
 local function fallbackGunOrigin()
@@ -2000,6 +1999,9 @@ local function hasCFrameArgument(args)
     return false
 end
 function redirect(remote, args)
+    -- Never touch arbitrary RemoteEvents. This hook is allowed to mutate only
+    -- a verified local Gun/Knife remote selected by the matchers below.
+    if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return end
     local part, useWallCheck, isKnife = nil, false, false
     if shotRemote(remote, args) then
         if not buttonShotActive and config.aimKey ~= "None" and not aimHeld then return end
@@ -2186,13 +2188,12 @@ function fireGunAt(player)
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        local aim=calculateAim(part)
-        local origin=handle.Position
-        -- Mark this as a controlled shot so the remote hook uses the exact
-        -- target selected by the button on both touch and desktop.
+        -- Do not call the Gun remote with a guessed CFrame signature.
+        -- This client currently reports: argument #1 expects a string, but CFrame was passed.
+        -- Let the equipped Tool create its own valid FireServer arguments.
         buttonShotActive = true
         buttonShotTarget = player
-        success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
+        success=pcall(function() gun:Activate() end)
         task.wait(0.16)
         if autoEquipped and humanoid.Parent then
             task.wait(0.08)
