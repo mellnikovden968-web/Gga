@@ -1937,12 +1937,12 @@ local function remoteBelongsToLocalGun(remote)
         or (backpackGun and remote:IsDescendantOf(backpackGun))
 end
 function shotRemote(remote, args)
-    if not (config.enabled or buttonShotActive) or args.n < 1 then return false end
+    if not (config.enabled or buttonShotActive) or args.n ~= 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     -- Never rewrite an unknown GunClient protocol. The current error proves
     -- that the earlier guessed CFrame call was not the real firing signature.
     -- Only a captured two-Vector3 or two-CFrame shot is safe to retarget.
-    if not remoteBelongsToLocalGun(remote) or args.n < 2 then return false end
+    if not remoteBelongsToLocalGun(remote) then return false end
     local first, second = args[1], args[2]
     local vectors = typeof(first) == "Vector3" and typeof(second) == "Vector3"
     local cframes = typeof(first) == "CFrame" and typeof(second) == "CFrame"
@@ -2052,41 +2052,20 @@ end
 --======================================================== HOOK SETUP
 function installHook()
     if hooked then return true end
-    local wrap = type(newcclosure) == "function" and newcclosure or function(callback) return callback end
-
-    -- Prefer __namecall: this catches the exact Gun.Shoot:FireServer(...) call
-    -- even when the executor does not expose the RemoteEvent's C closure.
-    if type(hookmetamethod) == "function" and type(getnamecallmethod) == "function" then
-        local originalNamecall
-        local ok, err = pcall(function()
-            originalNamecall = hookmetamethod(game, "__namecall", wrap(function(self, ...)
-                local args = table.pack(...)
-                if getnamecallmethod() == "FireServer" then
-                    pcall(redirect, self, args)
-                end
-                return originalNamecall(self, table.unpack(args, 1, args.n))
-            end))
-        end)
-        if ok and type(originalNamecall) == "function" then
-            hooked = true
-            return true
-        end
-    end
-
-    -- Compatibility fallback for executors that only provide hookfunction.
-    if type(hookfunction) ~= "function" then notify("Remote hook is unavailable", 6); return false end
-    local probe = Instance.new("RemoteEvent")
+    if type(hookfunction) ~= "function" then notify("hookfunction is unavailable",6); return false end
+    local wrap=type(newcclosure)=="function" and newcclosure or function(callback) return callback end
+    local probe=Instance.new("RemoteEvent")
     local original
-    local ok, err = pcall(function()
-        original = hookfunction(probe.FireServer, wrap(function(self, ...)
-            local args = table.pack(...)
-            pcall(redirect, self, args)
-            return original(self, table.unpack(args, 1, args.n))
+    local ok,err=pcall(function()
+        original=hookfunction(probe.FireServer,wrap(function(self,...)
+            local args=table.pack(...)
+            if typeof(self)=="Instance" and self:IsA("RemoteEvent") then pcall(redirect,self,args) end
+            return original(self,table.unpack(args,1,args.n))
         end))
     end)
     probe:Destroy()
-    if not ok then notify("Hook failed: " .. tostring(err), 6); return false end
-    hooked = true
+    if not ok or type(original)~="function" then notify("Hook failed: "..tostring(err),6); return false end
+    hooked=true
     return true
 end
 function toggle(value)
