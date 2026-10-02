@@ -873,7 +873,7 @@ local config = {
     -- knife
     knifeEnabled = false,
     knifeWallCheck = false,
-    knifePrioritizeSheriff = true,
+    knifePrioritizeSheriff = false,
     knifeAutoThrow = false,
     -- player ESP
     espOutline = false, espOutlineMurderer = false, espOutlineSheriff = false,
@@ -1742,9 +1742,10 @@ function findNearestKnifeTarget()
     return closest
 end
 function knifeTargetPlayer()
-    if config.knifePrioritizeSheriff then
-        local sheriffPlayer = findSheriff()
-        if passesFilters(sheriffPlayer) then return sheriffPlayer end
+    if not config.knifeEnabled then return nil end
+    if config.knifePrioritizeSheriff == true then
+        local sheriffPlayer=findSheriff()
+        return passesFilters(sheriffPlayer) and sheriffPlayer or nil
     end
     return findNearestKnifeTarget()
 end
@@ -2920,7 +2921,125 @@ flingSettings:AddToggle("Anti Fling", function(v) utility.antiFling = v end)
 flingSettings:AddSlider("Fling Duration", 1, 5, 2, function(v) utility.flingDuration = v end)
 flingSettings:AddSlider("Fling Power", 1, 3, 1, function(v) utility.flingPower = v end)
 
--- Combat UI intentionally contains no sections.
+-- COMBAT
+do
+    local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
+    combatAim:AddToggle("Enabled", toggle)
+    combatAim:AddToggle("Wall Check", function(v) config.wallCheck=v==true end)
+    combatAim:AddToggle("Show Shoot Murder Button", setShootButtonVisible)
+    combatAim:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton=v==true end)
+
+    local combatKnife=tab:AddSection("KNIFE SILENT AIM", "Nearest player or Sheriff-only targeting")
+    combatKnife:AddToggle("Knife Silent Aim", function(v)
+        config.knifeEnabled=v==true
+        if config.knifeEnabled then installHook() end
+    end)
+    combatKnife:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck=v==true end)
+    combatKnife:AddToggle("Prioritize Sheriff", function(v)
+        config.knifePrioritizeSheriff=v==true
+    end)
+
+    local function addPrediction(section,profile,prefix)
+        local function addToggle(key,label)
+            local control=section:AddToggle(label,function(v) profile[key]=v==true end)
+            noirMirrorControls[prefix..key]=control
+            revertToggleStates[prefix..key]=profile[key]==true
+        end
+        local function addSlider(key,label,min,max)
+            local control=section:AddSlider(label,min,max,tonumber(profile[key]) or min,function(v) profile[key]=tonumber(v) or profile[key] end)
+            noirMirrorControls[prefix..key]=control
+            if key=="manualPingMs" then noirMirrorControls[prefix=="knife." and "knifeManualPingMs" or "manualPingMs"]=control end
+        end
+        addToggle("prioritizePing","Prioritize Your Ping")
+        addToggle("predictJump","Predict Jump")
+        addToggle("predictLag","Predict Lag")
+        addSlider("maxSimulationMs","Prediction Max Simulation",20,300)
+        addSlider("predictionIntervalMs","Prediction Interval",1,100)
+        addSlider("manualPingMs","Prediction Ping",10,350)
+        addSlider("offsetX","X Position Offset",-100,100)
+        addSlider("offsetY","Y Position Offset",-100,100)
+        addSlider("offsetZ","Z Position Offset",-100,100)
+        addSlider("horizontalMultiplier","Horizontal Multiplier",0,400)
+        addSlider("verticalMultiplier","Vertical Multiplier",0,400)
+    end
+
+    local pistolPrediction=tab:AddSection("PISTOL PREDICTION", "Independent server-shot prediction")
+    addPrediction(pistolPrediction,config,"pistol.")
+    local knifePrediction=tab:AddSection("KNIFE PREDICTION", "Independent KnifeThrown prediction")
+    addPrediction(knifePrediction,config.knifeAim,"knife.")
+
+    local profileKeys={"adaptive","fixedLead","extraLead","maxLead","prioritizePing","predictJump","predictLag","maxSimulationMs","predictionIntervalMs","manualPingMs","offsetX","offsetY","offsetZ","horizontalMultiplier","verticalMultiplier"}
+    local function profileSnapshot(profile)
+        local data={}
+        for _,key in ipairs(profileKeys) do data[key]=profile[key] end
+        return data
+    end
+    local function applyProfile(profile,data)
+        if typeof(data)~="table" then return false end
+        for _,key in ipairs(profileKeys) do
+            if typeof(data[key])==typeof(profile[key]) then profile[key]=data[key] end
+        end
+        if type(syncRevertControls)=="function" then syncRevertControls() end
+        return true
+    end
+    local function profilePresetNames(kind)
+        local names={"default"}
+        if type(listfiles)=="function" then
+            ensurePresetFolder()
+            local ok,files=pcall(listfiles,PRESET_FOLDER)
+            if ok and typeof(files)=="table" then
+                local suffix="_"..string.lower(kind).."%.preset$"
+                for _,file in ipairs(files) do
+                    local base=tostring(file):gsub("\\","/"):match("([^/]+)"..suffix)
+                    if base and not table.find(names,base) then names[#names+1]=base end
+                end
+            end
+        end
+        table.sort(names)
+        return names
+    end
+    local function addProfileConfig(title,kind,profile)
+        local section=tab:AddSection(title,"Independent "..kind.." preset storage")
+        local selected="default"
+        section:AddDropdown("Your Presets",profilePresetNames(kind),function(v) selected=cleanPresetName(v) end)
+        section:AddTextBox("Preset Name",function(v) selected=cleanPresetName(v) end)
+        section:AddButton("Save "..kind.." Preset",function()
+            if type(writefile)~="function" then notify("Executor does not support writefile",4) return end
+            ensurePresetFolder()
+            local payload={version=4,kind=string.lower(kind),profile=profileSnapshot(profile)}
+            local ok,encoded=pcall(function() return HttpService:JSONEncode(payload) end)
+            local path=PRESET_FOLDER.."/"..selected.."_"..string.lower(kind)..".preset"
+            if ok and pcall(writefile,path,xorPreset(encoded)) then notify(kind.." preset saved: "..selected,3) else notify(kind.." preset save failed",4) end
+        end)
+        section:AddButton("Load "..kind.." Preset",function()
+            if type(readfile)~="function" then notify("Executor does not support readfile",4) return end
+            local path=PRESET_FOLDER.."/"..selected.."_"..string.lower(kind)..".preset"
+            local ok,data=pcall(function() return HttpService:JSONDecode(xorPreset(readfile(path))) end)
+            if ok and typeof(data)=="table" and data.kind==string.lower(kind) and applyProfile(profile,data.profile) then notify(kind.." preset loaded: "..selected,3) else notify(kind.." preset not found or invalid",4) end
+        end)
+    end
+    addProfileConfig("PISTOL NOIR CONFIG","Pistol",config)
+    addProfileConfig("KNIFE NOIR CONFIG","Knife",config.knifeAim)
+
+    syncRevertControls=function()
+        for _,entry in ipairs({
+            {"pistol.prioritizePing",config.prioritizePing},{"pistol.predictJump",config.predictJump},{"pistol.predictLag",config.predictLag},
+            {"knife.prioritizePing",config.knifeAim.prioritizePing},{"knife.predictJump",config.knifeAim.predictJump},{"knife.predictLag",config.knifeAim.predictLag}
+        }) do
+            local control=noirMirrorControls[entry[1]]
+            if type(control)=="function" then pcall(control,entry[2]) end
+        end
+        for _,entry in ipairs({
+            {"pistol.maxSimulationMs",config.maxSimulationMs},{"pistol.predictionIntervalMs",config.predictionIntervalMs},{"pistol.manualPingMs",config.manualPingMs},
+            {"pistol.offsetX",config.offsetX},{"pistol.offsetY",config.offsetY},{"pistol.offsetZ",config.offsetZ},{"pistol.horizontalMultiplier",config.horizontalMultiplier},{"pistol.verticalMultiplier",config.verticalMultiplier},
+            {"knife.maxSimulationMs",config.knifeAim.maxSimulationMs},{"knife.predictionIntervalMs",config.knifeAim.predictionIntervalMs},{"knife.manualPingMs",config.knifeAim.manualPingMs},
+            {"knife.offsetX",config.knifeAim.offsetX},{"knife.offsetY",config.knifeAim.offsetY},{"knife.offsetZ",config.knifeAim.offsetZ},{"knife.horizontalMultiplier",config.knifeAim.horizontalMultiplier},{"knife.verticalMultiplier",config.knifeAim.verticalMultiplier}
+        }) do
+            local control=noirMirrorControls[entry[1]]
+            if type(control)=="table" and type(control.SetValue)=="function" then pcall(control.SetValue,control,entry[2]) end
+        end
+    end
+end
 
 -- VISUAL • PLAYER OUTLINE
 local playerOutline = tab:AddSection("VISUAL \u{2022} PLAYER OUTLINE", "Role-colored silhouettes")
