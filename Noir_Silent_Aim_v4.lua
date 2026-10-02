@@ -2053,34 +2053,19 @@ end
 --======================================================== HOOK SETUP
 function installHook()
     if hooked then return true end
+    if type(hookfunction)~="function" then notify("hookfunction is unavailable",6); return false end
     local wrap=type(newcclosure)=="function" and newcclosure or function(callback) return callback end
-    local installed=false
-    if type(hookfunction)=="function" then
-        local probe=Instance.new("RemoteEvent")
-        local original
-        local ok=pcall(function()
-            original=hookfunction(probe.FireServer,wrap(function(self,...)
-                local args=table.pack(...)
-                if typeof(self)=="Instance" and self:IsA("RemoteEvent") then pcall(redirect,self,args) end
-                return original(self,table.unpack(args,1,args.n))
-            end))
-        end)
-        probe:Destroy()
-        if ok and type(original)=="function" then installed=true end
-    end
-    if type(hookmetamethod)=="function" and type(getnamecallmethod)=="function" then
-        local originalNamecall
-        local ok=pcall(function()
-            originalNamecall=hookmetamethod(game,"__namecall",wrap(function(self,...)
-                local method=getnamecallmethod()
-                local args=table.pack(...)
-                if method=="FireServer" and typeof(self)=="Instance" and self:IsA("RemoteEvent") then pcall(redirect,self,args) end
-                return originalNamecall(self,table.unpack(args,1,args.n))
-            end))
-        end)
-        if ok and type(originalNamecall)=="function" then installed=true end
-    end
-    if not installed then notify("Remote hook is unavailable",6); return false end
+    local probe=Instance.new("RemoteEvent")
+    local original
+    local ok,err=pcall(function()
+        original=hookfunction(probe.FireServer,wrap(function(self,...)
+            local args=table.pack(...)
+            pcall(redirect,self,args)
+            return original(self,table.unpack(args,1,args.n))
+        end))
+    end)
+    probe:Destroy()
+    if not ok or type(original)~="function" then notify("Hook failed: "..tostring(err),6); return false end
     hooked=true
     return true
 end
@@ -2139,11 +2124,16 @@ function fireGunAt(player)
         end
         buttonShotTarget=player
         buttonShotActive=true
-        if type(firesignal)=="function" then
-            success=pcall(firesignal,gun.Activated)
-        else
-            success=pcall(function() gun:Activate() end)
-        end
+        success=pcall(function()
+            local vim=game:GetService("VirtualInputManager")
+            local camera=Workspace.CurrentCamera
+            local view=camera and camera.ViewportSize or Vector2.new(800,600)
+            local x,y=math.floor(view.X*.5),math.floor(view.Y*.5)
+            vim:SendMouseButtonEvent(x,y,0,true,game,0)
+            task.wait(.035)
+            vim:SendMouseButtonEvent(x,y,0,false,game,0)
+        end)
+        if not success then success=pcall(function() gun:Activate() end) end
         task.wait(0.20)
         buttonShotActive=false
         buttonShotTarget=nil
@@ -5197,13 +5187,8 @@ local function CreateBombJumpSystem(config)
         if success and bomb then
             local position = GetCenterPosition()
             if position then
-                local remote = bomb:FindFirstChild("Remote")
-                if remote then
-                    PlaySound(Sounds.Click)
-                    pcall(function()
-                        remote:FireServer(CFrame.new(position), 50)
-                    end)
-                end
+                PlaySound(Sounds.Click)
+                pcall(function() bomb:Activate() end)
                 
                 local char = LocalPlayer.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
