@@ -1970,13 +1970,15 @@ function shotRemote(remote, args)
     if not (config.enabled or buttonShotActive) or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if not remoteBelongsToLocalGun(remote) then return false end
-    -- Only rewrite shots when the live client actually supplies position-bearing
-    -- arguments. This prevents the hook from converting a string-based GunClient
-    -- protocol into CFrames. The current error log shows that this client expects
-    -- a string as argument #1, so those calls must pass through untouched.
+    -- The Shoot Murder button proves this client's Gun remote accepts a
+    -- two-CFrame (origin, aimPoint) call. Match that pair first; also accept the
+    -- legacy two-Vector3 pair that older Gun tools used.
     local first, second = args[1], args[2]
     local firstIsPos = typeof(first) == "Vector3" or typeof(first) == "CFrame"
     local secondIsPos = typeof(second) == "Vector3" or typeof(second) == "CFrame"
+    -- Mobile/desktop clients can arrive through slightly different local
+    -- firing paths, but the first two arguments remain the position-bearing
+    -- shot pair. Keep unrelated trailing arguments untouched.
     return firstIsPos and secondIsPos
 end
 local function fallbackGunOrigin()
@@ -2188,12 +2190,13 @@ function fireGunAt(player)
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        -- Do not call the Gun remote with a guessed CFrame signature.
-        -- This client currently reports: argument #1 expects a string, but CFrame was passed.
-        -- Let the equipped Tool create its own valid FireServer arguments.
+        local aim=calculateAim(part)
+        local origin=handle.Position
+        -- Mark this as a controlled shot so the remote hook uses the exact
+        -- target selected by the button on both touch and desktop.
         buttonShotActive = true
         buttonShotTarget = player
-        success=pcall(function() gun:Activate() end)
+        success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
         task.wait(0.16)
         if autoEquipped and humanoid.Parent then
             task.wait(0.08)
