@@ -1938,12 +1938,16 @@ local function remoteBelongsToLocalGun(remote)
     return (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun))
 end
 function shotRemote(remote, args)
-    if not (config.enabled or buttonShotActive) or args.n ~= 2 then return false end
+    -- FIX: accept "at least two" args (args.n >= 2) exactly like the working
+    -- MM2 reference. The old "args.n ~= 2" rejected the real shot whenever the
+    -- client sent any trailing argument, so passive silent aim never fired even
+    -- though the manual Shoot button (which sends its own clean 2-arg call) did.
+    if not (config.enabled or buttonShotActive) or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
-    -- Never rewrite an unknown GunClient protocol. The current error proves
-    -- that the earlier guessed CFrame call was not the real firing signature.
-    -- Only a captured two-Vector3 or two-CFrame shot is safe to retarget.
     if not remoteBelongsToLocalGun(remote) then return false end
+    -- The Shoot Murder button proves this client's Gun remote accepts a
+    -- two-CFrame (origin, aimPoint) call. Match that pair first; also accept the
+    -- legacy two-Vector3 pair that older Gun tools used.
     local first, second = args[1], args[2]
     local vectors = typeof(first) == "Vector3" and typeof(second) == "Vector3"
     local cframes = typeof(first) == "CFrame" and typeof(second) == "CFrame"
@@ -1999,53 +2003,33 @@ function redirect(remote, args)
         return
     end
 
-    -- The supplied Shoot remote is a Vector3 protocol in the current client,
-    -- while older Gun tools used two CFrames. Find the origin/aim pair without
-    -- disturbing Handle/target metadata arguments.
-    local numericIndices = {}
-    for index = 1, args.n do
-        if vectorOrCFramePosition(args[index]) then numericIndices[#numericIndices + 1] = index end
-    end
-    if #numericIndices == 0 then return end
-    local originIndex = numericIndices[1]
-    local aimIndex = numericIndices[2]
-    local firstValue = args[originIndex]
-    local secondValue = aimIndex and args[aimIndex]
-    local fallbackOrigin = fallbackGunOrigin()
-    -- Also accept the alternate Vector3 order: direction, origin.
-    if aimIndex and typeof(firstValue) == "Vector3" and typeof(secondValue) == "Vector3" then
-        if firstValue.Magnitude <= 1.5 and secondValue.Magnitude > 1.5 then
-            originIndex, aimIndex = numericIndices[2], numericIndices[1]
-        elseif fallbackOrigin then
-            local firstDistance = (firstValue - fallbackOrigin).Magnitude
-            local secondDistance = (secondValue - fallbackOrigin).Magnitude
-            if secondDistance + 0.5 < firstDistance then
-                originIndex, aimIndex = numericIndices[2], numericIndices[1]
-            end
+    -- GUN SHOT.
+    -- The "Shoot Murder" button already works, and it fires the Gun remote as
+    -- remote:FireServer(CFrame.lookAt(origin, aim), CFrame.new(aim)). That proves
+    -- the server's Shoot protocol is a plain two-CFrame (origin, aimPoint) pair --
+    -- the same thing the working MM2 reference rewrites.
+    --
+    -- The previous v4 code assumed a "Vector3 protocol" and tried to re-order and
+    -- unit-normalise the arguments. When it guessed wrong it sent the server a
+    -- malformed shot, so passive silent aim never registered a hit. We now rewrite
+    -- the exact pair the button proves is correct, with a clean Vector3 fallback.
+    local aim = calculateAim(part)
+    if typeof(args[1]) == "CFrame" and typeof(args[2]) == "CFrame" then
+        local origin = args[1].Position
+        if config.alignDirection and (aim - origin).Magnitude > 0.01 then
+            args[1] = CFrame.lookAt(origin, aim)
         end
-    end
-    local origin = vectorOrCFramePosition(args[originIndex])
-    if not aimIndex then
-        aimIndex = originIndex
-        origin = fallbackOrigin or origin
-    end
-    if not origin then return end
-
-    local aim = isKnife and calculateKnifeAim(part, origin) or calculateAim(part)
-    local originalAim = args[aimIndex]
-    if typeof(originalAim) == "CFrame" then
-        args[aimIndex] = CFrame.new(aim)
-    elseif typeof(originalAim) == "Vector3" then
-        -- A few builds send a unit direction instead of a world-space hit
-        -- point. Preserve that protocol when the original vector is tiny.
-        if originalAim.Magnitude <= 1.5 and (aim - origin).Magnitude > 0.01 then
-            args[aimIndex] = (aim - origin).Unit
+        args[2] = CFrame.new(aim)
+    elseif typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
+        -- Legacy Gun tools: (originVector, hitVector) or (originVector, unitDir).
+        local origin = args[1]
+        if args[2].Magnitude <= 1.5 and (aim - origin).Magnitude > 0.01 then
+            args[2] = (aim - origin).Unit
         else
-            args[aimIndex] = aim
+            args[2] = aim
         end
-    end
-    if config.alignDirection and typeof(args[originIndex]) == "CFrame" and (aim - origin).Magnitude > 0.01 then
-        args[originIndex] = CFrame.lookAt(origin, aim)
+    else
+        return
     end
     redirected = redirected + 1
 end
