@@ -2133,16 +2133,20 @@ function fireGunAt(player)
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        local remote=findGunRemote()
-        local handle=gun:FindFirstChild("Handle",true)
-        if not remote or not handle or not handle:IsA("BasePart") then
+        if not installHook() then
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        local aim=calculateAim(part)
-        local origin=handle.Position
-        success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
-        task.wait(0.16)
+        buttonShotTarget=player
+        buttonShotActive=true
+        if type(firesignal)=="function" then
+            success=pcall(firesignal,gun.Activated)
+        else
+            success=pcall(function() gun:Activate() end)
+        end
+        task.wait(0.20)
+        buttonShotActive=false
+        buttonShotTarget=nil
         if autoEquipped and humanoid.Parent then
             task.wait(0.08)
             humanoid:UnequipTools()
