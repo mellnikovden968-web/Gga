@@ -1950,7 +1950,16 @@ local function remoteBelongsToLocalGun(remote)
     if tool and tool.Name=="Gun" and ((character and tool:IsDescendantOf(character)) or (backpack and tool:IsDescendantOf(backpack))) then return true end
     local characterGun=character and character:FindFirstChild("Gun")
     local backpackGun=backpack and backpack:FindFirstChild("Gun")
-    return (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun))
+    if (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun)) then
+        return true
+    end
+    -- Some MM2 client revisions invoke the pistol's Shoot remote through a
+    -- different local reference, so it is not always an actual descendant of
+    -- the Tool at the moment FireServer is called. The combination of an active
+    -- local Gun + a remote named Shoot + a position-bearing argument pair is
+    -- specific enough for the gun path and prevents unrelated remotes from
+    -- being rewritten.
+    return remote and remote.Name == "Shoot" and localGunTool() ~= nil
 end
 function shotRemote(remote, args)
     -- FIX: accept "at least two" args (args.n >= 2) exactly like the working
@@ -2066,23 +2075,61 @@ function redirect(remote, args)
 end
 
 --======================================================== HOOK SETUP
+-- MM2 can reach the same Shoot RemoteEvent through different client-side
+-- references. The old hook only replaced FireServer on a temporary probe
+-- instance; that is not reliable in every executor. Prefer the global
+-- __namecall path so a normal mouse/touch shot is intercepted at the exact
+-- moment the game calls remote:FireServer(...). Keep hookfunction as a fallback
+-- for executors that expose it but not hookmetamethod.
+local namecallHooked = false
+local fireServerHooked = false
 function installHook()
-    if hooked then return true end
-    if type(hookfunction) ~= "function" then notify("hookfunction is unavailable",6); return false end
+    if hooked or namecallHooked or fireServerHooked then return true end
     local wrap=type(newcclosure)=="function" and newcclosure or function(callback) return callback end
-    local probe=Instance.new("RemoteEvent")
-    local original
-    local ok,err=pcall(function()
-        original=hookfunction(probe.FireServer,wrap(function(self,...)
-            local args=table.pack(...)
-            if typeof(self)=="Instance" and self:IsA("RemoteEvent") then pcall(redirect,self,args) end
-            return original(self,table.unpack(args,1,args.n))
-        end))
-    end)
-    probe:Destroy()
-    if not ok or type(original)~="function" then notify("Hook failed: "..tostring(err),6); return false end
-    hooked=true
-    return true
+
+    -- Primary path: intercept actual RemoteEvent:FireServer namecalls.
+    if type(hookmetamethod)=="function" and type(getnamecallmethod)=="function" then
+        local ok,err=pcall(function()
+            local oldNamecall
+            oldNamecall = hookmetamethod(game, "__namecall", wrap(function(self, ...)
+                local args=table.pack(...)
+                local method
+                pcall(function() method=getnamecallmethod() end)
+                if method=="FireServer" and typeof(self)=="Instance" and self:IsA("RemoteEvent") then
+                    pcall(redirect,self,args)
+                end
+                return oldNamecall(self,table.unpack(args,1,args.n))
+            end))
+            if type(oldNamecall)~="function" then error("invalid __namecall original") end
+        end)
+        if ok then
+            namecallHooked=true
+            hooked=true
+            return true
+        end
+    end
+
+    -- Fallback: some environments expose hookfunction but not hookmetamethod.
+    if type(hookfunction)=="function" then
+        local probe=Instance.new("RemoteEvent")
+        local original
+        local ok,err=pcall(function()
+            original=hookfunction(probe.FireServer,wrap(function(self,...)
+                local args=table.pack(...)
+                if typeof(self)=="Instance" and self:IsA("RemoteEvent") then pcall(redirect,self,args) end
+                return original(self,table.unpack(args,1,args.n))
+            end))
+        end)
+        probe:Destroy()
+        if ok and type(original)=="function" then
+            fireServerHooked=true
+            hooked=true
+            return true
+        end
+    end
+
+    notify("FireServer hook is unavailable",6)
+    return false
 end
 function toggle(value)
     config.enabled = value == true
