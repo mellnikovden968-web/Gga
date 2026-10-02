@@ -2053,14 +2053,14 @@ end
 --======================================================== HOOK SETUP
 function installHook()
     if hooked then return true end
-    if type(hookfunction)~="function" then notify("hookfunction is unavailable",6); return false end
+    if type(hookfunction) ~= "function" then notify("hookfunction is unavailable",6); return false end
     local wrap=type(newcclosure)=="function" and newcclosure or function(callback) return callback end
     local probe=Instance.new("RemoteEvent")
     local original
     local ok,err=pcall(function()
         original=hookfunction(probe.FireServer,wrap(function(self,...)
             local args=table.pack(...)
-            pcall(redirect,self,args)
+            if typeof(self)=="Instance" and self:IsA("RemoteEvent") then pcall(redirect,self,args) end
             return original(self,table.unpack(args,1,args.n))
         end))
     end)
@@ -2118,25 +2118,16 @@ function fireGunAt(player)
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        if not installHook() then
+        local remote=findGunRemote()
+        local handle=gun:FindFirstChild("Handle",true)
+        if not remote or not handle or not handle:IsA("BasePart") then
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        buttonShotTarget=player
-        buttonShotActive=true
-        success=pcall(function()
-            local vim=game:GetService("VirtualInputManager")
-            local camera=Workspace.CurrentCamera
-            local view=camera and camera.ViewportSize or Vector2.new(800,600)
-            local x,y=math.floor(view.X*.5),math.floor(view.Y*.5)
-            vim:SendMouseButtonEvent(x,y,0,true,game,0)
-            task.wait(.035)
-            vim:SendMouseButtonEvent(x,y,0,false,game,0)
-        end)
-        if not success then success=pcall(function() gun:Activate() end) end
-        task.wait(0.20)
-        buttonShotActive=false
-        buttonShotTarget=nil
+        local aim=calculateAim(part)
+        local origin=handle.Position
+        success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
+        task.wait(0.16)
         if autoEquipped and humanoid.Parent then
             task.wait(0.08)
             humanoid:UnequipTools()
@@ -5187,8 +5178,13 @@ local function CreateBombJumpSystem(config)
         if success and bomb then
             local position = GetCenterPosition()
             if position then
-                PlaySound(Sounds.Click)
-                pcall(function() bomb:Activate() end)
+                local remote = bomb:FindFirstChild("Remote")
+                if remote then
+                    PlaySound(Sounds.Click)
+                    pcall(function()
+                        remote:FireServer(CFrame.new(position), 50)
+                    end)
+                end
                 
                 local char = LocalPlayer.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
