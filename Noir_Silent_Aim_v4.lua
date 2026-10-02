@@ -37,6 +37,21 @@ local HttpService       = game:GetService("HttpService")
 local Lighting          = game:GetService("Lighting")
 local LocalPlayer       = Players.LocalPlayer
 
+--===================================================== INPUT COMPATIBILITY
+-- One input layer for desktop and mobile.  The game-facing aim/shot logic
+-- does not depend on a physical mouse being present.
+local IS_TOUCH = UIS.TouchEnabled == true
+local IS_KEYBOARD = UIS.KeyboardEnabled == true
+local IS_MOUSE = UIS.MouseEnabled == true
+local INPUT_DEVICE = (IS_TOUCH and not IS_MOUSE and not IS_KEYBOARD) and "Touch"
+    or (IS_TOUCH and "Hybrid")
+    or "Desktop"
+
+local function isPrimaryPress(input)
+    return input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch
+end
+
 local guiParent = CoreGui
 if type(gethui) == "function" then local ok,v=pcall(gethui); if ok and typeof(v)=="Instance" then guiParent=v end end
 pcall(function() local old=guiParent:FindFirstChild("NoirSilentAimUI"); if old then old:Destroy() end end)
@@ -1935,7 +1950,16 @@ local function remoteBelongsToLocalGun(remote)
     if tool and tool.Name=="Gun" and ((character and tool:IsDescendantOf(character)) or (backpack and tool:IsDescendantOf(backpack))) then return true end
     local characterGun=character and character:FindFirstChild("Gun")
     local backpackGun=backpack and backpack:FindFirstChild("Gun")
-    return (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun))
+    if (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun)) then
+        return true
+    end
+    -- Some MM2 client revisions invoke the pistol's Shoot remote through a
+    -- different local reference, so it is not always an actual descendant of
+    -- the Tool at the moment FireServer is called. The combination of an active
+    -- local Gun + a remote named Shoot + a position-bearing argument pair is
+    -- specific enough for the gun path and prevents unrelated remotes from
+    -- being rewritten.
+    return remote and remote.Name == "Shoot" and localGunTool() ~= nil
 end
 function shotRemote(remote, args)
     -- FIX: accept "at least two" args (args.n >= 2) exactly like the working
@@ -1949,9 +1973,12 @@ function shotRemote(remote, args)
     -- two-CFrame (origin, aimPoint) call. Match that pair first; also accept the
     -- legacy two-Vector3 pair that older Gun tools used.
     local first, second = args[1], args[2]
-    local vectors = typeof(first) == "Vector3" and typeof(second) == "Vector3"
-    local cframes = typeof(first) == "CFrame" and typeof(second) == "CFrame"
-    return vectors or cframes
+    local firstIsPos = typeof(first) == "Vector3" or typeof(first) == "CFrame"
+    local secondIsPos = typeof(second) == "Vector3" or typeof(second) == "CFrame"
+    -- Mobile/desktop clients can arrive through slightly different local
+    -- firing paths, but the first two arguments remain the position-bearing
+    -- shot pair. Keep unrelated trailing arguments untouched.
+    return firstIsPos and secondIsPos
 end
 local function fallbackGunOrigin()
     local gun = localGunTool()
@@ -2014,19 +2041,32 @@ function redirect(remote, args)
     -- malformed shot, so passive silent aim never registered a hit. We now rewrite
     -- the exact pair the button proves is correct, with a clean Vector3 fallback.
     local aim = calculateAim(part)
-    if typeof(args[1]) == "CFrame" and typeof(args[2]) == "CFrame" then
+    local firstType, secondType = typeof(args[1]), typeof(args[2])
+    if firstType == "CFrame" then
         local origin = args[1].Position
         if config.alignDirection and (aim - origin).Magnitude > 0.01 then
             args[1] = CFrame.lookAt(origin, aim)
         end
-        args[2] = CFrame.new(aim)
-    elseif typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
-        -- Legacy Gun tools: (originVector, hitVector) or (originVector, unitDir).
-        local origin = args[1]
-        if args[2].Magnitude <= 1.5 and (aim - origin).Magnitude > 0.01 then
-            args[2] = (aim - origin).Unit
-        else
+        if secondType == "CFrame" then
+            args[2] = CFrame.new(aim)
+        elseif secondType == "Vector3" then
             args[2] = aim
+        else
+            return
+        end
+    elseif firstType == "Vector3" then
+        local origin = args[1]
+        if secondType == "Vector3" then
+            -- Legacy Gun tools: (originVector, hitVector) or (originVector, unitDir).
+            if args[2].Magnitude <= 1.5 and (aim - origin).Magnitude > 0.01 then
+                args[2] = (aim - origin).Unit
+            else
+                args[2] = aim
+            end
+        elseif secondType == "CFrame" then
+            args[2] = CFrame.new(aim)
+        else
+            return
         end
     else
         return
@@ -2035,23 +2075,61 @@ function redirect(remote, args)
 end
 
 --======================================================== HOOK SETUP
+-- MM2 can reach the same Shoot RemoteEvent through different client-side
+-- references. The old hook only replaced FireServer on a temporary probe
+-- instance; that is not reliable in every executor. Prefer the global
+-- __namecall path so a normal mouse/touch shot is intercepted at the exact
+-- moment the game calls remote:FireServer(...). Keep hookfunction as a fallback
+-- for executors that expose it but not hookmetamethod.
+local namecallHooked = false
+local fireServerHooked = false
 function installHook()
-    if hooked then return true end
-    if type(hookfunction) ~= "function" then notify("hookfunction is unavailable",6); return false end
+    if hooked or namecallHooked or fireServerHooked then return true end
     local wrap=type(newcclosure)=="function" and newcclosure or function(callback) return callback end
-    local probe=Instance.new("RemoteEvent")
-    local original
-    local ok,err=pcall(function()
-        original=hookfunction(probe.FireServer,wrap(function(self,...)
-            local args=table.pack(...)
-            if typeof(self)=="Instance" and self:IsA("RemoteEvent") then pcall(redirect,self,args) end
-            return original(self,table.unpack(args,1,args.n))
-        end))
-    end)
-    probe:Destroy()
-    if not ok or type(original)~="function" then notify("Hook failed: "..tostring(err),6); return false end
-    hooked=true
-    return true
+
+    -- Primary path: intercept actual RemoteEvent:FireServer namecalls.
+    if type(hookmetamethod)=="function" and type(getnamecallmethod)=="function" then
+        local ok,err=pcall(function()
+            local oldNamecall
+            oldNamecall = hookmetamethod(game, "__namecall", wrap(function(self, ...)
+                local args=table.pack(...)
+                local method
+                pcall(function() method=getnamecallmethod() end)
+                if method=="FireServer" and typeof(self)=="Instance" and self:IsA("RemoteEvent") then
+                    pcall(redirect,self,args)
+                end
+                return oldNamecall(self,table.unpack(args,1,args.n))
+            end))
+            if type(oldNamecall)~="function" then error("invalid __namecall original") end
+        end)
+        if ok then
+            namecallHooked=true
+            hooked=true
+            return true
+        end
+    end
+
+    -- Fallback: some environments expose hookfunction but not hookmetamethod.
+    if type(hookfunction)=="function" then
+        local probe=Instance.new("RemoteEvent")
+        local original
+        local ok,err=pcall(function()
+            original=hookfunction(probe.FireServer,wrap(function(self,...)
+                local args=table.pack(...)
+                if typeof(self)=="Instance" and self:IsA("RemoteEvent") then pcall(redirect,self,args) end
+                return original(self,table.unpack(args,1,args.n))
+            end))
+        end)
+        probe:Destroy()
+        if ok and type(original)=="function" then
+            fireServerHooked=true
+            hooked=true
+            return true
+        end
+    end
+
+    notify("FireServer hook is unavailable",6)
+    return false
 end
 function toggle(value)
     config.enabled = value == true
@@ -2110,6 +2188,10 @@ function fireGunAt(player)
         end
         local aim=calculateAim(part)
         local origin=handle.Position
+        -- Mark this as a controlled shot so the remote hook uses the exact
+        -- target selected by the button on both touch and desktop.
+        buttonShotActive = true
+        buttonShotTarget = player
         success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
         task.wait(0.16)
         if autoEquipped and humanoid.Parent then
@@ -2204,7 +2286,7 @@ function createShootButton()
     local pressTween = TweenInfo.new(0.30, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
     local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
     button.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if isPrimaryPress(input) then
             dragging = not config.lockShootButton; moved = false; dragStart = input.Position; startPosition = button.Position
             TweenService:Create(button, pressTween, { Size = pressedSize, TextSize = 18, BackgroundColor3 = Color3.fromRGB(27,27,31) }):Play()
             button.Text = "T A R G E T   L O C K"
@@ -2229,7 +2311,7 @@ function createShootButton()
         end
     end)
     UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if isPrimaryPress(input) then
             dragging = false
             NoirPersistence.SetPosition("shoot_v2", button.Position)
             TweenService:Create(button, TweenInfo.new(.62, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = normalSize, TextSize = 17, BackgroundColor3 = Color3.fromRGB(8,8,10), BackgroundTransparency = .28 }):Play()
@@ -3129,6 +3211,9 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
         if config.aimKey == "MouseButton1" then aimHeld = true end
         if config.autoFireKey == "MouseButton1" then autoFireHeld = true end
+    elseif input.UserInputType == Enum.UserInputType.Touch then
+        if config.aimKey == "Touch" then aimHeld = true end
+        if config.autoFireKey == "Touch" then autoFireHeld = true end
     end
 end)
 UIS.InputEnded:Connect(function(input)
@@ -3139,6 +3224,9 @@ UIS.InputEnded:Connect(function(input)
     elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
         if config.aimKey == "MouseButton1" then aimHeld = false end
         if config.autoFireKey == "MouseButton1" then autoFireHeld = false end
+    elseif input.UserInputType == Enum.UserInputType.Touch then
+        if config.aimKey == "Touch" then aimHeld = false end
+        if config.autoFireKey == "Touch" then autoFireHeld = false end
     end
 end)
 
