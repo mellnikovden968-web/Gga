@@ -1,30 +1,3 @@
---[[=====================================================================
-    NOIR SILENT AIM — IMPROVED  (v4)
-    Game : Murder Mystery 2  (placeId 142823291)
-    Base : "Noir_Silent_Aim_Identical_UI.lua"
-    Notes: rewritten feature modules (gun, knife, ESP, roles, round timer,
-           fling, misc) + new controls (keybinds, FOV, auto-fire, tracers,
-           skeleton, anti-afk, chat spam).
-    The Velvet UI look is preserved ("identical UI").
-
-    v4.1 — CACHE/ESP PASS (lag/freeze fixes):
-      * Object ESP no longer re-scans the whole Workspace on every
-        DescendantAdded/Removing; it now adds/removes highlights
-        incrementally (O(1)) and only does a full scan on a toggle change.
-      * ESP tracer/skeleton loop: cached player list, precomputed bone
-        tables, per-player line cache, no per-frame string concatenation,
-        Drawing lines freed on respawn / player leave.
-      * ESP text/health loop throttled to ~12 Hz and uses cached billboard
-        references (also fixed a name collision on the health bar).
-      * Motion sampling runs at ~30 Hz and only while an aim feature is on.
-      * findDroppedGun uses a registry (no per-tick Workspace scan).
-      * Cached: player list, local root/humanoid, friend status, GetPlayerData
-        remote, pickup remote, RaycastParams.
-      * applyCharacterMods only runs when WalkSpeed/JumpPower is enabled.
-      * Gradient stroke animation throttled to ~30 Hz.
-=======================================================================]]
-
---============================================================ SERVICES
 local Players           = game:GetService("Players")
 local UIS               = game:GetService("UserInputService")
 local TweenService      = game:GetService("TweenService")
@@ -37,9 +10,6 @@ local HttpService       = game:GetService("HttpService")
 local Lighting          = game:GetService("Lighting")
 local LocalPlayer       = Players.LocalPlayer
 
---===================================================== INPUT COMPATIBILITY
--- One input layer for desktop and mobile.  The game-facing aim/shot logic
--- does not depend on a physical mouse being present.
 local IS_TOUCH = UIS.TouchEnabled == true
 local IS_KEYBOARD = UIS.KeyboardEnabled == true
 local IS_MOUSE = UIS.MouseEnabled == true
@@ -56,7 +26,6 @@ local guiParent = CoreGui
 if type(gethui) == "function" then local ok,v=pcall(gethui); if ok and typeof(v)=="Instance" then guiParent=v end end
 pcall(function() local old=guiParent:FindFirstChild("NoirSilentAimUI"); if old then old:Destroy() end end)
 
---========================================================= PERSISTENCE
 local NoirPersistence = {
     data = { toggles = {}, sliders = {}, dropdowns = {}, textboxes = {}, keybinds = {}, positions = {} },
     token = 0,
@@ -107,9 +76,6 @@ function NoirPersistence.SetPosition(key, p)
     NoirPersistence.Save()
 end
 
---=========================================================== UI THEME
--- Palette sampled straight from the "NOIR ROBLOX HUB" reference image:
--- near-black backdrop, soft graphite panels and a single green accent.
 local C = {
     base = Color3.fromRGB(7,8,10), surface = Color3.fromRGB(15,17,20), panel = Color3.fromRGB(13,15,18),
     card = Color3.fromRGB(17,19,23), border = Color3.fromRGB(120,126,134), accent = Color3.fromRGB(93,168,94),
@@ -124,8 +90,6 @@ function New(class, props)
 end
 function corner(x, r) New("UICorner", { CornerRadius = UDim.new(0, r or 12), Parent = x }) end
 local gradientStrokes = {}
--- Gradient stroke: a 1px border whose colour sweeps transparent -> lit -> transparent, exactly
--- like the reference cards. Each gradient is stored so the highlight can slowly travel the edge.
 function stroke(x, col, tr)
     local s = New("UIStroke", { Color = col or C.border, Transparency = tr or .55, Thickness = 1, Parent = x })
     local g = New("UIGradient", { Parent = s, Rotation = 35, Color = ColorSequence.new({
@@ -160,7 +124,6 @@ function text(parent, value, size, pos, dim)
         Position = pos or UDim2.new(), Size = UDim2.new(1, 0, 0, size + 8) })
 end
 
---=========================================================== MAIN GUI
 local gui = New("ScreenGui", { Name = "NoirSilentAimUI", ResetOnSpawn = false, IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Parent = guiParent })
 local scale = New("UIScale", { Parent = gui, Scale = 1 })
 function rescale()
@@ -176,13 +139,11 @@ local win = New("Frame", { Parent = gui, Name = "Window", AnchorPoint = Vector2.
 local winScale = New("UIScale", { Parent = win, Scale = .68 })
 corner(win, 22)
 local winStroke = stroke(win, C.border, .5); winStroke.Thickness = 1.5
--- subtle sheen: brighter top-left fading to black bottom-right, like the reference backdrop
 New("UIGradient", { Parent = win, Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0, Color3.fromRGB(20,22,26)),
     ColorSequenceKeypoint.new(.45, Color3.fromRGB(9,10,13)),
     ColorSequenceKeypoint.new(1, Color3.fromRGB(3,4,6)) }), Rotation = 25 })
 
---=========================================================== SIDEBAR
 local navButtons, navIcons = {}, {}
 local sidebar = New("Frame", { Parent = win, Size = UDim2.fromOffset(240, 700), BackgroundColor3 = C.surface, BackgroundTransparency = .28 })
 corner(sidebar, 22); stroke(sidebar, C.border, .68)
@@ -252,8 +213,6 @@ local icon = New("ImageLabel", { Parent = header, Position = UDim2.new(1, -152, 
     BackgroundColor3 = C.panel, Image = creatorImage, ScaleType = Enum.ScaleType.Crop })
 corner(icon, 13); stroke(icon, C.border, .45)
 if creatorImage == "" then local fb = text(icon, "N", 22, UDim2.fromOffset(0, 8)); fb.TextXAlignment = Enum.TextXAlignment.Center end
--- Small utility buttons use the same visual language as Shoot Murder:
--- dark glass, white animated gradient border, inner border and click sound.
 function styleCircularButton(b, diameter)
     b.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
     b.BackgroundTransparency = .28
@@ -305,7 +264,6 @@ close.MouseButton1Click:Connect(function()
     task.delay(.29, function() if gui.Parent then gui:Destroy() end end)
 end)
 
--- window drag
 local dragging, dragStart, startPos
 header.Active = true
 header.InputBegan:Connect(function(input)
@@ -366,7 +324,6 @@ restore.MouseButton1Click:Connect(function()
     TweenService:Create(winScale, TweenInfo.new(.46, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 end)
 
---====================================================== CONTENT PAGES
 local content = New("ScrollingFrame", { Parent = win, Position = UDim2.fromOffset(275, 110), Size = UDim2.new(1, -300, 1, -130),
     BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 7, ScrollBarImageColor3 = C.accent,
     CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollingDirection = Enum.ScrollingDirection.Y,
@@ -384,8 +341,6 @@ for i = 1, 2 do
         BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
     New("UIListLayout", { Parent = configCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
 end
--- Keep every page clear of the 240px sidebar.  The old 264px inset was
--- too small on narrow viewports and some cards visually crossed into the nav.
 content.Position = UDim2.fromOffset(282, 104); content.Size = UDim2.new(1, -306, 1, -128); content.Visible = false
 configContent.Position = content.Position; configContent.Size = content.Size
 local visualContent = content:Clone(); visualContent.Name = "VisualContent"; visualContent.Parent = win; visualContent.Visible = false; visualContent:ClearAllChildren()
@@ -411,7 +366,6 @@ for i = 1, 2 do
 end
 
 local dashboard = New("Frame", { Parent = win, Position = content.Position, Size = content.Size, BackgroundTransparency = 1 })
--- profile card
 local profile = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 0), Size = UDim2.fromOffset(430, 168), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
 corner(profile, 18); stroke(profile, C.border, .5)
 local avatar = New("ImageLabel", { Parent = profile, Position = UDim2.fromOffset(22, 24), Size = UDim2.fromOffset(120, 120), BackgroundColor3 = C.surface })
@@ -426,14 +380,12 @@ local pill = New("Frame", { Parent = profile, Position = UDim2.fromOffset(162, 1
 corner(pill, 15); stroke(pill, C.accent, .35)
 local pillDot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(12, 11), Size = UDim2.fromOffset(8, 8), BackgroundColor3 = C.accent }); corner(pillDot, 4)
 text(pill, "Connected", 13, UDim2.fromOffset(26, 7))
--- hero card
 local heroCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(446, 0), Size = UDim2.new(1, -446, 0, 168), BackgroundColor3 = C.card, BackgroundTransparency = .15 })
 corner(heroCard, 18); stroke(heroCard, C.border, .45)
 New("UIGradient", { Parent = heroCard, Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(23,28,25)), ColorSequenceKeypoint.new(1, Color3.fromRGB(10,12,14)) }), Rotation = 25 })
 text(heroCard, "NOIR SILENT AIM", 26, UDim2.fromOffset(26, 24))
 text(heroCard, "v4 \u{2022} gun & knife prediction, player and object ESP, presets", 14, UDim2.fromOffset(27, 62), true)
 local statText = text(heroCard, "", 14, UDim2.fromOffset(27, 96), true)
--- stat cards
 local fpsCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
 corner(fpsCard, 18); stroke(fpsCard, C.border, .5)
 text(fpsCard, "FPS", 14, UDim2.fromOffset(22, 20), true)
@@ -446,7 +398,6 @@ local playerCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffse
 corner(playerCard, 18); stroke(playerCard, C.border, .5)
 text(playerCard, "PLAYERS", 14, UDim2.fromOffset(22, 20), true)
 local playerText = text(playerCard, "0", 42, UDim2.fromOffset(22, 50)); playerText.TextColor3 = C.text
--- info card
 local infoCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 332), Size = UDim2.new(1, 0, 1, -348), BackgroundColor3 = C.panel, BackgroundTransparency = .3 })
 corner(infoCard, 18); stroke(infoCard, C.border, .5)
 text(infoCard, "QUICK START", 18, UDim2.fromOffset(24, 22))
@@ -467,7 +418,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- (navigation now lives in the left sidebar; the old bottom bar was removed)
 local activePage = "home"
 local selectPage
 do
@@ -488,10 +438,6 @@ do
         local newObject = pageObjects[page]
         activePage = page
 
-        -- Pages used to slide horizontally during every navigation change.
-        -- If two transitions overlapped, an old tween could finish later and
-        -- leave the whole section column a few pixels to the left.  Keep one
-        -- immutable horizontal anchor and animate only scale/visibility.
         for _, object in pairs(pageObjects) do
             if object ~= oldObject and object ~= newObject then
                 object.Visible = false
@@ -537,7 +483,6 @@ end
 for name, b in pairs(navButtons) do b.MouseButton1Click:Connect(function() if activePage == name then selectPage("home") else selectPage(name) end end) end
 selectPage("home")
 
---====================================================== SECTION BUILDER
 local sectionCount, mainSectionCount, worldSectionCount, visualSectionCount, configSectionCount = 0, 0, 0, 0, 0
 local sectionPanels, controls = {}, {}
 function refreshCanvas()
@@ -569,9 +514,6 @@ end)
 
 local host = {}
 
--- Notifications live in their own right-side rail instead of being created at
--- the same bottom-right pixel position.  This prevents a stack of toasts from
--- covering the window, the round timer, or the shoot button.
 local notificationHolder = New("Frame", {
     Parent = gui, Name = "NotificationRail", AnchorPoint = Vector2.new(1, 0),
     Position = UDim2.new(1, -20, 0, 82), Size = UDim2.new(0, 360, 0, 270),
@@ -796,9 +738,6 @@ function host.CreateTab()
             end
             return r
         end
-        -- Compatibility surface for embedded ODH plugins. The current
-        -- plugins do not require a colour picker, but exposing a small
-        -- SetRGBValue-compatible control keeps their adapter API intact.
         function api:AddColorpicker(label, default, callback)
             local r = row(label, 52)
             local colour = default or C.accent
@@ -838,24 +777,21 @@ function host.CreateTab()
     return tab
 end
 
---============================================================= CONFIG
 local config = {
-    -- gun / silent aim
     enabled = false,
-    targetMode = "Murderer",          -- Murderer | Sheriff | Hero | Nearest | Selected | Crosshair | Lowest Health | Random
-    hitPart = "HumanoidRootPart",     -- Head | HumanoidRootPart | UpperTorso | LowerTorso | Torso | Random
-    fovSize = 0,                      -- 0 = disabled
+    targetMode = "Murderer",
+    hitPart = "HumanoidRootPart",
+    fovSize = 0,
     showFov = false,
-    aimKey = "None",                  -- hold to aim (None = always active)
+    aimKey = "None",
     toggleKey = "None",
     autoFire = false,
     autoFireKey = "None",
-    shotMethod = "Remote",            -- Remote = Vector3/CFrame remote rewrite; CFrame = only CFrame protocol
+    shotMethod = "Remote",
     wallCheck = false,
     ignoreDead = true,
     ignoreFriends = false,
-    maxDistance = 0,                  -- 0 = unlimited
-    -- prediction
+    maxDistance = 0,
     adaptive = true,
     fixedLead = 0.075,
     extraLead = 0.02,
@@ -870,7 +806,6 @@ local config = {
     manualPingMs = 80,
     offsetX = 0, offsetY = 0, offsetZ = 0,
     horizontalMultiplier = 100, verticalMultiplier = 100,
-    -- separate knife prediction profile; gun values above remain pistol-only
     knifeAim = {
         adaptive = true,
         fixedLead = 0.075,
@@ -885,27 +820,23 @@ local config = {
         offsetX = 0, offsetY = 0, offsetZ = 0,
         horizontalMultiplier = 100, verticalMultiplier = 100,
     },
-    -- knife
     knifeEnabled = false,
     knifeWallCheck = false,
     knifePrioritizeSheriff = false,
     knifeAutoThrow = false,
-    -- player ESP
+    knifeRadius = 15,
     espOutline = false, espOutlineMurderer = false, espOutlineSheriff = false,
     espChams = false, espChamsMurderer = false, espChamsSheriff = false,
     espBox = false, espBoxMurderer = false, espBoxSheriff = false,
     espName = false, espDistance = false, espHealth = false, espRole = false,
     espTracer = false, espSkeleton = false,
-    -- object ESP
     outlineDroppedGun = false, outlineTraps = false, outlineThrowingKnives = false, outlineCoins = false,
     boxDroppedGun = false, boxTraps = false, boxThrowingKnives = false, boxCoins = false,
-    -- misc
     showShootButton = false,
     lockShootButton = false,
     selectedPlayer = nil,
 }
 
---============================================================== STATE
 local murderer, sheriff, hero
 local cachedPing = 0.05
 local redirected = 0
@@ -925,9 +856,6 @@ local previousEstimatedVelocity = Vector3.zero
 local estimatedAcceleration = Vector3.zero
 local lastAutoTune = 0
 local roundTimerEndsAt, roundPendingStart
--- waiting/starting/playing is also used to gate gun automation.  Without a
--- round state, the lobby can look like a valid GunDrop and the old loop keeps
--- retrying forever after the local player has died.
 local roundState = "waiting"
 local roundResetToken = 0
 local lastRoundResetAt = os.clock()
@@ -939,8 +867,6 @@ local playerData = {}
 local aimHeld = true
 local autoFireHeld = false
 
---===================================================== CACHED STATE
--- Cached player list: avoids allocating a fresh table every frame in hot loops.
 local cachedPlayers = {}
 local function refreshPlayerCache() cachedPlayers = Players:GetPlayers() end
 refreshPlayerCache()
@@ -948,7 +874,6 @@ local function getPlayers() return cachedPlayers end
 Players.PlayerAdded:Connect(refreshPlayerCache)
 Players.PlayerRemoving:Connect(refreshPlayerCache)
 
---============================================================ HELPERS
 function notify(msg, time)
     if type(host.Notify) == "function" then pcall(host.Notify, "MM2 Silent Aim: " .. tostring(msg), time or 3) end
 end
@@ -958,7 +883,6 @@ function validTarget(player)
     return player ~= nil and player ~= LocalPlayer and character ~= nil and humanoid ~= nil and humanoid.Health > 0
 end
 function localCharacter() return LocalPlayer.Character end
--- Cache the local humanoid / root per character so hot loops don't re-run FindFirstChild every call.
 local localHumCache, localHumChar
 function localHumanoid()
     local c = LocalPlayer.Character
@@ -982,7 +906,6 @@ function playerHasTool(player, toolName)
     local backpack = player and player:FindFirstChildOfClass("Backpack")
     return (character and character:FindFirstChild(toolName)) or (backpack and backpack:FindFirstChild(toolName))
 end
--- Friend status rarely changes mid-session, so cache the IsFriendsWith result per player.
 local friendCache = {}
 Players.PlayerRemoving:Connect(function(p) friendCache[p] = nil end)
 function isFriend(player)
@@ -1001,7 +924,6 @@ function distanceTo(player)
     return math.huge
 end
 
---========================================================== ROLE ENGINE
 local ESP_INACTIVE_COLOR = Color3.fromRGB(150, 154, 162)
 function roleColor(role)
     if role == "murderer" then return Color3.fromRGB(255, 55, 65) end
@@ -1019,9 +941,6 @@ local function playerIsInLobby(player)
         return true
     end
 
-    -- MM2 builds have used both attributes and BoolValues for spectators/dead
-    -- players. Check only objects that actually exist; do not assume a single
-    -- hierarchy so active players remain coloured normally.
     local containers = { player, player.Character }
     for _, container in ipairs(containers) do
         if container then
@@ -1059,11 +978,7 @@ function playerESPInactive(player)
     local character = player and player.Character
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
     if not humanoid or humanoid.Health <= 0 then return true end
-    -- During the 10-second start countdown everyone alive stays role-coloured;
-    -- do not mix gray lobby flags into the starting state.
     if roundState == "starting" then return false end
-    -- After the round starts, a player who is individually in the lobby or
-    -- spectating is gray even when other players remain in the round.
     return roundState ~= "playing" or playerIsInLobby(player)
 end
 function playerESPColor(player, role)
@@ -1167,11 +1082,10 @@ function updatePing()
     end)
 end
 
---=============================================================== ESP
 local ESP_OUTLINE_NAME = "NoirESPOutline"
 local ESP_BOX_NAME = "NoirESPBox"
 local espTracers = {}
-local espRefs = {}          -- [player] = { char, info, bar, humanoid } cached billboard refs
+local espRefs = {}
 local Drawing = (typeof(Drawing) == "table") and Drawing or nil
 
 function clearESPCharacter(character)
@@ -1201,7 +1115,6 @@ function makeBillboard(root, role)
     line.Transparency = 0
     line.Parent = frame
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
-    -- health bar
     local barBg = Instance.new("Frame")
     barBg.Name = "NoirESPBar"
     barBg.AnchorPoint = Vector2.new(0, 1)
@@ -1217,7 +1130,6 @@ function makeBillboard(root, role)
     bar.BackgroundColor3 = Color3.fromRGB(65, 235, 105)
     bar.BorderSizePixel = 0
     bar.Parent = barBg
-    -- name / distance / role
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Name = "NoirESPName"
     nameLabel.BackgroundTransparency = 1
@@ -1286,8 +1198,6 @@ function applyESPPlayer(player)
             espRefs[player] = { char = character, info = infoLabel, bar = bar, humanoid = character:FindFirstChildWhichIsA("Humanoid"), highlight = highlight, boxStroke = boxStroke }
         end
     end
-    -- Keep a reference even when only Highlight/Chams are enabled so the
-    -- colour can change to gray immediately when the player dies.
     if not espRefs[player] then
         espRefs[player] = { char = character, info = nil, bar = nil, humanoid = character:FindFirstChildWhichIsA("Humanoid"), highlight = highlight, boxStroke = boxStroke }
     end
@@ -1303,9 +1213,6 @@ end
 for _, player in ipairs(getPlayers()) do bindESPPlayer(player) end
 Players.PlayerAdded:Connect(bindESPPlayer)
 
--- Highlight colours must react to Humanoid.Health and roundState changes even
--- when the character itself did not respawn.  This lightweight loop only
--- updates already-created ESP instances; it does not rescan the workspace.
 task.spawn(function()
     while running do
         for _, player in ipairs(getPlayers()) do
@@ -1332,7 +1239,6 @@ task.spawn(function()
     end
 end)
 
--- tracer + skeleton render loop (optimized: precomputed bones, per-player cache, no per-frame string concat)
 local R15_BONES = {
     {"Head","UpperTorso"}, {"UpperTorso","LowerTorso"},
     {"UpperTorso","LeftUpperArm"}, {"LeftUpperArm","LeftLowerArm"}, {"LeftLowerArm","LeftHand"},
@@ -1343,10 +1249,8 @@ local R15_BONES = {
 local R6_BONES = {
     {"Head","Torso"}, {"Torso","Left Arm"}, {"Torso","Right Arm"}, {"Torso","Left Leg"}, {"Torso","Right Leg"},
 }
--- [player] = { char = character, parts = {{a,b},...}, lines = {line,...} }
 local skeletonCache = {}
 
--- TTL cache for the tool-based role fallback (avoids tool lookups every frame).
 local roleFallbackCache = {}
 local function espRoleFast(player)
     local cached = roleCache[player.UserId]
@@ -1450,7 +1354,6 @@ RunService.RenderStepped:Connect(function(dt)
     end
 end)
 
--- Clean up Drawing objects / refs when a player leaves so nothing leaks.
 Players.PlayerRemoving:Connect(function(player)
     local set = skeletonCache[player]
     if set then
@@ -1463,7 +1366,6 @@ Players.PlayerRemoving:Connect(function(player)
     roleFallbackCache[player.UserId] = nil
 end)
 
--- ESP text / health bar loop (throttled to ~12 Hz, uses cached billboard refs)
 local espTextAccum = 0
 RunService.RenderStepped:Connect(function(dt)
     if not (config.espDistance or config.espRole or config.espHealth) then return end
@@ -1500,7 +1402,6 @@ RunService.RenderStepped:Connect(function(dt)
     end
 end)
 
---====================================================== OBJECT ESP
 function objectKind(instance)
     local name = string.lower(instance.Name)
     if string.find(name, "coin", 1, true) then return "coin" end
@@ -1525,9 +1426,6 @@ function objectColor(kind)
     return Color3.fromRGB(100, 255, 150)
 end
 
--- Registry of highlighted objects: [instance] = { outline = Highlight, box = SelectionBox }.
--- Objects are added/removed incrementally (O(1) per DescendantAdded/Removing) instead of
--- re-scanning the whole workspace, which was the main source of freezes.
 local objectESPRegistry = {}
 function objectESPAnyEnabled()
     return config.outlineDroppedGun or config.outlineTraps or config.outlineThrowingKnives or config.outlineCoins
@@ -1580,7 +1478,6 @@ function removeObjectESP(instance)
         objectESPRegistry[instance] = nil
     end
 end
--- Full scan: only invoked when a toggle changes (initial population / settings change), never per-frame.
 function refreshObjectESP()
     if not objectESPAnyEnabled() then objectESPClearAll() return end
     local seen = {}
@@ -1592,7 +1489,6 @@ function refreshObjectESP()
     end
 end
 
--- Gun-drop registry so findDroppedGun never has to scan the whole workspace.
 local trackedGuns = {}
 function isGunName(name)
     local n = string.lower(name)
@@ -1605,8 +1501,6 @@ local function gunPickupPart(container)
     local fallback
     local function inspect(part)
         if not fallback then fallback = part end
-        -- GunDrop models often have several mesh parts; only one carries the
-        -- TouchInterest/TouchTransmitter that the game's pickup code listens to.
         if part:FindFirstChild("TouchInterest") or part:FindFirstChild("TouchTransmitter")
             or part:FindFirstChildOfClass("TouchTransmitter") then
             return part
@@ -1644,12 +1538,10 @@ Workspace.DescendantRemoving:Connect(function(instance)
     removeObjectESP(instance)
 end)
 
--- Seed the gun registry once at startup so already-present drops are tracked.
 for _, inst in ipairs(Workspace:GetDescendants()) do
     if isGunName(inst.Name) then trackGun(inst) end
 end
 
---=================================================== TARGET SELECTION
 function getAimPart(player)
     local char = player and player.Character
     if not char then return nil end
@@ -1671,22 +1563,22 @@ function inFOV(player)
     local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
     return (Vector2.new(screen.X, screen.Y) - center).Magnitude <= config.fovSize / 2
 end
-function passesFilters(player)
+function passesFilters(player, trusted)
     if player == nil or player == LocalPlayer then return false end
     if not validTarget(player) then return false end
-    if playerIsInLobby(player) then return false end
+    if not trusted and playerIsInLobby(player) then return false end
     if isFriend(player) then return false end
     if config.maxDistance > 0 and distanceTo(player) > config.maxDistance then return false end
     return true
 end
 function selectTarget(mode)
     mode = mode or config.targetMode
-    if mode == "Murderer" then return passesFilters(murderer) and murderer or nil end
-    if mode == "Sheriff" then return passesFilters(sheriff) and sheriff or nil end
-    if mode == "Hero" then return passesFilters(hero) and hero or nil end
+    if mode == "Murderer" then return passesFilters(murderer, true) and murderer or nil end
+    if mode == "Sheriff" then return passesFilters(sheriff, true) and sheriff or nil end
+    if mode == "Hero" then return passesFilters(hero, true) and hero or nil end
     if mode == "Selected" then
         local p = config.selectedPlayer and Players:FindFirstChild(config.selectedPlayer)
-        return passesFilters(p) and p or nil
+        return passesFilters(p, true) and p or nil
     end
     if mode == "Nearest" then
         local best, bd
@@ -1732,7 +1624,7 @@ function selectTarget(mode)
         if #list > 0 then return list[math.random(#list)] end
         return nil
     end
-    return passesFilters(murderer) and murderer or nil
+    return passesFilters(murderer, true) and murderer or nil
 end
 function targetPart()
     local player = selectTarget()
@@ -1760,7 +1652,7 @@ function knifeTargetPlayer()
     if not config.knifeEnabled then return nil end
     if config.knifePrioritizeSheriff == true then
         local sheriffPlayer=findSheriff()
-        return passesFilters(sheriffPlayer) and sheriffPlayer or nil
+        return passesFilters(sheriffPlayer, true) and sheriffPlayer or nil
     end
     return findNearestKnifeTarget()
 end
@@ -1771,7 +1663,6 @@ function knifeTargetPart()
     return getAimPart(player) or character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
 end
 
---================================================= PREDICTION ENGINE
 local PingProfiles = {
     { Ping = 20, Sim = 48, Interval = 70, H = 154, V = 144, X = -5, Y = -14, Z = 0 },
     { Ping = 50, Sim = 54, Interval = 66, H = 162, V = 152, X = -6, Y = -14, Z = 0 },
@@ -1922,10 +1813,7 @@ function targetVisible(part, forceWallCheck)
     return result == nil or result.Instance:IsDescendantOf(part.Parent)
 end
 
---=================================================== REMOTE MATCHERS
 function knifeRemote(remote, args)
-    -- Confirmed client protocol from the captured call:
-    -- Workspace.<LocalPlayer>.Knife.Events.KnifeThrown:FireServer(CFrame, CFrame).
     if not config.knifeEnabled or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if remote.Name ~= "KnifeThrown" then return false end
@@ -1953,22 +1841,12 @@ local function remoteBelongsToLocalGun(remote)
     return (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun))
 end
 function shotRemote(remote, args)
-    -- FIX: accept "at least two" args (args.n >= 2) exactly like the working
-    -- MM2 reference. The old "args.n ~= 2" rejected the real shot whenever the
-    -- client sent any trailing argument, so passive silent aim never fired even
-    -- though the manual Shoot button (which sends its own clean 2-arg call) did.
     if not (config.enabled or buttonShotActive) or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if not remoteBelongsToLocalGun(remote) then return false end
-    -- The Shoot Murder button proves this client's Gun remote accepts a
-    -- two-CFrame (origin, aimPoint) call. Match that pair first; also accept the
-    -- legacy two-Vector3 pair that older Gun tools used.
     local first, second = args[1], args[2]
     local firstIsPos = typeof(first) == "Vector3" or typeof(first) == "CFrame"
     local secondIsPos = typeof(second) == "Vector3" or typeof(second) == "CFrame"
-    -- Mobile/desktop clients can arrive through slightly different local
-    -- firing paths, but the first two arguments remain the position-bearing
-    -- shot pair. Keep unrelated trailing arguments untouched.
     return firstIsPos and secondIsPos
 end
 local function fallbackGunOrigin()
@@ -1994,8 +1872,6 @@ function redirect(remote, args)
     local part, useWallCheck, isKnife = nil, false, false
     if shotRemote(remote, args) then
         if not buttonShotActive and config.aimKey ~= "None" and not aimHeld then return end
-        -- CFrame mode intentionally only rewrites the CFrame protocol. Remote
-        -- mode supports both the current Vector3 protocol and old CFrame pairs.
         if config.shotMethod == "CFrame" and not hasCFrameArgument(args) then return end
         part = (buttonShotActive and buttonShotTarget and getAimPart(buttonShotTarget)) or targetPart()
         useWallCheck = config.wallCheck
@@ -2007,9 +1883,6 @@ function redirect(remote, args)
     if not part or typeof(part) ~= "Instance" or not part:IsA("BasePart") then return end
     if useWallCheck and not targetVisible(part, true) then return end
 
-    -- KnifeThrown in this client is a strict two-CFrame protocol. Handle it
-    -- separately so no string/bool/metadata argument can be mistaken for the
-    -- destination and so ShiftLock keeps a valid direction CFrame.
     if isKnife then
         local origin = args[1].Position
         local aim = calculateKnifeAim(part, origin)
@@ -2021,16 +1894,6 @@ function redirect(remote, args)
         return
     end
 
-    -- GUN SHOT.
-    -- The "Shoot Murder" button already works, and it fires the Gun remote as
-    -- remote:FireServer(CFrame.lookAt(origin, aim), CFrame.new(aim)). That proves
-    -- the server's Shoot protocol is a plain two-CFrame (origin, aimPoint) pair --
-    -- the same thing the working MM2 reference rewrites.
-    --
-    -- The previous v4 code assumed a "Vector3 protocol" and tried to re-order and
-    -- unit-normalise the arguments. When it guessed wrong it sent the server a
-    -- malformed shot, so passive silent aim never registered a hit. We now rewrite
-    -- the exact pair the button proves is correct, with a clean Vector3 fallback.
     local aim = calculateAim(part)
     local firstType, secondType = typeof(args[1]), typeof(args[2])
     if firstType == "CFrame" then
@@ -2048,7 +1911,6 @@ function redirect(remote, args)
     elseif firstType == "Vector3" then
         local origin = args[1]
         if secondType == "Vector3" then
-            -- Legacy Gun tools: (originVector, hitVector) or (originVector, unitDir).
             if args[2].Magnitude <= 1.5 and (aim - origin).Magnitude > 0.01 then
                 args[2] = (aim - origin).Unit
             else
@@ -2065,23 +1927,43 @@ function redirect(remote, args)
     redirected = redirected + 1
 end
 
---======================================================== HOOK SETUP
 function installHook()
     if hooked then return true end
-    if type(hookfunction) ~= "function" then notify("hookfunction is unavailable",6); return false end
-    local wrap=type(newcclosure)=="function" and newcclosure or function(callback) return callback end
-    local probe=Instance.new("RemoteEvent")
+    local wrap = type(newcclosure) == "function" and newcclosure or function(callback) return callback end
+    local isOwnCall = type(checkcaller) == "function" and checkcaller or function() return false end
+    if type(hookmetamethod) == "function" and type(getnamecallmethod) == "function" then
+        local old
+        local ok, err = pcall(function()
+            old = hookmetamethod(game, "__namecall", wrap(function(self, ...)
+                local method = getnamecallmethod()
+                if method == "FireServer" and typeof(self) == "Instance" and self.ClassName == "RemoteEvent" and not isOwnCall() then
+                    local args = table.pack(...)
+                    pcall(redirect, self, args)
+                    if type(setnamecallmethod) == "function" then setnamecallmethod(method) end
+                    return old(self, table.unpack(args, 1, args.n))
+                end
+                return old(self, ...)
+            end))
+        end)
+        if ok and type(old) == "function" then
+            hooked = true
+            return true
+        end
+        notify("Namecall hook failed: " .. tostring(err), 5)
+    end
+    if type(hookfunction) ~= "function" then notify("No hook support in this executor", 6) return false end
+    local probe = Instance.new("RemoteEvent")
     local original
-    local ok,err=pcall(function()
-        original=hookfunction(probe.FireServer,wrap(function(self,...)
-            local args=table.pack(...)
-            if typeof(self)=="Instance" and self:IsA("RemoteEvent") then pcall(redirect,self,args) end
-            return original(self,table.unpack(args,1,args.n))
+    local ok, err = pcall(function()
+        original = hookfunction(probe.FireServer, wrap(function(self, ...)
+            local args = table.pack(...)
+            if typeof(self) == "Instance" and self.ClassName == "RemoteEvent" and not isOwnCall() then pcall(redirect, self, args) end
+            return original(self, table.unpack(args, 1, args.n))
         end))
     end)
     probe:Destroy()
-    if not ok or type(original)~="function" then notify("Hook failed: "..tostring(err),6); return false end
-    hooked=true
+    if not ok or type(original) ~= "function" then notify("Hook failed: " .. tostring(err), 6) return false end
+    hooked = true
     return true
 end
 function toggle(value)
@@ -2095,7 +1977,118 @@ function toggle(value)
     end
 end
 
---======================================================= FIRE GUN
+do
+    local CollectionService = game:GetService("CollectionService")
+    local touch = type(firetouchinterest) == "function" and firetouchinterest or nil
+    local active = {}
+    local stepConnection
+
+    local function ownKnifeTool()
+        local character = LocalPlayer.Character
+        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+        return (character and character:FindFirstChild("Knife")) or (backpack and backpack:FindFirstChild("Knife"))
+    end
+
+    local function knifePosition(knife)
+        if not knife or not knife.Parent then return nil end
+        local blade = knife:FindFirstChild("BladePosition")
+        if blade and blade:IsA("BasePart") then return blade.Position end
+        if blade and blade:IsA("Attachment") then return blade.WorldPosition end
+        local visual = knife:FindFirstChild("KnifeVisual")
+        if visual and visual:IsA("BasePart") then return visual.Position end
+        if knife:IsA("BasePart") then return knife.Position end
+        local part = knife:FindFirstChildWhichIsA("BasePart", true)
+        if part then return part.Position end
+        return nil
+    end
+
+    local function isOwnKnife(knife)
+        local link = knife:FindFirstChild("HandleLink")
+        local character = LocalPlayer.Character
+        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+        if link and link:IsA("ObjectValue") and link.Value then
+            if character and link.Value:IsDescendantOf(character) then return true end
+            if backpack and link.Value:IsDescendantOf(backpack) then return true end
+        end
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local position = knifePosition(knife)
+        return root ~= nil and position ~= nil and ownKnifeTool() ~= nil and (position - root.Position).Magnitude <= 35
+    end
+
+    local function touchPair(first, second)
+        if not touch or not first or not second then return end
+        pcall(touch, first, second, true)
+        task.defer(function()
+            if first.Parent and second.Parent then pcall(touch, first, second, false) end
+        end)
+    end
+
+    local function strike(knife, part)
+        local tool = ownKnifeTool()
+        local handle = tool and tool:FindFirstChild("Handle", true)
+        local blade = knife:FindFirstChild("BladePosition")
+        if not (blade and blade:IsA("BasePart")) then
+            blade = knife:IsA("BasePart") and knife or knife:FindFirstChildWhichIsA("BasePart", true)
+        end
+        touchPair(blade, part)
+        if handle and handle:IsA("BasePart") and handle ~= blade then touchPair(handle, part) end
+        if not tool then return end
+        local touched = tool:FindFirstChild("HandleTouched", true)
+        if touched and touched:IsA("RemoteEvent") then pcall(touched.FireServer, touched, part) end
+        local stabbed = tool:FindFirstChild("KnifeStabbed", true)
+        if stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
+    end
+
+    local function stopStep()
+        if stepConnection then
+            stepConnection:Disconnect()
+            stepConnection = nil
+        end
+    end
+
+    local function step()
+        if not config.knifeEnabled or next(active) == nil then stopStep() return end
+        local now = os.clock()
+        local radius = config.knifeRadius
+        for knife, data in pairs(active) do
+            if not knife.Parent or now - data.started > 3.5 then
+                active[knife] = nil
+            else
+                local position = knifePosition(knife)
+                if position then
+                    for _, player in ipairs(getPlayers()) do
+                        local character = player ~= LocalPlayer and player.Character
+                        local root = character and character:FindFirstChild("HumanoidRootPart")
+                        if root and validTarget(player) and (root.Position - position).Magnitude <= radius and now - (data.hit[player] or 0) >= 0.08 then
+                            data.hit[player] = now
+                            strike(knife, root)
+                        end
+                    end
+                end
+            end
+        end
+        if next(active) == nil then stopStep() end
+    end
+
+    local function track(knife)
+        if active[knife] or not config.knifeEnabled then return end
+        local isKnife = knife.Name == "ThrowingKnife" or knife:HasTag("ThrowingKnife")
+            or knife:FindFirstChild("HandleLink") ~= nil or knife:FindFirstChild("BladePosition") ~= nil
+        if not isKnife then return end
+        if not isOwnKnife(knife) then
+            knife:WaitForChild("HandleLink", 0.1)
+            if not isOwnKnife(knife) then return end
+        end
+        active[knife] = { started = os.clock(), hit = {} }
+        if not stepConnection then stepConnection = RunService.Heartbeat:Connect(step) end
+    end
+
+    CollectionService:GetInstanceAddedSignal("ThrowingKnife"):Connect(function(knife) task.defer(track, knife) end)
+    Workspace.ChildAdded:Connect(function(child)
+        if child.Name == "ThrowingKnife" or child:HasTag("ThrowingKnife") then task.defer(track, child) end
+    end)
+end
+
 function findGunRemote()
     local gun=localGunTool()
     if not gun then return nil end
@@ -2141,8 +2134,6 @@ function fireGunAt(player)
         end
         local aim=calculateAim(part)
         local origin=handle.Position
-        -- Mark this as a controlled shot so the remote hook uses the exact
-        -- target selected by the button on both touch and desktop.
         buttonShotActive = true
         buttonShotTarget = player
         success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
@@ -2176,7 +2167,6 @@ task.spawn(function()
     end
 end)
 
---====================================================== SHOOT BUTTON
 function removeShootButton()
     if shootGui then shootGui:Destroy(); shootGui = nil; shootButton = nil end
 end
@@ -2191,9 +2181,6 @@ function createShootButton()
     local button = Instance.new("TextButton")
     button.Name = "ShootMurderer"
     button.AnchorPoint = Vector2.new(0.5, 0.5)
-    -- Start in the right-side safe rail, outside the main window.  The v4
-    -- position key is intentionally new so an old centre-screen position is
-    -- not restored over the UI after updating.
     button.Position = NoirPersistence.GetPosition("shoot_v2", UDim2.new(1, -132, 1, -124))
     button.Size = UDim2.new(0, 194, 0, 66)
     button.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
@@ -2257,8 +2244,6 @@ function createShootButton()
         if dragging and input == dragInput and not config.lockShootButton then
             local delta = input.Position - dragStart
             if delta.Magnitude > 8 then moved = true end
-            -- Deliberately do not clamp the button: it can be moved freely,
-            -- including partly outside the screen, as requested.
             button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X,
                 startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
         end
@@ -2279,18 +2264,14 @@ function setShootButtonVisible(value)
     if config.showShootButton then createShootButton() else removeShootButton() end
 end
 
---======================================================== FOV CIRCLE
 local fovCircle = New("Frame", { Parent = gui, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5),
     BackgroundTransparency = 1, Size = UDim2.fromOffset(200, 200), Visible = false, ZIndex = 2 })
 New("UICorner", { Parent = fovCircle, CornerRadius = UDim.new(.5, 0) })
 local fovStroke = New("UIStroke", { Parent = fovCircle, Color = Color3.fromRGB(232,232,236), Thickness = 1.5, Transparency = .35 })
 function updateFovCircle()
-    -- FOV controls were removed from Silent Aim; keep the legacy object hidden
-    -- even when an old preset contains showFov/fovSize values.
     fovCircle.Visible = false
 end
 
---======================================================= ROUND TIMER
 local roundTimerGui
 local function formatRoundTime(seconds)
     seconds = math.max(0, math.floor(tonumber(seconds) or 0))
@@ -2362,7 +2343,6 @@ function setRoundTimerVisible(value)
     end)
 end
 
---======================================================== MISC / UTILITY
 local utility = {
     walkEnabled = false, walkSpeed = 16, jumpEnabled = false, jumpPower = 50,
     autoGrab = false, grabSafety = true, gunAura = false, gunAuraRange = 10,
@@ -2415,10 +2395,8 @@ function findPickupRemote()
     return pickupRemoteCache
 end
 function findDroppedGun()
-    -- 1) fast registry lookup (kept up to date by DescendantAdded/Removing)
     local tracked = findTrackedGun()
     if tracked then return tracked end
-    -- 2) throttled fallback (at most once per second) instead of a full scan every tick
     local now = os.clock()
     if now - lastGunDeepScan < 1 then return nil end
     lastGunDeepScan = now
@@ -2440,9 +2418,6 @@ end
 local function gunRoundActive()
     local humanoid = localHumanoid()
     if not humanoid or humanoid.Health <= 0 then return false end
-    -- A round must be positively identified by RoundStart/role data.  This
-    -- also keeps a persisted Auto Grab toggle idle while the player is in the
-    -- lobby after dying.
     if roundState ~= "starting" and roundState ~= "playing" then return false end
     return true
 end
@@ -2468,9 +2443,6 @@ function grabGun(silent)
     if not part or not part.Parent then return false end
 
     local attempted = false
-    -- MM2's normal dropped-gun pickup is a touch interaction.  Verify the
-    -- local inventory after the attempt instead of treating the existence of
-    -- firetouchinterest as a successful pickup.
     if type(firetouchinterest) == "function" then
         local ok = pcall(function()
             firetouchinterest(root, part, 0)
@@ -2479,7 +2451,6 @@ function grabGun(silent)
         end)
         attempted = ok or attempted
     end
-    -- Keep the legacy fallback for executors that do not expose touch events.
     pcall(function() part.CFrame = root.CFrame end)
 
     local pickupRemote = findPickupRemote()
@@ -2514,7 +2485,6 @@ function nearestPlayer(maxDistance)
     return best
 end
 
--- fling machinery
 local flingBusy = false
 local flingBodyVelocity, flingOldPosition
 local flingDestroyHeight = Workspace.FallenPartsDestroyHeight
@@ -2598,7 +2568,6 @@ function applyAntiFling()
     end
 end
 
--- chat helper (legacy + TextChatService)
 function sendChat(message)
     if type(message) ~= "string" or message == "" then return false end
     local sent = false
@@ -2628,7 +2597,6 @@ function showMurdererChance()
     end
 end
 
--- anti-afk
 do
     local virtualUser = game:GetService("VirtualUser")
     LocalPlayer.Idled:Connect(function()
@@ -2640,7 +2608,6 @@ do
     end)
 end
 
--- main utility loop
 task.spawn(function()
     local hadDrop = false
     local lastGunScan = 0
@@ -2651,9 +2618,6 @@ task.spawn(function()
             if now - lastGunScan >= 0.5 then
                 lastGunScan = now
                 local active = gunRoundActive()
-                -- Reset the edge detector in the lobby.  This prevents a stale
-                -- GunDrop from alternating between “dropped” and “picked up”
-                -- notifications while the player is dead or waiting.
                 if not active then
                     hadDrop = false
                 else
@@ -2703,7 +2667,6 @@ task.spawn(function()
     end
 end)
 
--- chat spam loop
 task.spawn(function()
     while running do
         if utility.chatSpam and utility.chatMessage ~= "" then
@@ -2715,7 +2678,6 @@ task.spawn(function()
     end
 end)
 
---======================================================== PRESET SYSTEM
 function cleanPresetName(name)
     name = tostring(name or "default"):gsub("%.preset$", ""):gsub("[^%w_%- ]", "_")
     return name ~= "" and name or "default"
@@ -2866,10 +2828,8 @@ presetNames = function()
     return names
 end
 
---========================================================= UI SECTIONS
 local tab = host.CreateTab()
 
--- MAIN • SELF MODS
 local selfMods = tab:AddSection("MAIN \u{2022} SELF MODS", "Universal player controls")
 selfMods:AddToggle("Enable WalkSpeed", function(v) utility.walkEnabled = v; applyCharacterMods() end)
 selfMods:AddSlider("WalkSpeed", 8, 100, 16, function(v) utility.walkSpeed = v; applyCharacterMods() end)
@@ -2877,7 +2837,6 @@ selfMods:AddToggle("Enable JumpPower", function(v) utility.jumpEnabled = v; appl
 selfMods:AddSlider("JumpPower", 25, 150, 50, function(v) utility.jumpPower = v; applyCharacterMods() end)
 selfMods:AddToggle("Anti AFK", function(v) utility.antiAfk = v end)
 
--- MAIN • SERVER
 local serverMods = tab:AddSection("MAIN \u{2022} SERVER", "MM2 round information")
 serverMods:AddToggle("Show Round Timer", setRoundTimerVisible)
 serverMods:AddToggle("Instant Role Detection", function(v) instantRoleDetection = v; if v then task.spawn(refreshTarget) end end)
@@ -2886,7 +2845,6 @@ serverMods:AddButton("Show Murderer Chance", showMurdererChance)
 serverMods:AddButton("Refresh Roles", refreshTarget)
 serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
 
--- WORLD • GUN
 local worldGun = tab:AddSection("WORLD \u{2022} GUN", "Gun pickup and dropped gun controls")
 worldGun:AddButton("Grab Gun", function() grabGun() end)
 worldGun:AddToggle("Auto Grab Gun", function(v) utility.autoGrab = v end)
@@ -2896,7 +2854,6 @@ worldGun:AddSlider("Gun Aura Range", 5, 40, 10, function(v) utility.gunAuraRange
 worldGun:AddToggle("Auto Notify on Dropped Gun", function(v) utility.notifyDropped = v end)
 worldGun:AddToggle("Gun Pickup Notify", function(v) utility.notifyPickup = v end)
 
--- WORLD • FLING
 local worldFling = tab:AddSection("WORLD \u{2022} FLING", "Sheriff, Murderer and selected player")
 worldFling:AddButton("Fling Sheriff", function() local p = findSheriff(); if p then task.spawn(flingPlayer, p) else notify("Sheriff not found", 2) end end)
 worldFling:AddButton("Fling Murder", function() local p = validTarget(murderer) and murderer or findByKnife(); if p then task.spawn(flingPlayer, p) else notify("Murderer not found", 2) end end)
@@ -2907,12 +2864,10 @@ end)
 worldFling:AddButton("Fling Selected", function() local p = utility.selectedPlayer and Players:FindFirstChild(utility.selectedPlayer); if p then task.spawn(flingPlayer, p) else notify("Select a player", 2) end end)
 worldFling:AddButton("Refresh Player List", function() if selectedPlayerControl and selectedPlayerControl.Refresh then selectedPlayerControl:Refresh(playerNameList(), utility.selectedPlayer or "None") end end)
 
--- WORLD • TOUCH FLING
 local touchFlingSection = tab:AddSection("WORLD \u{2022} TOUCH FLING", "Adapted from FlingGui")
 touchFlingSection:AddToggle("Touch Fling", function(v) utility.touchFling = v end)
 touchFlingSection:AddSlider("Touch Fling Power", 10, 50000, 100, function(v) utility.touchPower = v end)
 
--- WORLD • FLING SETTINGS
 local flingSettings = tab:AddSection("WORLD \u{2022} FLING SETTINGS", "Automatic fling and power settings")
 flingSettings:AddButton("Fling Nearest", function() task.spawn(flingPlayer, nearestPlayer()) end)
 flingSettings:AddToggle("Auto Fling Sheriff / Hero", function(v) utility.autoFlingSheriff = v end)
@@ -2922,7 +2877,6 @@ flingSettings:AddToggle("Anti Fling", function(v) utility.antiFling = v end)
 flingSettings:AddSlider("Fling Duration", 1, 5, 2, function(v) utility.flingDuration = v end)
 flingSettings:AddSlider("Fling Power", 1, 3, 1, function(v) utility.flingPower = v end)
 
--- COMBAT
 do
     local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
     combatAim:AddToggle("Enabled", toggle)
@@ -2935,6 +2889,7 @@ do
         config.knifeEnabled=v==true
         if config.knifeEnabled then installHook() end
     end)
+    combatKnife:AddSlider("Knife Radius", 5, 40, config.knifeRadius, function(v) config.knifeRadius = tonumber(v) or config.knifeRadius end)
     combatKnife:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck=v==true end)
     combatKnife:AddToggle("Prioritize Sheriff", function(v)
         config.knifePrioritizeSheriff=v==true
@@ -3042,7 +2997,6 @@ do
     end
 end
 
--- VISUAL • PLAYER OUTLINE
 local playerOutline = tab:AddSection("VISUAL \u{2022} PLAYER OUTLINE", "Role-colored silhouettes")
 playerOutline:AddToggle("Everyone", function(v) config.espOutline = v; task.spawn(refreshTarget); refreshESP() end)
 playerOutline:AddToggle("Murderer Only", function(v) config.espOutlineMurderer = v; task.spawn(refreshTarget); refreshESP() end)
@@ -3051,7 +3005,6 @@ playerOutline:AddToggle("Chams Everyone", function(v) config.espChams = v; refre
 playerOutline:AddToggle("Chams Murderer", function(v) config.espChamsMurderer = v; refreshESP() end)
 playerOutline:AddToggle("Chams Sheriff / Hero", function(v) config.espChamsSheriff = v; refreshESP() end)
 
--- VISUAL • PLAYER BOX
 local playerBox = tab:AddSection("VISUAL \u{2022} PLAYER BOX", "Clean role-colored boxes")
 playerBox:AddToggle("Everyone", function(v) config.espBox = v; task.spawn(refreshTarget); refreshESP() end)
 playerBox:AddToggle("Murderer Only", function(v) config.espBoxMurderer = v; task.spawn(refreshTarget); refreshESP() end)
@@ -3063,21 +3016,18 @@ playerBox:AddToggle("Show Role", function(v) config.espRole = v; refreshESP() en
 playerBox:AddToggle("Show Tracer", function(v) config.espTracer = v end)
 playerBox:AddToggle("Show Skeleton", function(v) config.espSkeleton = v end)
 
--- VISUAL • OBJECT OUTLINE
 local objectOutline = tab:AddSection("VISUAL \u{2022} OBJECT OUTLINE", "Dropped items and map objects")
 objectOutline:AddToggle("Dropped Gun", function(v) config.outlineDroppedGun = v; refreshObjectESP() end)
 objectOutline:AddToggle("Traps", function(v) config.outlineTraps = v; refreshObjectESP() end)
 objectOutline:AddToggle("Throwing Knives", function(v) config.outlineThrowingKnives = v; refreshObjectESP() end)
 objectOutline:AddToggle("Coins", function(v) config.outlineCoins = v; refreshObjectESP() end)
 
--- VISUAL • OBJECT BOX
 local objectBox = tab:AddSection("VISUAL \u{2022} OBJECT BOX", "Compact object boxes")
 objectBox:AddToggle("Dropped Gun", function(v) config.boxDroppedGun = v; refreshObjectESP() end)
 objectBox:AddToggle("Traps", function(v) config.boxTraps = v; refreshObjectESP() end)
 objectBox:AddToggle("Throwing Knives", function(v) config.boxThrowingKnives = v; refreshObjectESP() end)
 objectBox:AddToggle("Coins", function(v) config.boxCoins = v; refreshObjectESP() end)
 
---===================================================== EVENT CONNECTIONS
 local remoteConnections = {}
 function connectRemote(name, handler)
     local wanted = string.lower(tostring(name))
@@ -3101,9 +3051,6 @@ connectRemote("RoundStart", function(timerValue, roundData)
     beginRoundTimer(timerValue)
     murderer, sheriff, hero = nil, nil, nil
     table.clear(roleCache); table.clear(announcedRoles)
-    -- RoundStart carries the live role/player table as its second argument in
-    -- this client. Consume it immediately instead of waiting for a missing
-    -- GetPlayerData request; this is what gives Gun/Knife a target at round start.
     if typeof(roundData) == "table" then consumeData(roundData) end
     task.spawn(refreshTarget)
 end)
@@ -3124,7 +3071,6 @@ connectRemote("KillEvent", function() task.spawn(refreshTarget) end)
 connectRemote("GameOver", finishRound)
 connectRemote("VictoryScreen", finishRound)
 connectRemote("Stealth", function() notify("Stealth activated", 3) end)
---======================================================== BACKGROUND LOOPS
 task.spawn(function()
     while running do
         updatePing()
@@ -3142,7 +3088,6 @@ end)
 
 task.spawn(function()
     while running do
-        -- Only sample motion while an aim feature is active; run at ~30 Hz instead of every frame.
         if config.enabled or config.knifeEnabled then
             local part = targetPart()
             local settings = config.enabled and config or config.knifeAim
@@ -3152,7 +3097,6 @@ task.spawn(function()
     end
 end)
 
---======================================================== KEYBINDS
 aimHeld = (config.aimKey == "None")
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
@@ -3183,10 +3127,8 @@ UIS.InputEnded:Connect(function(input)
     end
 end)
 
---======================================================== NAV WIRING
 refreshCanvas()
 
---====================================================== INTRO ANIMATION
 task.defer(function()
     RunService.RenderStepped:Wait()
     if not win.Parent then return end
@@ -3202,9 +3144,6 @@ end)
 
 notify("v4 ready \u{2022} " .. tostring(#getPlayers()) .. " players in server", 4)
 
---==================================================== EMBEDDED WORLD PLUGINS
--- Compatibility bridge for the four attached ODH plugins. Each plugin is
--- isolated and guarded so one unsupported feature cannot stop the main UI.
 do
     local function makeWorldPluginTab(base)
         local proxy = {}
@@ -3239,15 +3178,8 @@ do
             notify(tostring(textValue), duration or 3)
         end,
     }
-    -- ================================================================
-    -- EMBEDDED PLUGIN: Anims.lua.txt
     do
         local __pluginOk, __pluginError = xpcall(function()
--- FE Animations: current Overdrive H API + persistent preferences.
--- Revision 3: full track reset before ID changes + delayed, supersession-safe Animate restart.
--- Animation presets by aux0on: https://github.com/aux0on/FE/blob/main/Anims.lua
--- R15 only. Asset availability/replication depends on Roblox and the experience.
--- Self-contained: does not download or execute the old external CrashHandler.
 local shared = odh_shared_plugins
 if not shared or type(shared.CreateTab) ~= "function" then
     warn("[FE Animations] Load this file through the current Overdrive H plugin menu.")
@@ -3685,7 +3617,7 @@ local animPresets = {
         climb = "http://www.roblox.com/asset/?id=95973965948476",
         fall  = "http://www.roblox.com/asset/?id=109790195947848"
     },
-                
+
     ["FHA V2"] = {
         idle1 = "http://www.roblox.com/asset/?id=77320840005481",
         idle2 = "http://www.roblox.com/asset/?id=77320840005481",
@@ -3695,7 +3627,7 @@ local animPresets = {
         climb = "http://www.roblox.com/asset/?id=114562994724647",
         fall  = "http://www.roblox.com/asset/?id=98383265864436"
     },
-   
+
     ["Silent Nurse"] = {
         idle1 = "http://www.roblox.com/asset/?id=111047244862844",
         idle2 = "http://www.roblox.com/asset/?id=111047244862844",
@@ -3715,7 +3647,7 @@ local animPresets = {
         climb = "http://www.roblox.com/asset/?id=82728029306069",
         fall  = "http://www.roblox.com/asset/?id=119173466228299"
     },
-    
+
     ["Enchanted Fairy"] = {
         idle1 = "http://www.roblox.com/asset/?id=73650178233095",
         idle2 = "http://www.roblox.com/asset/?id=73650178233095",
@@ -3725,7 +3657,7 @@ local animPresets = {
         climb = "http://www.roblox.com/asset/?id=140663406485180",
         fall  = "http://www.roblox.com/asset/?id=100947971756348"
     },
-    
+
     ["Furry"] = {
         idle1 = "http://www.roblox.com/asset/?id=111821292044705",
         idle2 = "http://www.roblox.com/asset/?id=111821292044705",
@@ -3735,7 +3667,7 @@ local animPresets = {
         climb = "http://www.roblox.com/asset/?id=76660530164497",
         fall  = "http://www.roblox.com/asset/?id=137079985547592"
     },
-    
+
     ["Vlada Model"] = {
         idle1 = "http://www.roblox.com/asset/?id=100139116433530",
         idle2 = "http://www.roblox.com/asset/?id=100139116433530",
@@ -3788,7 +3720,6 @@ local runAnimOptions = {
     "Bike/Bicyclist", "Animal", "It-Girl Essential Model",
     "Oldschool", "Spider", "Joy", "Flying Aura", "FHA V2", "Silent Nurse", "Supermodel", "Enchanted Fairy", "Furry", "Vlada Model", "R6 Converter"
 }
-
 
 local allowed={}
 for key in pairs(runtime.selections) do
@@ -3845,13 +3776,10 @@ local function Status(text)
     runtime.status=text
     if statusLabel then pcall(function() statusLabel:SetValue(text) end) end
 end
-local changed={} -- [Animation instance] = {original=assetId,last=assetId,animate=LocalScript}
-local touched={} -- Animate scripts refreshed by this plugin, including Default selections.
-local restarts={} -- One pending restart per Animate; newest batch owns its restart.
+local changed={}
+local touched={}
+local restarts={}
 
--- AnimationTrack.Animation may reference the very Animation whose ID we replace.
--- Matching tracks by that ID AFTER writing IDs misses stale, still-playing tracks.
--- A full transition reset also clears cross-fading tracks and cached idle/run blends.
 local function StopTracks(animate)
     local character=animate.Parent
     local humanoid=character and character:FindFirstChildOfClass("Humanoid")
@@ -3866,8 +3794,6 @@ local function StopTracks(animate)
     end
     local stopped=true
     for _,track in ipairs(tracks) do
-        -- Do not destroy tracks owned by tools/emotes or other scripts. This reset
-        -- interrupts them once, but does not permanently block future animations.
         pcall(function() track:AdjustWeight(0,0) end)
         local stopOK=pcall(function() track:Stop(0) end)
         if not stopOK then stopped=false end
@@ -3876,9 +3802,8 @@ local function StopTracks(animate)
     return stopped
 end
 local function FinishRestart(animate,lease)
-    if restarts[animate]~=lease then return true end -- superseded by a later toggle/choice
+    if restarts[animate]~=lease then return true end
     local stopOK=StopTracks(animate)
-    -- Always attempt to restore Disabled, even if stopping a track failed.
     local ok,err=pcall(function() animate.Disabled=lease.wasDisabled end)
     if ok then
         restarts[animate]=nil
@@ -3895,10 +3820,9 @@ local function WriteBatch(animate,entries,forceRestart)
     local lease={wasDisabled=wasDisabled}
     restarts[animate]=lease
     local stopped=true
-    -- ID writes never yield. A new request cannot observe a half-written batch.
     local ok,err=pcall(function()
         animate.Disabled=true
-        stopped=StopTracks(animate) -- BEFORE mutating Animation.AnimationId
+        stopped=StopTracks(animate)
         for _,entry in ipairs(entries) do
             entry.anim.AnimationId=entry.value
             if entry.saved and entry.anim.AnimationId==entry.value then entry.saved.beforeWrite=nil end
@@ -3910,9 +3834,6 @@ local function WriteBatch(animate,entries,forceRestart)
         return false
     end
     task.spawn(function()
-        -- Keep Animate stopped for actual scheduler frames; an immediate true/false
-        -- flip is not a reliable script restart. New requests inherit the ORIGINAL
-        -- Disabled state, not the temporary true used by this transaction.
         task.wait(0.1)
         if restarts[animate]~=lease then return end
         local restarted=FinishRestart(animate,lease)
@@ -3923,7 +3844,6 @@ end
 local function RestoreOriginals()
     local batches={}
     local restored=true
-    -- Even if IDs are already original, old loaded tracks may still be running.
     for animate in pairs(touched) do
         if animate.Parent then batches[animate]={} else touched[animate]=nil end
     end
@@ -3987,8 +3907,6 @@ local function ApplyReady(ready,forceRestart)
     for _,slot in ipairs(ready.slots) do
         local anim=slot.anim
         local saved=changed[anim]
-        -- If a game/avatar script replaced an ID since our last write, use that
-        -- new ID as the restoration baseline rather than a stale avatar default.
         if saved and anim.AnimationId~=saved.last and anim.AnimationId~=saved.original and anim.AnimationId~=saved.beforeWrite then
             changed[anim]=nil
             saved=nil
@@ -4000,8 +3918,6 @@ local function ApplyReady(ready,forceRestart)
         local desired=preset and preset[slot.key] or original
         if anim.AnimationId~=desired then
             saved=saved or {original=original,animate=ready.animate}
-            -- Each batch is synchronous; a failed assignment leaves either the
-            -- old value or this intended value, both safe for restoration.
             saved.beforeWrite=anim.AnimationId
             saved.last=desired
             changed[anim]=saved
@@ -4032,7 +3948,6 @@ local function RequestApply()
             if not Current(character,ticket) then return end
             if not ready then Status(reason); return end
             if ApplyReady(ready,true) then Status("ON — selection applied") else Status("Could not apply — press Retry") end
-            -- A single delayed recheck handles late avatar appearance updates.
             task.wait(0.5)
             if not Current(character,ticket) then return end
             ready,reason=ReadySlots(character,ticket)
@@ -4057,7 +3972,6 @@ function runtime.Cleanup()
     if characterConnection then characterConnection:Disconnect() end
     if appearanceConnection then appearanceConnection:Disconnect() end
     local restored=RestoreOriginals()
-    -- Cleanup must leave no deferred restart that could interfere with a reload.
     local pending={}
     for animate,lease in pairs(restarts) do pending[#pending+1]={animate=animate,lease=lease} end
     for _,item in ipairs(pending) do
@@ -4122,11 +4036,8 @@ RequestApply()
             notify("Anims.lua.txt failed to load: " .. tostring(__pluginError), 7)
         end
     end
-    -- ================================================================
-    -- EMBEDDED PLUGIN: BJP.lua.txt
     do
         local __pluginOk, __pluginError = xpcall(function()
--- ODH 2026 adapter. Embedded in every plugin; no downloads/dependencies.
 local ODHX = (function()
     local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
     X.id, X.title, X.file = "BJP", "Bomb Jump+", "ODH_BJP_settings.json"
@@ -4161,7 +4072,7 @@ local ODHX = (function()
             end
             return result
         end
-        return nil -- never serialize Instances, connections, functions or players
+        return nil
     end
     local function decode(v, depth)
         depth=depth or 0
@@ -4192,7 +4103,7 @@ local ODHX = (function()
         else report("readfile/writefile unavailable; settings last only for this session.") end
     end
     local tab
-    X.shared=setmetatable({}, {__index=host}) -- never mutate the host API
+    X.shared=setmetatable({}, {__index=host})
     X.shared.Notify=function(text,seconds)
         if X.restoring then return end
         if type(host.Notify)=="function" then return host.Notify(text,seconds or 3) end
@@ -4257,7 +4168,6 @@ local ODHX = (function()
     end
     function X.Restore()
         X.restoring=true
-        -- Options before enabling modules. Actions and player selections are never replayed.
         for _,togglePass in ipairs({false,true}) do
             for _,r in ipairs(X.records) do
                 if not r.exclude and ((r.kind=="Toggle")==togglePass) then
@@ -4300,7 +4210,7 @@ local ODHX = (function()
         local function register(kind,label,callback,default,min,max,items)
             local r={section=name,name=label,kind=kind,callback=callback,default=default,min=min,max=max,items=items,visual=false}
             r.key=key(name,label,kind)
-            r.exclude=(name=="🔑 Keys") -- key-capture toggles are actions, not enabled modes
+            r.exclude=(name=="🔑 Keys")
             X.records[#X.records+1]=r; X.byKey[r.key]=r
             local function changed(v)
                 if kind=="Toggle" then r.visual=(v==true) end
@@ -4340,7 +4250,6 @@ local ODHX = (function()
         function section:AddParagraph(...) return raw:AddParagraph(...) end
         return section
     end
-    -- Stable GUI paths, never serialized Instances. Player name is session-independent.
     function X.Path(object)
         local parts={}
         local player=game:GetService("Players").LocalPlayer
@@ -4382,15 +4291,14 @@ local ODHX = (function()
     registry[X.id]=X
     return X
 end)()
--- END ODH 2026 ADAPTER
 
 local table_insert = table.insert
 
 local Maid = {}
 Maid.__index = Maid
 
-function Maid.new() 
-    return setmetatable({_tasks = {}, _destroyed = false}, Maid) 
+function Maid.new()
+    return setmetatable({_tasks = {}, _destroyed = false}, Maid)
 end
 
 function Maid:GiveTask(task)
@@ -4430,8 +4338,8 @@ function Maid:DoCleaning()
     self._tasks = {}
 end
 
-function Maid:Destroy() 
-    self:DoCleaning() 
+function Maid:Destroy()
+    self:DoCleaning()
 end
 
 local RootMaid = Maid.new()
@@ -4607,7 +4515,7 @@ local function AddBigButton(id, text, func, isGold, customSize)
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = bb
     local gradient = Instance.new("UIGradient")
-    
+
     if isGold then
         gradient.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0,    __RGB(255, 215, 0)),
@@ -4721,7 +4629,7 @@ end
 local function Bind_MakeDraggable(gui, maid, ripple, sound, clickFunc)
     local dragging, dragInput, dragStart, startPos
     local hasMoved = false
-    
+
     maid:GiveTask(ODHX.Connect(gui.InputBegan, function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging, dragStart, startPos = true, input.Position, gui.Position
@@ -4749,13 +4657,13 @@ local function Bind_MakeDraggable(gui, maid, ripple, sound, clickFunc)
             end)
         end
     end))
-    
+
     maid:GiveTask(ODHX.Connect(gui.InputChanged, function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             dragInput = input
         end
     end))
-    
+
     maid:GiveTask(ODHX.Connect(__UIS.InputChanged, function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
@@ -4768,7 +4676,7 @@ end
 
 function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     if BindableButtons.Buttons[id] then return end
-    
+
     local buttonMaid = Maid.new()
     local camera = workspace.CurrentCamera
     local screen = camera.ViewportSize
@@ -4869,12 +4777,12 @@ end
 function BindableButtons.UpdateBButtonText(id, text, isWaiting, isGold)
     local btn = BindableButtons.Buttons[id]
     if not btn then return end
-    
+
     local textLabel = btn:FindFirstChild("@Text")
     if textLabel then
         textLabel.Text = text
     end
-    
+
     local stroke = btn:FindFirstChild("@Stroke")
     if stroke then
         if isGold then
@@ -4886,8 +4794,8 @@ function BindableButtons.UpdateBButtonText(id, text, isWaiting, isGold)
 end
 
 local function GetSafeGuiRoot()
-    local success, result = pcall(function() 
-        return gethui() 
+    local success, result = pcall(function()
+        return gethui()
     end)
     if success and result and typeof(result) == "Instance" then
         return result
@@ -4918,10 +4826,6 @@ end)
 
 shared.Notify("Bomb Jump+ Successfully Loaded", 5)
 
--- ============================================
--- УЛУЧШЕННАЯ СИСТЕМА ДЛЯ РАБОТЫ С БОМБАМИ
--- ============================================
-
 local CONFIG = {
     CooldownTime = 22.0,
     LaunchPower = 58,
@@ -4931,17 +4835,15 @@ local CONFIG = {
     BindDefaultSize = 0.11
 }
 
--- Расширенный список имен бомб для MM2
 local BOMB_NAMES = {
-    "FakeBomb", 
-    "Bomb", 
-    "GiftBomb", 
+    "FakeBomb",
+    "Bomb",
+    "GiftBomb",
     "PresentBomb",
-    "Snowball",  -- Для зимних событий
-    "CandyBomb"  -- Для хэллоуинских событий
+    "Snowball",
+    "CandyBomb"
 }
 
--- Конфигурация для разных типов бомб
 local BOMB_CONFIGS = {
     FakeBomb = {
         Cooldown = 22,
@@ -4959,33 +4861,17 @@ local BOMB_CONFIGS = {
     }
 }
 
--- ============================================
--- УНИВЕРСАЛЬНАЯ СИСТЕМА BOMB JUMP
--- ============================================
-
 local function CreateBombJumpSystem(config)
-    -- config = {
-    --     bombType = "FakeBomb" или "GoldBomb",
-    --     section = shared.AddSection(...),
-    --     defaultEnabled = false,
-    --     defaultAutoGet = false,
-    --     defaultBigButton = false,
-    --     defaultBindButton = false,
-    --     bigButtonSize = 200,
-    --     bindButtonSize = 0.11,
-    --     keybind = "E"
-    -- }
-    
+
     local bombConfig = BOMB_CONFIGS[config.bombType]
     if not bombConfig then return nil end
-    
+
     local isGold = bombConfig.IsGold
     local bombName = config.bombType
     local cooldownTime = bombConfig.Cooldown
     local launchPower = bombConfig.Power
     local displayName = config.displayName or bombConfig.DisplayName
-    
-    -- Состояние системы
+
     local state = {
         enabled = false,
         onCooldown = false,
@@ -4999,12 +4885,10 @@ local function CreateBombJumpSystem(config)
         bindButton = nil,
         activeTouches = {}
     }
-    
-    -- Maid для очистки
+
     local systemMaid = Maid.new()
     RootMaid:GiveTask(systemMaid)
-    
-    -- Звуки
+
     local Sounds = {
         Click = Instance.new("Sound"),
         Cooldown = Instance.new("Sound")
@@ -5013,7 +4897,7 @@ local function CreateBombJumpSystem(config)
     Sounds.Click.Volume = 1.0
     Sounds.Cooldown.SoundId = "rbxassetid://138090596"
     Sounds.Cooldown.Volume = 1.0
-    
+
     local function PlaySound(snd)
         pcall(function()
             if snd then
@@ -5021,56 +4905,55 @@ local function CreateBombJumpSystem(config)
             end
         end)
     end
-    
-    -- Вспомогательные функции
+
     local function IsPlayerInAir()
         local character = LocalPlayer.Character
         if not character then return false end
-        
+
         local humanoid = character:FindFirstChild("Humanoid")
         if not humanoid then return false end
-        
+
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return false end
-        
+
         local state = humanoid:GetState()
-        if state == Enum.HumanoidStateType.Jumping or 
+        if state == Enum.HumanoidStateType.Jumping or
            state == Enum.HumanoidStateType.FallingDown or
            state == Enum.HumanoidStateType.Freefall then
             return true
         end
-        
+
         local velocityY = rootPart.Velocity.Y
         return math.abs(velocityY) > 0.5
     end
-    
+
     local function ResetCooldown()
         state.onCooldown = false
         local bigBtn = BBSystem.Buttons[config.bigButtonId]
         if bigBtn then bigBtn.Text = displayName end
         if state.bindButton then
-            BindableButtons.UpdateBButtonText(config.bindButtonId, 
+            BindableButtons.UpdateBButtonText(config.bindButtonId,
                 isGold and "GBJ" or "BJ", false, isGold)
         end
     end
-    
+
     local function StartCooldown()
         state.onCooldown = true
         state.debounce = false
         local bigBtn = BBSystem.Buttons[config.bigButtonId]
         if bigBtn then bigBtn.Text = "Wait" end
         if state.bindButton then
-            BindableButtons.UpdateBButtonText(config.bindButtonId, 
+            BindableButtons.UpdateBButtonText(config.bindButtonId,
                 "Wait", true, isGold)
         end
-        
+
         task.spawn(function()
             for i = cooldownTime, 1, -1 do
                 if not state.onCooldown then break end
                 local bigBtn = BBSystem.Buttons[config.bigButtonId]
                 if bigBtn then bigBtn.Text = tostring(i) end
                 if state.bindButton then
-                    BindableButtons.UpdateBButtonText(config.bindButtonId, 
+                    BindableButtons.UpdateBButtonText(config.bindButtonId,
                         tostring(i), true, isGold)
                 end
                 task.wait(1)
@@ -5078,18 +4961,17 @@ local function CreateBombJumpSystem(config)
             if state.onCooldown then ResetCooldown() end
         end)
     end
-    
+
     local function GetCenterPosition()
         local character = LocalPlayer.Character
         if character and character:FindFirstChild("HumanoidRootPart") then
             local root = character.HumanoidRootPart
-            -- Кидаем бомбу под ноги для максимальной эффективности
             local lookDir = Services.Workspace.CurrentCamera.CFrame.LookVector
             return root.Position + (lookDir * 3) + Vector3.new(0, -2, 0)
         end
         return nil
     end
-    
+
     local function MakeCharacterJump()
         local character = LocalPlayer.Character
         if character then
@@ -5099,7 +4981,7 @@ local function CreateBombJumpSystem(config)
             end
         end
     end
-    
+
     local function UnequipBomb(bombName)
         task.spawn(function()
             task.wait(0.5)
@@ -5112,23 +4994,21 @@ local function CreateBombJumpSystem(config)
             end
         end)
     end
-    
+
     local function GetAnyBomb(bombName)
         local character = LocalPlayer.Character
         if not character then return false, nil end
-        
-        -- Проверяем все возможные имена бомб
+
         local bombNamesToCheck = {bombName}
         if bombName == "FakeBomb" then
-            -- Для обычной бомбы проверяем все возможные имена
             bombNamesToCheck = BOMB_NAMES
         end
-        
+
         for _, name in ipairs(bombNamesToCheck) do
             local bomb = character:FindFirstChild(name)
             if bomb then return true, bomb end
         end
-        
+
         local backpack = LocalPlayer:FindFirstChild("Backpack")
         if backpack then
             for _, name in ipairs(bombNamesToCheck) do
@@ -5139,8 +5019,7 @@ local function CreateBombJumpSystem(config)
                 end
             end
         end
-        
-        -- Пытаемся получить бомбу через Remote с таймаутом
+
         local success = false
         local attempts = 0
         while not success and attempts < 3 do
@@ -5148,13 +5027,13 @@ local function CreateBombJumpSystem(config)
             local ok = pcall(function()
                 Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName)
             end)
-            if ok then 
+            if ok then
                 success = true
                 break
             end
             task.wait(0.1)
         end
-        
+
         if success then
             for _ = 1, 5 do
                 for _, name in ipairs(bombNamesToCheck) do
@@ -5171,19 +5050,19 @@ local function CreateBombJumpSystem(config)
                 task.wait(0.05)
             end
         end
-        
+
         return false, nil
     end
-    
+
     local function IsHoldingBomb(bombName)
         local character = LocalPlayer.Character
         if not character then return false end
-        
+
         local bombNamesToCheck = {bombName}
         if bombName == "FakeBomb" then
             bombNamesToCheck = BOMB_NAMES
         end
-        
+
         for _, name in ipairs(bombNamesToCheck) do
             if character:FindFirstChild(name) then
                 return true
@@ -5191,15 +5070,14 @@ local function CreateBombJumpSystem(config)
         end
         return false
     end
-    
-    -- Основная функция прыжка
+
     local function FastBombJump()
         if not IsPlayerInAir() then return end
         if state.onCooldown or state.debounce or state.justRespawned then return end
         state.debounce = true
-        
+
         local success, bomb = GetAnyBomb(bombName)
-        
+
         if success and bomb then
             local position = GetCenterPosition()
             if position then
@@ -5210,52 +5088,50 @@ local function CreateBombJumpSystem(config)
                         remote:FireServer(CFrame.new(position), 50)
                     end)
                 end
-                
+
                 local char = LocalPlayer.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
                 if root then
                     local currentVelocity = root.AssemblyLinearVelocity
-                    -- Добавляем к текущей скорости, а не заменяем
                     root.AssemblyLinearVelocity = Vector3.new(
-                        currentVelocity.X, 
-                        currentVelocity.Y + launchPower, 
+                        currentVelocity.X,
+                        currentVelocity.Y + launchPower,
                         currentVelocity.Z
                     )
                 end
-                
+
                 MakeCharacterJump()
                 UnequipBomb(bomb.Name)
-                
+
                 task.spawn(function()
                     task.wait(0.1)
                     StartCooldown()
                 end)
             end
         end
-        
+
         task.spawn(function()
             task.wait(0.5)
             state.debounce = false
         end)
     end
-    
-    -- Настройка UI
+
     local section = config.section
-    
+
     section:AddLabel(displayName .. " Options")
-    section:AddToggle("Enable Auto " .. displayName, function(bool) 
-        state.enabled = bool 
+    section:AddToggle("Enable Auto " .. displayName, function(bool)
+        state.enabled = bool
     end)
-    
+
     section:AddToggle("Auto-Get " .. bombName, function(bool)
         state.autoGetBomb = bool
         if bool then
-            pcall(function() 
-                Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName) 
+            pcall(function()
+                Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName)
             end)
         end
     end)
-    
+
     section:AddToggle("Enable " .. displayName .. " Bind Button", function(e)
         state.bindBtnExists = e
         if e then
@@ -5265,7 +5141,7 @@ local function CreateBombJumpSystem(config)
             if state.bindButton then
                 local screen = Services.Workspace.CurrentCamera.ViewportSize
                 state.bindButton.Size = __UD2(state.bindButtonSize * (screen.Y / screen.X), 0, state.bindButtonSize, 0)
-                BindableButtons.UpdateBButtonText(config.bindButtonId, 
+                BindableButtons.UpdateBButtonText(config.bindButtonId,
                     state.onCooldown and "Wait" or shortName, state.onCooldown, isGold)
             end
         else
@@ -5273,7 +5149,7 @@ local function CreateBombJumpSystem(config)
             state.bindButton = nil
         end
     end)
-    
+
     section:AddSlider(displayName .. " Bind Button Size", 5, 25, state.bindButtonSize * 100, function(value)
         state.bindButtonSize = value / 100
         if state.bindButton then
@@ -5281,21 +5157,20 @@ local function CreateBombJumpSystem(config)
             state.bindButton.Size = __UD2(state.bindButtonSize * (screen.Y / screen.X), 0, state.bindButtonSize, 0)
         end
     end)
-    
+
     section:AddKeybind(displayName .. " Keybind", config.keybind, FastBombJump)
-    
-    -- Обработка ввода
+
     local TAP_MOVEMENT_THRESHOLD = 10
     local TAP_TIME_THRESHOLD = 0.3
-    
+
     systemMaid:GiveTasks(
         ODHX.Connect(Services.UserInputService.InputBegan, function(input, gp)
             if gp then return end
-            if input.UserInputType == Enum.UserInputType.Touch or 
+            if input.UserInputType == Enum.UserInputType.Touch or
                input.UserInputType == Enum.UserInputType.MouseButton1 then
                 state.activeTouches[input] = {
-                    startPosition = input.Position, 
-                    startTime = tick(), 
+                    startPosition = input.Position,
+                    startTime = tick(),
                     moved = false
                 }
             end
@@ -5307,9 +5182,9 @@ local function CreateBombJumpSystem(config)
             end
         end),
         ODHX.Connect(Services.UserInputService.InputEnded, function(input, gp)
-            if gp then 
-                state.activeTouches[input] = nil 
-                return 
+            if gp then
+                state.activeTouches[input] = nil
+                return
             end
             local data = state.activeTouches[input]
             if data and not data.moved and tick() - data.startTime <= TAP_TIME_THRESHOLD then
@@ -5329,41 +5204,35 @@ local function CreateBombJumpSystem(config)
             state.justRespawned = false
             if state.autoGetBomb then
                 task.wait(0.2)
-                pcall(function() 
-                    Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName) 
+                pcall(function()
+                    Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName)
                 end)
             end
         end)
     )
-    
+
     ODHX.Bind(section.Name, "Enable Auto " .. displayName, "Toggle", function() return state.enabled end)
     ODHX.Bind(section.Name, "Auto-Get " .. bombName, "Toggle", function() return state.autoGetBomb end)
     ODHX.Bind(section.Name, "Enable " .. displayName .. " Bind Button", "Toggle", function() return state.bindBtnExists end)
     ODHX.Bind(section.Name, displayName .. " Bind Button Size", "Slider", function() return state.bindButtonSize * 100 end)
-    -- Возвращаем управление
     return {
         GetState = function() return state end,
         FastBombJump = FastBombJump,
         ResetCooldown = ResetCooldown,
         SetEnabled = function(bool) state.enabled = bool end,
-        SetAutoGet = function(bool) 
+        SetAutoGet = function(bool)
             state.autoGetBomb = bool
             if bool then
-                pcall(function() 
-                    Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName) 
+                pcall(function()
+                    Services.ReplicatedStorage.Remotes.Extras.ReplicateToy:InvokeServer(bombName)
                 end)
             end
         end
     }
 end
 
--- ============================================
--- СОЗДАНИЕ СИСТЕМ
--- ============================================
-
 local section = shared.AddSection("Bomb Jump+")
 
--- Обычная бомба
 local bombJumpSystem = CreateBombJumpSystem({
     bombType = "FakeBomb",
     section = section,
@@ -5379,10 +5248,9 @@ local bombJumpSystem = CreateBombJumpSystem({
     bindButtonId = "bombjump_bind"
 })
 
--- Золотая бомба (только для модов)
 if _game == "Murder Mystery Modded" then
     local gbjSection = shared.AddSection("Gold Bomb Jump+")
-    
+
     local goldBombJumpSystem = CreateBombJumpSystem({
         bombType = "GoldBomb",
         section = gbjSection,
@@ -5416,12 +5284,8 @@ ODHX.Finish()
             notify("BJP.lua.txt failed to load: " .. tostring(__pluginError), 7)
         end
     end
-    -- ================================================================
-    -- EMBEDDED PLUGIN: unlimit.lua.txt
     do
         local __pluginOk, __pluginError = xpcall(function()
--- Inventory Unlimiter V5: current ODH plugin API + durable preferences.
--- Changes CLIENT-side values only; server-side limits are not bypassed by this file.
 local shared = odh_shared_plugins
 if not shared or type(shared.CreateTab) ~= "function" then
     warn("[Inventory Unlimiter] Load through the current Overdrive H plugin menu.")
@@ -5457,7 +5321,6 @@ local function ClampItems(value)
     return math.clamp(math.floor(value+0.5),2,9999)
 end
 
--- File APIs are executor-provided, not part of odh_shared_plugins.
 local environment = {}
 if type(getgenv)=="function" then
     local ok, result=pcall(getgenv)
@@ -5518,7 +5381,6 @@ local function SaveSettings()
 end
 LoadSettings()
 
--- The original plugin's target heuristics are retained. No globals are patched.
 local debugLibrary = type(debug)=="table" and debug or {}
 local function Resolve(primary, fallback, external)
     if type(primary)=="function" then return primary end
@@ -5532,7 +5394,7 @@ local readInfo = Resolve(debugLibrary.getinfo, getinfo, environment.getinfo)
 local readConstants = Resolve(debugLibrary.getconstants, getconstants, environment.getconstants)
 local readName = Resolve(debugLibrary.info)
 
-local changed = {} -- [function][numeric upvalue index] = {original=..., last=...}
+local changed = {}
 local connection
 local statusLabel
 local function Status(text)
@@ -5584,7 +5446,6 @@ local function RestoreOriginals()
                 if current==saved.original then
                     slots[index]=nil
                 elseif current~=saved.last then
-                    -- Another script/game update owns the current value. Do not overwrite it.
                     WarnOnce("conflict","A value changed elsewhere; left it untouched.")
                     slots[index]=nil
                 else
@@ -5623,7 +5484,6 @@ local function ApplyLimit()
                     if type(index)=="number" and index>=1 and index%1==0 and type(value)=="number" then
                         local slots=changed[fn]
                         local saved=slots and slots[index]
-                        -- Existing tracked values remain targets after any Max Items change.
                         if saved or value==10 or value==3 then
                             if not saved then
                                 slots=slots or {};changed[fn]=slots
@@ -5632,8 +5492,6 @@ local function ApplyLimit()
                             if value==target then
                                 saved.last=target;count=count+1
                             elseif value==saved.last or value==saved.original then
-                                -- Record intent before writing, so cleanup can recover even
-                                -- if the executor writes but verification subsequently fails.
                                 saved.last=target
                                 local applied,err=WriteAndVerify(fn,index,target)
                                 if applied then count=count+1
@@ -5660,8 +5518,6 @@ local function RequestApply()
         return
     end
     Status("Applying saved/current limit...")
-    -- Bounded retries, not a continuous getgc loop. Old requests are cancelled
-    -- by any new setting change, disable, reload, or respawn.
     task.spawn(function()
         for _,delay in ipairs({0.2,0.8,2.0}) do
             task.wait(delay)
@@ -5674,11 +5530,10 @@ runtime.Cleanup=function()
     runtime.alive=false
     runtime.generation=runtime.generation+1
     if connection then connection:Disconnect();connection=nil end
-    return RestoreOriginals() -- do not persist OFF merely because the runtime is unloading
+    return RestoreOriginals()
 end
 runtime.SaveSettings=SaveSettings
 
--- UI: CreateTab uses a GitHub path without domain and without .png.
 local UI_VERSION=5
 local ui
 if type(previous)=="table" and type(previous.ui)=="table"
@@ -5756,11 +5611,8 @@ print("[Inventory Unlimiter V5] Loaded | Settings: " .. FILE .. " | " .. runtime
             notify("unlimit.lua.txt failed to load: " .. tostring(__pluginError), 7)
         end
     end
-    -- ================================================================
-    -- EMBEDDED PLUGIN: Pm-Wallhop.lua.txt
     do
         local __pluginOk, __pluginError = xpcall(function()
--- ODH 2026 adapter. Embedded in every plugin; no downloads/dependencies.
 local ODHX = (function()
     local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
     X.id, X.title, X.file = "Pm-Wallhop", "Pm-WallHop", "ODH_Pm-Wallhop_settings.json"
@@ -5795,7 +5647,7 @@ local ODHX = (function()
             end
             return result
         end
-        return nil -- never serialize Instances, connections, functions or players
+        return nil
     end
     local function decode(v, depth)
         depth=depth or 0
@@ -5826,7 +5678,7 @@ local ODHX = (function()
         else report("readfile/writefile unavailable; settings last only for this session.") end
     end
     local tab
-    X.shared=setmetatable({}, {__index=host}) -- never mutate the host API
+    X.shared=setmetatable({}, {__index=host})
     X.shared.Notify=function(text,seconds)
         if X.restoring then return end
         if type(host.Notify)=="function" then return host.Notify(text,seconds or 3) end
@@ -5891,7 +5743,6 @@ local ODHX = (function()
     end
     function X.Restore()
         X.restoring=true
-        -- Options before enabling modules. Actions and player selections are never replayed.
         for _,togglePass in ipairs({false,true}) do
             for _,r in ipairs(X.records) do
                 if not r.exclude and ((r.kind=="Toggle")==togglePass) then
@@ -5934,7 +5785,7 @@ local ODHX = (function()
         local function register(kind,label,callback,default,min,max,items)
             local r={section=name,name=label,kind=kind,callback=callback,default=default,min=min,max=max,items=items,visual=false}
             r.key=key(name,label,kind)
-            r.exclude=(name=="🔑 Keys") -- key-capture toggles are actions, not enabled modes
+            r.exclude=(name=="🔑 Keys")
             X.records[#X.records+1]=r; X.byKey[r.key]=r
             local function changed(v)
                 if kind=="Toggle" then r.visual=(v==true) end
@@ -5974,7 +5825,6 @@ local ODHX = (function()
         function section:AddParagraph(...) return raw:AddParagraph(...) end
         return section
     end
-    -- Stable GUI paths, never serialized Instances. Player name is session-independent.
     function X.Path(object)
         local parts={}
         local player=game:GetService("Players").LocalPlayer
@@ -6016,19 +5866,15 @@ local ODHX = (function()
     registry[X.id]=X
     return X
 end)()
--- END ODH 2026 ADAPTER
 
 local shared = ODHX.shared
 local UpdateWallhopButtonState, performVideoFlick, performWallhop
 
--- Создаем секцию для нашего плагина
 local wallhop_section = shared.AddSection("Pm-WallHop")
 
--- Добавляем информацию
 wallhop_section:AddLabel("Pm-WallHop Script by @Phemtom (Improved)")
 wallhop_section:AddParagraph("Pm-WallHop", "Флинг при прыжке возле стыка стен")
 
--- Основной переключатель (ТОГГЛ)
 local isWallHopEnabled = false
 wallhop_section:AddToggle("Включить WallHop", function(bool)
     isWallHopEnabled = bool
@@ -6040,35 +5886,30 @@ wallhop_section:AddToggle("Включить WallHop", function(bool)
     UpdateWallhopButtonState()
 end)
 
--- Кнопка ВКЛ/ВЫКЛ (дополнительная)
 wallhop_section:AddButton("Вкл/Выкл WallHop", function()
     isWallHopEnabled = not isWallHopEnabled
     shared.Notify(isWallHopEnabled and "Pm-WallHop включен" or "Pm-WallHop выключен", 2)
     UpdateWallhopButtonState()
 end)
 
--- Настройка чувствительности (дистанция обнаружения стены)
 local detectionDistance = 3
 wallhop_section:AddSlider("Дистанция обнаружения", 1, 6, 3, function(int)
     detectionDistance = int
     shared.Notify("Дистанция: " .. int, 2)
 end)
 
--- Настройка силы флинга
 local flickPower = 50
 wallhop_section:AddSlider("Сила флинга", 20, 100, 50, function(int)
     flickPower = int
     shared.Notify("Сила: " .. int, 2)
 end)
 
--- Клавиша для быстрого включения/выключения
 wallhop_section:AddKeybind("Toggle Keybind", "F", function()
     isWallHopEnabled = not isWallHopEnabled
     shared.Notify(isWallHopEnabled and "Pm-WallHop включен" or "Pm-WallHop выключен", 2)
     UpdateWallhopButtonState()
 end)
 
--- Клавиша для ручного WallHop
 wallhop_section:AddKeybind("WallHop Jump Key", "J", function()
     if isWallHopEnabled then
         performWallhop()
@@ -6077,7 +5918,6 @@ wallhop_section:AddKeybind("WallHop Jump Key", "J", function()
     end
 end)
 
--- === Плавающая кнопка (как в Aimlock) ===
 local WallhopBindableButtons = {Buttons = {}, Maids = {}, Count = 0}
 
 local __SHAPES = {
@@ -6325,7 +6165,6 @@ function WallhopBindableButtons.DeleteBButton(id)
     end
 end
 
--- Обновление состояния кнопки
 UpdateWallhopButtonState = function()
     ODHX.Commit()
     local btn = WallhopBindableButtons.Buttons["wallhop_toggle"]
@@ -6342,26 +6181,20 @@ UpdateWallhopButtonState = function()
     end
 end
 
--- Экранная кнопка WallHop полностью отключена по запросу пользователя.
-
--- --- Основная логика ---
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
--- --- Переменные ---
 local isFlicking = false
 local lastFlickTime = 0
 local isJumpKeyPressed = false
 local Camera = workspace.CurrentCamera
 local wallDetectionCooldown = 0
 
--- --- Raycast параметры для WallHop ---
 local wallRaycastParams = RaycastParams.new()
 wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
 
--- --- Функция проверки, является ли объект игроком ---
 local function isPlayerCharacter(instance)
     if not instance then return false end
     local current = instance
@@ -6379,16 +6212,13 @@ local function isPlayerCharacter(instance)
     return false
 end
 
--- --- Функция проверки, является ли объект стеной ---
 local function isWall(instance)
     if not instance or not instance.IsA then return false end
-    
-    -- Игнорируем игроков
+
     if instance:IsA("Part") and instance.Parent and instance.Parent:IsA("Model") and instance.Parent:FindFirstChild("Humanoid") then
         return false
     end
-    
-    -- Проверяем все родительские объекты на принадлежность игроку
+
     local current = instance
     while current do
         if isPlayerCharacter(current) then
@@ -6396,28 +6226,24 @@ local function isWall(instance)
         end
         current = current.Parent
     end
-    
-    -- Проверяем, что это часть с коллизией
+
     if not instance:IsA("BasePart") and not instance:IsA("Terrain") then
         return false
     end
-    
-    -- Проверяем CanCollide
+
     if instance:IsA("BasePart") and not instance.CanCollide then
         return false
     end
-    
+
     return true
 end
 
--- --- Функция получения результата Raycast для стены ---
 local function getWallRaycastResult()
     local character = LocalPlayer.Character
     if not character then return nil end
     local hrp = character:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
-    
-    -- Добавляем в черный список персонажи других игроков
+
     local players = Players:GetPlayers()
     local blacklist = {character}
     for _, player in ipairs(players) do
@@ -6426,7 +6252,7 @@ local function getWallRaycastResult()
         end
     end
     wallRaycastParams.FilterDescendantsInstances = blacklist
-    
+
     local closestHit, minDistance = nil, detectionDistance
     local hrpCF = hrp.CFrame
     for i = 0,7 do
@@ -6444,107 +6270,94 @@ local function getWallRaycastResult()
     return closestHit
 end
 
--- --- Флинг (Видео флинг) ---
 performVideoFlick = function()
     if not isWallHopEnabled then return end
     if isFlicking then return end
     isFlicking = true
-    
+
     local char = LocalPlayer.Character
     if not char then isFlicking = false return end
-    
+
     local hum = char:FindFirstChild("Humanoid")
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hum or not hrp then isFlicking = false return end
-    
-    -- Проверяем, жив ли игрок
+
     if hum.Health <= 0 then isFlicking = false return end
-    
-    -- Сохраняем текущее состояние
+
     local currentVel = hrp.Velocity
-    
-    -- Выполняем флинг
+
     hum:ChangeState(Enum.HumanoidStateType.Jumping)
     hrp.Velocity = Vector3.new(currentVel.X, flickPower, currentVel.Z)
-    
-    -- Разворот камеры
+
     local startCFrame = Camera.CFrame
     Camera.CFrame = startCFrame * CFrame.Angles(0, math.rad(180), 0)
-    
+
     task.wait(0.01)
     Camera.CFrame = startCFrame
-    
+
     isFlicking = false
 end
 
--- --- Wallhop (Новая версия) ---
 performWallhop = function()
     if not isWallHopEnabled then return end
-    
+
     local character = LocalPlayer.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not (humanoid and rootPart and humanoid:GetState() ~= Enum.HumanoidStateType.Dead) then return end
-    
+
     local wall = getWallRaycastResult()
     if not wall then return end
 
-    -- Поворачиваем игрока к стене
     rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + wall.Normal)
     RunService.Heartbeat:Wait()
-    
+
     if humanoid:GetState() ~= Enum.HumanoidStateType.Dead then
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         task.wait(0.1)
     end
 end
 
--- --- Обнаружение стыков стен (Видео флинг) ---
 local lastHitInstance = nil
 local currentHitInstance = nil
 
 ODHX.Connect(RunService.Heartbeat, function()
     if not isWallHopEnabled or isFlicking then return end
-    
+
     local char = LocalPlayer.Character
-    if not char then 
+    if not char then
         lastHitInstance = nil
-        return 
+        return
     end
-    
+
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChild("Humanoid")
-    if not hrp or not hum or hum.Health <= 0 then 
+    if not hrp or not hum or hum.Health <= 0 then
         lastHitInstance = nil
-        return 
+        return
     end
-    
-    -- Проверяем, зажат ли пробел
-    if not isJumpKeyPressed then 
+
+    if not isJumpKeyPressed then
         lastHitInstance = nil
-        return 
+        return
     end
-    
-    -- Создаем Raycast с улучшенной фильтрацией
+
     local raycastParams = RaycastParams.new()
     raycastParams.FilterDescendantsInstances = {char}
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.IgnoreWater = true
-    
-    -- Пускаем луч в направлении камеры
+
     local direction = Camera.CFrame.LookVector * detectionDistance
     local result = workspace:Raycast(hrp.Position, direction, raycastParams)
-    
+
     currentHitInstance = nil
-    
+
     if result then
         local hitInstance = result.Instance
-        
-        -- Проверяем, является ли объект стеной
+
         if isWall(hitInstance) then
             currentHitInstance = hitInstance
-            
-            -- Проверяем смену стены (стык)
+
             if lastHitInstance and lastHitInstance ~= currentHitInstance then
                 local currentTime = os.clock()
                 if currentTime - lastFlickTime > 0.1 then
@@ -6554,21 +6367,19 @@ ODHX.Connect(RunService.Heartbeat, function()
             end
         end
     end
-    
+
     lastHitInstance = currentHitInstance
 end)
 
--- --- Автоматический Wallhop при прыжке (только если включен) ---
 ODHX.Connect(UserInputService.JumpRequest, function()
     if isWallHopEnabled then
         performWallhop()
     end
 end)
 
--- --- Отслеживание нажатия на прыжок ---
 ODHX.Connect(UserInputService.InputBegan, function(input, gameProcessed)
     if gameProcessed then return end
-    
+
     if input.KeyCode == Enum.KeyCode.Space then
         isJumpKeyPressed = true
     end
@@ -6576,24 +6387,20 @@ end)
 
 ODHX.Connect(UserInputService.InputEnded, function(input, gameProcessed)
     if gameProcessed then return end
-    
+
     if input.KeyCode == Enum.KeyCode.Space then
         isJumpKeyPressed = false
-        -- Сбрасываем детекцию при отпускании пробела
         lastHitInstance = nil
     end
 end)
 
--- --- Сброс состояния при респавне ---
 ODHX.Connect(LocalPlayer.CharacterAdded, function(character)
     lastHitInstance = nil
     currentHitInstance = nil
     isFlicking = false
 end)
 
--- --- Дополнительно: сброс при потере фокуса ---
 ODHX.Connect(UserInputService.WindowFocused, function()
-    -- Если окно потеряло фокус, сбрасываем состояние прыжка
     isJumpKeyPressed = false
     lastHitInstance = nil
 end)
