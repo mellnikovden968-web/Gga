@@ -212,6 +212,7 @@ do
         { "aim",    16898613777, Vector2.new(967, 759), "Combat" },
         { "world",  16898613509, Vector2.new(771, 563), "World" },
         { "visual", 16898613353, Vector2.new(771, 563), "Visuals" },
+        { "emotes", 16898613777, Vector2.new(967, 759), "Emotes" },
     }
     for i, d in ipairs(navDefs) do
         local b = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(16, 116 + (i - 1) * 52), Size = UDim2.fromOffset(208, 46),
@@ -419,6 +420,13 @@ for i = 1, 2 do
         BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
     New("UIListLayout", { Parent = worldCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
 end
+local emotesContent = content:Clone(); emotesContent.Name = "EmotesContent"; emotesContent.Parent = win; emotesContent.Visible = false; emotesContent:ClearAllChildren()
+local emotesCols = {}
+for i = 1, 2 do
+    emotesCols[i] = New("Frame", { Parent = emotesContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
+        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
+    New("UIListLayout", { Parent = emotesCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+end
 
 local dashboard = New("Frame", { Parent = win, Position = content.Position, Size = content.Size, BackgroundTransparency = 1 })
 local profile = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 0), Size = UDim2.fromOffset(430, 168), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
@@ -476,7 +484,7 @@ end)
 local activePage = "home"
 local selectPage
 do
-    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent }
+    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent, emotes = emotesContent }
     local pageBasePosition = content.Position
     local pageTransitionId = 0
     local function pageScaleFor(object)
@@ -538,7 +546,7 @@ end
 for name, b in pairs(navButtons) do b.MouseButton1Click:Connect(function() if activePage == name then selectPage("home") else selectPage(name) end end) end
 selectPage("home")
 
-local sectionCount, mainSectionCount, worldSectionCount, visualSectionCount, configSectionCount = 0, 0, 0, 0, 0
+local sectionCount, mainSectionCount, worldSectionCount, visualSectionCount, emotesSectionCount, configSectionCount = 0, 0, 0, 0, 0, 0
 local sectionPanels, controls = {}, {}
 function refreshCanvas()
     task.defer(function()
@@ -547,11 +555,12 @@ function refreshCanvas()
         visualContent.CanvasSize = UDim2.fromOffset(0, math.max(visualCols[1].AbsoluteSize.Y, visualCols[2].AbsoluteSize.Y) + 165)
         mainContent.CanvasSize = UDim2.fromOffset(0, math.max(mainCols[1].AbsoluteSize.Y, mainCols[2].AbsoluteSize.Y) + 165)
         worldContent.CanvasSize = UDim2.fromOffset(0, math.max(worldCols[1].AbsoluteSize.Y, worldCols[2].AbsoluteSize.Y) + 130)
+        emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(emotesCols[1].AbsoluteSize.Y, emotesCols[2].AbsoluteSize.Y) + 165)
     end)
 end
 search:GetPropertyChangedSignal("Text"):Connect(function()
     local q = string.lower(search.Text or "")
-    local counts = { main = 0, aim = 0, world = 0, visual = 0 }
+    local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0 }
     for _, entry in ipairs(sectionPanels) do
         local hay = entry.name
         for _, d in ipairs(entry.panel:GetDescendants()) do
@@ -562,7 +571,7 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
         if match then counts[entry.page] = (counts[entry.page] or 0) + 1 end
     end
     if q ~= "" and activePage ~= "home" and (counts[activePage] or 0) == 0 then
-        for _, page in ipairs({ "main", "aim", "world", "visual" }) do if counts[page] > 0 then selectPage(page) break end end
+        for _, page in ipairs({ "main", "aim", "world", "visual", "emotes" }) do if counts[page] > 0 then selectPage(page) break end end
     end
     refreshCanvas()
 end)
@@ -630,10 +639,12 @@ function host.CreateTab()
         local isVisual = name == "Visuals" or name == "Object ESP" or string.find(name, "VISUAL", 1, true) == 1
         local isMain = string.sub(name, 1, 5) == "MAIN "
         local isWorld = string.sub(name, 1, 6) == "WORLD "
+        local isEmotes = string.sub(name, 1, 7) == "EMOTES "
         local col, page = nil, "aim"
         if isVisual then visualSectionCount += 1; col = visualCols[(visualSectionCount - 1) % 2 + 1]; page = "visual"
         elseif isMain then mainSectionCount += 1; col = mainCols[(mainSectionCount - 1) % 2 + 1]; page = "main"
         elseif isWorld then worldSectionCount += 1; col = worldCols[(worldSectionCount - 1) % 2 + 1]; page = "world"
+        elseif isEmotes then emotesSectionCount += 1; col = emotesCols[(emotesSectionCount - 1) % 2 + 1]; page = "emotes"
         else sectionCount += 1; col = cols[(sectionCount - 1) % 2 + 1] end
         local panel = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
             BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
@@ -641,7 +652,7 @@ function host.CreateTab()
         local tick = New("Frame", { Parent = panel, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
         corner(tick, 2)
         table.insert(sectionPanels, { panel = panel, page = page, name = string.lower(name .. " " .. (description or "")) })
-        local shownName = name:gsub("^MAIN \u{2022} ", ""):gsub("^WORLD \u{2022} ", ""):gsub("^VISUAL \u{2022} ", "")
+        local shownName = name:gsub("^MAIN \u{2022} ", ""):gsub("^WORLD \u{2022} ", ""):gsub("^VISUAL \u{2022} ", ""):gsub("^EMOTES \u{2022} ", "")
         text(panel, shownName, 18, UDim2.fromOffset(24, 16))
         if description and description ~= "" then text(panel, description, 12, UDim2.fromOffset(24, 44), true) end
         local holder = New("Frame", { Parent = panel, Position = UDim2.fromOffset(20, description ~= "" and 74 or 57), Size = UDim2.new(1, -40, 0, 0),
@@ -767,6 +778,7 @@ function host.CreateTab()
             function ctl:SetValue(v) set(v) end
             function ctl:Select(v) set(v) end
             function ctl:Refresh(newValues, selected) values = newValues or {}; idx = 1; set(selected or values[1]) end
+            function ctl:ChangeItems(newValues) values = newValues or {}; idx = 1; set(values[1]) end
             return ctl
         end
         function api:AddTextBox(label, callback)
@@ -3419,6 +3431,1459 @@ task.defer(applyCurrentCharacter)
     end
     local okRun, err = xpcall(moduleFn, function(message) return tostring(message) end)
     if not okRun then warn("[Noir Avatar Cosmetics] module startup failed: " .. tostring(err)) end
+end)
+
+
+
+
+-- Full 7yd7 Emotes port, hosted in Noir's native Emotes page instead of as an external ODH plugin.
+getgenv().__NoirEmotesContext = {
+    CreateTab = function(_, _)
+        local base = host.CreateTab()
+        local proxy = {}
+        function proxy:AddSection(name, description)
+            name = tostring(name or "Emotes")
+            if string.sub(name, 1, 7) ~= "EMOTES " then name = "EMOTES \u{2022} " .. name end
+            return base:AddSection(name, description or "")
+        end
+        return proxy
+    end,
+    Notify = function(textValue, duration) notify("Emotes: " .. tostring(textValue), duration or 3) end,
+}
+task.defer(function()
+    local __noirEmotesSource = [==[
+-- 7yd7 Emotes — Overdrive H plugin + responsive thumbnail card browser.
+-- Original: https://github.com/7yd7/Hub/blob/Branch/GUIS/Emotes.lua
+-- Catalog: 7yd7/sniper-Emote, EmoteSniper.json. No remote Lua execution.
+-- Separate card GUI; original animation bundles/themes/HUD editor are not included.
+-- R15 only. Asset permissions and replication remain controlled by Roblox/the game.
+-- Integrated into Noir's native Emotes tab. The catalog source stays data-only; no remote Lua is executed.
+local shared=getgenv().__NoirEmotesContext
+if not shared or type(shared.CreateTab)~="function" then
+    warn("[Noir Emotes] Noir Emotes context unavailable.")
+    return
+end
+local KEY="Noir_7yd7_EmotesRuntime_v1"
+local previous=_G[KEY]
+if type(previous)=="table" and previous.alive and type(previous.Cleanup)=="function" then
+    pcall(previous.Cleanup)
+end
+local Players=game:GetService("Players")
+local Player=Players.LocalPlayer
+if not Player then warn("[ODH Emotes] LocalPlayer unavailable.");return end
+local HttpService=game:GetService("HttpService")
+local RunService=game:GetService("RunService")
+local runtime={version=7,alive=true,initializing=true,generation=0,filterGeneration=0,page=1,catalog={},filtered={},resolutions={},connections={}}
+local prefs={windowTransparency=22,thumbnailSize=68,thumbnailPresetVersion=2,playbackModeVersion=2,shortcuts={},browserOnLoad=false,loop=false,walk=false,speed=1,favoritesOnly=false,query="",customId="",customKind="Catalog emote ID",favorites={}}
+local FILE="ODH_Emotes_settings.json"
+local CACHE="ODH_Emotes_catalog.json"
+local URL="https://raw.githubusercontent.com/7yd7/sniper-Emote/refs/heads/test/EmoteSniper.json"
+local PAGE_SIZE=12
+local MAX_SHORTCUTS=12
+local warnings={}
+local function Notify(text)
+    if type(shared.Notify)=="function" then pcall(shared.Notify,"Emotes: "..text,5) end
+end
+local function WarnOnce(key,text)
+    if warnings[key] then return end
+    warnings[key]=true;warn("[ODH Emotes] "..text);Notify(text)
+end
+local env={}
+if type(getgenv)=="function" then
+    local ok,value=pcall(getgenv)
+    if ok and type(value)=="table" then env=value end
+end
+local read=type(readfile)=="function" and readfile or env.readfile
+local write=type(writefile)=="function" and writefile or env.writefile
+local exists=type(isfile)=="function" and isfile or env.isfile
+local canSave=type(read)=="function" and type(write)=="function"
+runtime.settingsFile=FILE
+runtime.saveStatus=canSave and "Not saved" or "Session only"
+runtime.preferences=prefs
+local function AssetId(value)
+    if type(value)~="number" and type(value)~="string" then return nil end
+    local id=tonumber(value)
+    if id and id==id and id>0 and id<9007199254740992 and id==math.floor(id) then return id end
+end
+local function IdText(id) return string.format("%.0f",id) end
+local function ParseId(text)
+    if type(text)~="string" then return nil end
+    local digits=text:match("^%s*(%d+)%s*$") or text:match("^rbxassetid://(%d+)$")
+        or text:match("[?&]id=(%d+)") or text:match("roblox%.com/catalog/(%d+)")
+    return digits and AssetId(digits)
+end
+local function Item(value)
+    if type(value)~="table" then return nil end
+    local id=AssetId(value.id)
+    if not id then return nil end
+    local name=type(value.name)=="string" and value.name:gsub("[%c]"," ") or ("Emote "..IdText(id))
+    if #name==0 or #name>2000 then name="Emote "..IdText(id) end
+    return {id=id,name=name}
+end
+local function ReadJSON(path)
+    if type(read)~="function" then return nil,"unavailable" end
+    if type(exists)=="function" then
+        local ok,found=pcall(exists,path)
+        if ok and not found then return nil,"missing" end
+    end
+    local ok,text=pcall(read,path)
+    if not ok then return nil,"read error" end
+    local decoded,data=pcall(function() return HttpService:JSONDecode(text) end)
+    if not decoded or type(data)~="table" then return nil,"invalid JSON" end
+    return data
+end
+local function LoadSettings()
+    if not canSave then WarnOnce("files","readfile/writefile unavailable; settings are session-only.");return end
+    local data,err=ReadJSON(FILE)
+    if not data then
+        if err~="missing" then WarnOnce("read","Settings not loaded ("..tostring(err).."). Existing file is kept until you change a setting.") end
+        return
+    end
+    if data.version~=1 or type(data.values)~="table" then
+        WarnOnce("read","Invalid settings; existing file is kept until you change a setting.");return
+    end
+    local values=data.values
+    -- Migrate the old forced/default Loop ON without discarding other settings.
+    if values.playbackModeVersion==2 and type(values.loop)=="boolean" then prefs.loop=values.loop end
+    if type(values.shortcuts)=="table" then
+        local count=0
+        for _,value in pairs(values.shortcuts) do
+            local item=Item(value)
+            if item then
+                local function position(number,default)
+                    if type(number)=="number" and number==number and number>-math.huge and number<math.huge then
+                        return math.clamp(number,0,1)
+                    end
+                    return default
+                end
+                item.x=position(value.x,.75);item.y=position(value.y,.45)
+                prefs.shortcuts[IdText(item.id)]=item;count=count+1
+                if count>=MAX_SHORTCUTS then break end
+            end
+        end
+    end
+    for key,limits in pairs({windowTransparency={0,50},thumbnailSize={50,100}}) do
+        local value=values[key]
+        if type(value)=="number" and value==value and value>-math.huge and value<math.huge then
+            prefs[key]=math.clamp(value,limits[1],limits[2])
+        end
+    end
+    if values.thumbnailPresetVersion~=2 and prefs.thumbnailSize==78 then prefs.thumbnailSize=68 end
+    for _,key in ipairs({"walk","favoritesOnly","browserOnLoad"}) do
+        if type(values[key])=="boolean" then prefs[key]=values[key] end
+    end
+    if type(values.speed)=="number" and values.speed==values.speed and values.speed>-math.huge and values.speed<math.huge then prefs.speed=math.clamp(values.speed,0,3) end
+    if type(values.query)=="string" then prefs.query=values.query:sub(1,200) end
+    if type(values.customId)=="string" and #values.customId<=200 then prefs.customId=values.customId end
+    if values.customKind=="Animation ID" then prefs.customKind=values.customKind end
+    prefs.selected=Item(values.selected)
+    if type(values.favorites)=="table" then
+        local count=0
+        for _,value in pairs(values.favorites) do
+            local item=Item(value)
+            if item then prefs.favorites[IdText(item.id)]=item;count=count+1 end
+            if count>=10000 then break end
+        end
+    end
+    runtime.saveStatus="Loaded"
+end
+local function SaveSettings()
+    if runtime.initializing or not runtime.alive or not canSave then return false end
+    local ok,err=pcall(function() write(FILE,HttpService:JSONEncode({version=1,values=prefs})) end)
+    if not ok then runtime.saveStatus="Write error";WarnOnce("write","Cannot save settings: "..tostring(err));return false end
+    runtime.saveStatus="Saved";warnings.write=nil;return true
+end
+LoadSettings()
+
+local BUILTIN={
+    {id=3360689775,name="Salute"},
+    {id=5915779043,name="Applaud"},
+    {id=3360692915,name="Tilt"},
+    {id=15610015346,name="Yungblud Happier Jump"},
+    {id=14353423348,name="Baby Queen - Bouncy Twirl"},
+    {id=14353421343,name="Baby Queen - Face Frame"},
+    {id=3823158750,name="Godlike"},
+    {id=139021427684680,name="KATSEYE - Touch"},
+    {id=133596366979822,name="Biblically Accurate Emote"},
+    {id=108128682361404,name="Rambunctious"},
+    {id=79127989560307,name="Moon Walk"},
+    {id=5230661597,name="Bored"},
+    {id=14353425085,name="Baby Queen - Strut"},
+    {id=15694504637,name="d4vd - Backflip"},
+    {id=104142334418357,name="[Original] It's Gangnam Style!"},
+    {id=16553249658,name="Mae Stephens - Piano Hands"},
+    {id=12507097350,name="Alo Yoga Pose - Lotus Position"},
+    {id=15698511500,name="Cuco - Levitate"},
+    {id=4689362868,name="Sleep"},
+    {id=111426928948833,name="Floating on clouds"},
+    {id=130245358716273,name="The Weeknd Starboy Strut"},
+    {id=120642514156293,name="Secret Handshake Dance"},
+    {id=15506503658,name="Victory Dance"},
+    {id=3576717965,name="Shy"},
+    {id=73796726960568,name="Nyan Nyan! "},
+    {id=78758922757947,name="Kicking Feet Sit"},
+    {id=93511411593120,name="/e fly"},
+    {id=114899970878842,name="R15 Death (Accurate)"},
+    {id=5104377791,name="Hero Landing"},
+    {id=5917570207,name="Floss Dance"},
+    {id=131763631172236,name="Xaviersobased Emote"},
+    {id=132074413582912,name="California Girl Dance"},
+    {id=15554010118,name="Olivia Rodrigo Head Bop"},
+    {id=112758073578333,name="Bubbly Sit"},
+    {id=3716636630,name="Monkey"},
+    {id=123015710605336,name="Onion"},
+    {id=4646306583,name="Curtsy"},
+    {id=85936805522788,name="Caramell"},
+    {id=14900153406,name="TWICE Feel Special"},
+    {id=102492229412911,name="Deltarune - Tenna Dance"},
+    {id=133142324349281,name="Flopping Fish"},
+    {id=10214406616,name="Frosty Flair - Tommy Hilfiger"},
+    {id=120224229260879,name="Cute crouch "},
+    {id=15679955281,name="Festive Dance"},
+    {id=4849502101,name="Sad"},
+    {id=10214418283,name="V Pose - Tommy Hilfiger"},
+    {id=92853367837757,name="Garry's Dance"},
+    {id=104485625389237,name="Make You Mine"},
+    {id=139830733782518,name="Phut On"},
+    {id=132382355371060,name="Tank Transformation"},
+    {id=103046131635200,name="Scenario - LOVE SCENARIO"},
+    {id=15123050663,name="Bone Chillin' Bop"},
+    {id=124305244640379,name="Shattered"},
+    {id=134311528115559,name="how did he hit every beat"},
+    {id=17748346932,name="Elton John - Heart Shuffle"},
+    {id=93105950995997,name="Caramelldansen"},
+    {id=7466046574,name="Quiet Waves"},
+    {id=96557878503341,name="Caramell Dansen"},
+    {id=139859849852362,name="Dead"},
+    {id=17360720445,name="HUGO Let's Drive!"},
+    {id=103102322875221,name="Skibidi Toilet - Titan Speakerman Laser Spin"},
+    {id=3576968026,name="Shrug"},
+    {id=130998336536045,name="Gangnam Style"},
+    {id=84555218084038,name="Helicopter Spin"},
+    {id=71302743123422,name="Popular"},
+    {id=133765015173412,name="DearALICE - Ariana"},
+    {id=115319301809339,name="2 Phut Hon Dance"},
+    {id=70635223083942,name="Be Not Afraid"},
+    {id=17746270218,name="Sturdy Dance - Ice Spice"},
+    {id=129149402922241,name="griddy"},
+    {id=3576686446,name="Hello"},
+    {id=113547795536875,name="Gangnam Style"},
+    {id=126614732606871,name="Sit"},
+    {id=3762654854,name="Greatest"},
+    {id=16572756230,name="HIPMOTION - Amaarae"},
+    {id=16276506814,name="Sol de Janeiro - Samba"},
+    {id=3576823880,name="Point2"},
+    {id=78459263478161,name="Family Man Death Pose"},
+    {id=14900151704,name="TWICE LIKEY"},
+    {id=3360686498,name="Stadium"},
+    {id=15571540519,name="Nicki Minaj Starships"},
+    {id=4940597758,name="Cower"},
+    {id=11394056822,name="Elton John - Elevate"},
+    {id=117734400993750,name="Virtual Singer Dance"},
+    {id=97263450325496,name="Teto Territory"},
+    {id=4102315500,name="Haha"},
+    {id=79312439851071,name="Chappell Roan HOT TO GO!"},
+    {id=105851216004006,name="Electro Swing"},
+    {id=92707348383277,name="Mesmerizer"},
+    {id=103139492736941,name="Deltarune - Tenna Swing Dance"},
+    {id=15571538346,name="Nicki Minaj Boom Boom Boom"},
+    {id=15554016057,name="Olivia Rodrigo Fall Back to Float"},
+    {id=70615023659736,name="Floating"},
+    {id=136740085081295,name="/e hidden animation"},
+    {id=119431985170060,name="Helicopter"},
+    {id=87141651594092,name="No-Clip/Speed Glitch"},
+    {id=16303091119,name="Beauty Touchdown"},
+    {id=3934986896,name="Dizzy"},
+    {id=130726889233022,name="rolling crybaby"},
+    {id=11309263077,name="Elton John - Heart Skip"},
+    {id=84511772437190,name="Emote Loading. Please Wait... | spinning Robloxian"},
+    {id=14353417553,name="Baby Queen - Air Guitar & Knee Slide"},
+    {id=15392927897,name="Paris Hilton - Sliving For The Groove"},
+    {id=94796833553521,name="TWICE Takedown pt 1 from Kpop Demon Hunters"},
+    {id=120437019363089,name="peter griffin death pose"},
+    {id=15506506103,name="Flex Walk"},
+    {id=90608224567833,name="Proud to be Expendable - Pressure"},
+    {id=18526338976,name="Team USA Breaking Emote"},
+    {id=99818263438846,name="Default Dance"},
+    {id=103197720369544,name="Dani's Gangnam Style"},
+    {id=75017857395637,name="TV Time Dance"},
+    {id=73683655527605,name="Fashion Roadkill"},
+    {id=15392932768,name="Paris Hilton - Iconic IT-Grrrl"},
+    {id=82217023310738,name="Thanos Happy Jump - Squid Game"},
+    {id=102610758906338,name="Possessed"},
+    {id=95323795166399,name="Rat Dance"},
+    {id=127562607220778,name="Gangnam Style "},
+    {id=129132611803602,name="Helicopter"},
+    {id=82345302788133,name="Dia Delicia Dance"},
+    {id=15392937495,name="Paris Hilton - Checking My Angles"},
+    {id=4212496830,name="Zombie"},
+    {id=113016438012253,name="⌛ Best Mates EMOTE [LIMITED]"},
+    {id=110537281410647,name="[Aura Farm] Wall Lean Idle"},
+    {id=92903522317071,name="ILLIT - Magnetic"},
+    {id=122899100558551,name="It's TV Time!"},
+    {id=75528418031928,name="Rambunctious"},
+    {id=103040723950430,name="Gojo Floating"},
+    {id=70788193750089,name="Kickn around"},
+    {id=5915776835,name="High Wave"},
+    {id=84195923658292,name="Jojo"},
+    {id=110731335896907,name="[⌛ Limited]  HEADLESS EMOTE "},
+    {id=139271706064778,name="Hip Bounce"},
+    {id=4849499887,name="Happy"},
+    {id=127271798262177,name="M3GAN's Dance"},
+    {id=104304182344567,name="ONCE HOP HOP!"},
+    {id=85623000473425,name="TWICE Takedown pt 2 from KPop Demon Hunters"},
+    {id=84067050907557,name="Pickle Rick Dance"},
+    {id=86982022610765,name="Caramelldansen"},
+    {id=117301403779781,name="Im Talm Bout Innit"},
+    {id=84822284410814,name="Maraschino Step"},
+    {id=97847706148165,name="[NEW !] Caramelldansen Kawaii Dance"},
+    {id=89174456614428,name="Laying Down - Daydreaming"},
+    {id=91023138078288,name="OH WHO IS YOU"},
+    {id=107978036345855,name="Prince Of Egypt Dance / What You Want"},
+    {id=71363859760586,name="Golden Freddy Pose"},
+    {id=80877772569772,name="Default Dance | OG"},
+    {id=80436375269036,name="HEADLESS HOOPER"},
+    {id=93262662842394,name="Sit"},
+    {id=75703899901487,name="6 7 Transformation"},
+    {id=100773414188482,name="Stray Kids Walkin On Water"},
+    {id=131544122623505,name="Become A Car!"},
+    {id=99005087791705,name="Death Pose"},
+    {id=132384701706046,name="💀MM2 Fake Dead"},
+    {id=129916107176034,name="Discombobulated"},
+    {id=88598010609888,name="Angry Stomp "},
+    {id=132508867759412,name="xavier so based emote"},
+    {id=121167704249654,name="Hide"},
+    {id=137873580964093,name="Floating Human Spinner (LIMITED) "},
+    {id=76700167742736,name="Belly Dance"},
+    {id=87826892596287,name="levitate"},
+    {id=70972410468289,name="Fake Dead (Troll Emote)"},
+    {id=134615135651900,name="Young-hee Head Spin - Squid Game"},
+    {id=13823339506,name="Tommy - Archer"},
+    {id=109755476052324,name="IShowSpeed Dance"},
+    {id=124828909173982,name="Skibidi"},
+    {id=4272351660,name="Fast Hands"},
+    {id=137006085779408,name="Speed Glitch+"},
+    {id=89633087256727,name="Weird Spin"},
+    {id=125032357496729,name="Fake Death (BEST)"},
+    {id=81177294287826,name="Hug"},
+    {id=88721672617892,name="P.B.J.T."},
+    {id=121259524934987,name="Xaviersobased Jig"},
+    {id=121067808279598,name="PARROT PARTY DANCE"},
+    {id=7202898984,name="Show Dem Wrists - KSI"},
+    {id=120377619472998,name="Macarena"},
+    {id=4940602656,name="Jumping Wave"},
+    {id=94663026124741,name="Torture Dance"},
+    {id=120896030393583,name="Get Sturdy"},
+    {id=137261874619072,name="Sponge Dance"},
+    {id=119746055344304,name="Plane"},
+    {id=78620443286892,name="Cute Laying Down"},
+    {id=108922782921118,name="📸 Pose for the Pic "},
+    {id=131221550165951,name="Heart Hands Pose 3.0"},
+    {id=119454955259757,name="Caramel Hip Sway"},
+    {id=7202900159,name="Wake Up Call - KSI"},
+    {id=79752538807060,name="Griddy"},
+    {id=140466682449054,name="head spin"},
+    {id=107899954696611,name="Spongebob Shuffle Dance 🧽"},
+    {id=96405718067779,name="Cute Sit"},
+    {id=4849497510,name="Power Blast"},
+    {id=89413575288931,name="Blue Shirt Guy Dancing"},
+    {id=112924687333965,name="Aura Farm"},
+    {id=100782362883099,name="Car Transformation"},
+    {id=102323907950469,name="Space Dance"},
+    {id=110521067391235,name="The Old Jitterbug"},
+    {id=111304332281521,name="Druski Shuffle"},
+    {id=133600250245899,name="🥤 Soda Pop - Saja Boys"},
+    {id=133477296392756,name="Rasputin – Boney M."},
+    {id=122949892043249,name="[Aura Farm] Sit Idle"},
+    {id=82739386299071,name="Jackpot Groove"},
+    {id=80422524668416,name="Dreamer"},
+    {id=97968838104258,name="Subject Three / AI Cat Chinese Dance"},
+    {id=91274761264433,name="Macarena"},
+    {id=3994130516,name="Bodybuilder"},
+    {id=5938365243,name="Dolphin Dance"},
+    {id=99563839802389,name="Jumpstyle"},
+    {id=85361710130557,name="Caramelldansen"},
+    {id=74646784680842,name="Ishowspeed shake "},
+    {id=5230615437,name="Beckon"},
+    {id=135489824748823,name="Magical Pose"},
+    {id=98603994713783,name="Rat Dance"},
+    {id=14353419229,name="Baby Queen - Dramatic Bow"},
+    {id=84052327668385,name="Floating"},
+    {id=97999370392804,name="Spin my Head"},
+    {id=94319114655768,name="Rat Dance"},
+    {id=86849720336961,name="Mr. Ant Tennas Dance - DELTARUNE"},
+    {id=124754178569693,name="Die Lit!"},
+    {id=80544397800234,name="Helicopter"},
+    {id=100532972764499,name="MONSTER MASH"},
+    {id=88922397617835,name="What You Want"},
+    {id=115810068374896,name="Garry's Dance"},
+    {id=75842745124834,name="Human Snake"},
+    {id=94451497143711,name="Hakari Dance"},
+    {id=128972617664804,name="Fortnite Default Dance"},
+    {id=73556976257737,name="Saja Boy Pose - Jinu"},
+    {id=81390693780805,name="PROXIMA"},
+    {id=17000058939,name="Mini Kong"},
+    {id=97629500912487,name="BlockyKick Dance"},
+    {id=112949099442762,name="Griddy"},
+    {id=130641944883645,name=" Jinu Pose - Saja Boys"},
+    {id=108474079699304,name="Dep"},
+    {id=4049646104,name="Line Dance"},
+    {id=91423783304464,name="criss cross sit"},
+    {id=90524692306889,name="[⏳] Chill Sit"},
+    {id=15506496093,name="Rock n Roll"},
+    {id=134737246939931,name="GAG IT DEATH DROP"},
+    {id=71787387963141,name="Worm Dance"},
+    {id=128658037413893,name="I'm Going To Die Here - Pressure"},
+    {id=99568437064777,name="Relaxed Sit"},
+    {id=83018514370428,name="Stargazing"},
+    {id=92859581691366,name="ALTÉGO - Couldn’t Care Less"},
+    {id=94534169345613,name="Casual Sit"},
+    {id=16126526506,name="Paris Hilton Sanasa"},
+    {id=140037329261678,name="Caramel dance"},
+    {id=94118707925458,name="Go Mufasa"},
+    {id=105730788757021,name="Dani's BIRDBRAIN"},
+    {id=91927498467600,name="Koto Nai Meme Dance"},
+    {id=117450501566142,name="Hide Hidden Box Invisible Camo Emote Small tiny"},
+    {id=4272484885,name="Baby Dance"},
+    {id=88024974500195,name="Oppa Gangnam Style"},
+    {id=7202896732,name="Boxing Punch - KSI"},
+    {id=128792127841374,name="Watching silly videos (Or texting)"},
+    {id=87756443172440,name="xavier so based dance"},
+    {id=116770268279002,name="BirdBrain Teto"},
+    {id=124935873390035,name="Hiding Human Box"},
+    {id=94121796810251,name="Kicking Feet And Blushing"},
+}
+
+local statusLabel,catalogLabel,selectedLabel,searchLabel,customLabel
+local function Label(control,text)
+    if control then pcall(function() control:SetValue(text) end) end
+end
+local function Status(text)
+    runtime.status=text;Label(statusLabel,text)
+    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+end
+local function Dispose(track,animation)
+    if track then
+        pcall(function() track:Stop(0) end)
+        pcall(function() track:Destroy() end)
+    end
+    if animation then pcall(function() animation:Destroy() end) end
+end
+local function StopCurrent(message)
+    runtime.generation=runtime.generation+1
+    if runtime.endedConnection then runtime.endedConnection:Disconnect();runtime.endedConnection=nil end
+    local track,animation=runtime.track,runtime.animation
+    runtime.track=nil;runtime.animation=nil;runtime.character=nil;runtime.playing=nil
+    Dispose(track,animation)
+    if message then Status(message) end
+end
+runtime.Stop=function() StopCurrent("Stopped") end
+local function Current(ticket,character)
+    return runtime.alive and runtime.generation==ticket and Player.Character==character
+end
+local function ResolveCatalog(id)
+    if runtime.resolutions[id] then return runtime.resolutions[id] end
+    local ok,objects=pcall(function() return game:GetObjects("rbxassetid://"..IdText(id)) end)
+    if not ok or type(objects)~="table" then return nil end
+    local resolved
+    -- Loaded objects stay unparented. Scripts in an asset are never executed.
+    pcall(function()
+        for _,root in ipairs(objects) do
+            if root:IsA("Animation") then resolved=ParseId(root.AnimationId) end
+            if not resolved then
+                local descendants=root:GetDescendants()
+                for i,obj in ipairs(descendants) do
+                    if i>4000 then break end
+                    if obj:IsA("Animation") then resolved=ParseId(obj.AnimationId);if resolved then break end end
+                end
+            end
+            if resolved then break end
+        end
+    end)
+    for _,root in ipairs(objects) do pcall(function() root:Destroy() end) end
+    if resolved then runtime.resolutions[id]=resolved end
+    return resolved
+end
+local function Play(item,direct)
+    if not runtime.alive then return end
+    if not item or not AssetId(item.id) then Notify("Select an emote or enter a valid ID first.");return end
+    StopCurrent()
+    local ticket=runtime.generation
+    local character=Player.Character
+    if not character then Status("Waiting for character — press Play after spawning");return end
+    Status("Loading: "..item.name)
+    task.spawn(function()
+        local track,animation
+        local ok,err=pcall(function()
+            if not Current(ticket,character) then return end
+            local humanoid=character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid",8)
+            if not Current(ticket,character) then return end
+            if not humanoid or humanoid.Health<=0 then error("Character is not ready") end
+            if humanoid.RigType~=Enum.HumanoidRigType.R15 then error("R15 character required") end
+            local animator=humanoid:FindFirstChildOfClass("Animator") or humanoid:WaitForChild("Animator",8)
+            if not Current(ticket,character) then return end
+            if not animator then error("Animator is not ready") end
+            local animationId=direct and item.id or ResolveCatalog(item.id)
+            if not Current(ticket,character) then return end
+            if not animationId and not direct then
+                -- Roblox's native emote API is a fallback when GetObjects is unavailable.
+                local nativeOK,nativeTrack=pcall(function() return humanoid:PlayEmoteAndGetAnimTrackById(item.id) end)
+                if nativeOK and nativeTrack and typeof(nativeTrack)=="Instance" and nativeTrack:IsA("AnimationTrack") then track=nativeTrack end
+                if not Current(ticket,character) then return end
+            end
+            if not track then
+                animation=Instance.new("Animation")
+                animation.AnimationId="rbxassetid://"..IdText(animationId or item.id)
+                track=animator:LoadAnimation(animation)
+            end
+            if not Current(ticket,character) then return end
+            if not track then error("Roblox did not return an animation track") end
+            track.Priority=Enum.AnimationPriority.Action
+            track.Looped=prefs.loop
+            if not track.IsPlaying then track:Play(0.05,1,prefs.speed) else track:AdjustSpeed(prefs.speed) end
+            runtime.track=track;runtime.animation=animation;runtime.character=character
+            runtime.playing=item
+            runtime.endedConnection=track.Ended:Connect(function()
+                if runtime.track==track and Current(ticket,character) then StopCurrent("Finished: "..item.name) end
+            end)
+            -- LoadAnimation may return a track even for an inaccessible/deleted asset.
+            local deadline=os.clock()+8
+            while Current(ticket,character) and runtime.track==track and track.Length<=0 and os.clock()<deadline do task.wait(0.1) end
+            if not Current(ticket,character) or runtime.track~=track then return end
+            if track.Length<=0 then error("Animation did not load. It may be restricted, deleted, or incompatible.") end
+            Status("Playing: "..item.name)
+        end)
+        if not Current(ticket,character) then
+            -- A newer click/Stop/respawn wins even if GetObjects/LoadAnimation yielded.
+            if runtime.track~=track then Dispose(track,animation) end
+            return
+        end
+        if not ok then
+            if runtime.track==track then StopCurrent() else Dispose(track,animation) end
+            Status("Cannot play this emote")
+            Notify(tostring(err))
+        end
+    end)
+end
+runtime.Play=function(id,name,direct) Play({id=id,name=name or IdText(id)},direct==true) end
+runtime.SaveSettings=SaveSettings
+runtime.connections[#runtime.connections+1]=Player.CharacterAdded:Connect(function()
+    StopCurrent("Respawned — select an emote and press Play")
+end)
+runtime.connections[#runtime.connections+1]=RunService.Heartbeat:Connect(function()
+    if not runtime.alive or not runtime.track then return end
+    local character=runtime.character
+    local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+    if Player.Character~=character or not humanoid or humanoid.Health<=0 then StopCurrent("Stopped");return end
+    if not prefs.walk and humanoid.MoveDirection.Magnitude>0.05 then StopCurrent("Stopped on movement") end
+end)
+function runtime.Cleanup()
+    runtime.alive=false;runtime.filterGeneration=runtime.filterGeneration+1
+    StopCurrent()
+    for _,connection in ipairs(runtime.connections) do connection:Disconnect() end
+    if runtime.DestroyBrowser then runtime.DestroyBrowser() end
+end
+
+local dropdown,pageLabel
+local displayed={}
+local syncing=false
+local SENTINEL="— Select an emote —"
+local function NormalizeCatalog(data)
+    if type(data)~="table" then return nil end
+    local source=type(data.data)=="table" and data.data or data
+    local items,seen={},{}
+    for i,value in ipairs(source) do
+        if i>100000 then break end
+        local item=Item(value)
+        if item and not seen[item.id] then
+            seen[item.id]=true;items[#items+1]=item
+        end
+    end
+    return #items>0 and items or nil
+end
+local function SelectionLabel()
+    local item=prefs.selected
+    Label(selectedLabel,item and ("Selected: "..item.name.." ["..IdText(item.id).."]") or "Selected: none")
+    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+end
+local function RenderPage()
+    if not runtime.alive then return end
+    local pages=math.max(1,math.ceil(#runtime.filtered/PAGE_SIZE))
+    runtime.page=math.clamp(runtime.page,1,pages)
+    local names={SENTINEL}
+    displayed={}
+    local selectedText=SENTINEL
+    for i=(runtime.page-1)*PAGE_SIZE+1,math.min(runtime.page*PAGE_SIZE,#runtime.filtered) do
+        local item=runtime.filtered[i]
+        local text=item.name.." ["..IdText(item.id).."]"
+        names[#names+1]=text;displayed[text]=item
+        if prefs.selected and prefs.selected.id==item.id then selectedText=text end
+    end
+    if dropdown then
+        syncing=true
+        local ok,err=pcall(function() dropdown:ChangeItems(names);dropdown:Select(selectedText) end)
+        syncing=false
+        if not ok then WarnOnce("dropdown","Could not update the emote list: "..tostring(err)) end
+    end
+    Label(pageLabel,"Page "..runtime.page.." / "..pages.." • matches: "..#runtime.filtered.." • catalog: "..#runtime.catalog)
+    SelectionLabel()
+    if runtime.RenderCards then runtime.RenderCards() end
+end
+local function Filter(resetPage)
+    runtime.filterGeneration=runtime.filterGeneration+1
+    local ticket=runtime.filterGeneration
+    local query=prefs.query:lower()
+    local favoritesOnly=prefs.favoritesOnly
+    local source=runtime.catalog
+    if favoritesOnly then
+        source={}
+        for _,item in pairs(prefs.favorites) do source[#source+1]=item end
+        table.sort(source,function(a,b) return a.name:lower()<b.name:lower() end)
+    end
+    local words={}
+    for word in query:gmatch("%S+") do words[#words+1]=word end
+    runtime.filtering=true
+    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    Label(searchLabel,"Search: "..(prefs.query=="" and "(all)" or prefs.query))
+    task.spawn(function()
+        local filtered={}
+        for i,item in ipairs(source) do
+            if not runtime.alive or runtime.filterGeneration~=ticket then return end
+            local haystack=item.name:lower().." "..IdText(item.id)
+            local matches=true
+            for _,word in ipairs(words) do
+                if not haystack:find(word,1,true) then matches=false;break end
+            end
+            if matches then filtered[#filtered+1]=item end
+            if i%500==0 then task.wait() end
+        end
+        if not runtime.alive or runtime.filterGeneration~=ticket then return end
+        runtime.filtered=filtered;runtime.filtering=false
+        if resetPage then runtime.page=1 end
+        RenderPage()
+    end)
+end
+local function AdoptCatalog(items,source)
+    runtime.catalog=items
+    runtime.catalogSource=source
+    Label(catalogLabel,"Catalog: "..#items.." emotes • "..source)
+    -- A selected item need not be on the visible page or present in a newer catalog.
+    if not prefs.selected then prefs.selected=items[1] end
+    SelectionLabel()
+    Filter(true)
+end
+local function RefreshCatalog()
+    if not runtime.alive or runtime.catalogBusy then return end
+    runtime.catalogBusy=true
+    Label(catalogLabel,"Updating catalog... current list remains available")
+    task.spawn(function()
+        local ok,data=pcall(function() return HttpService:JSONDecode(game:HttpGet(URL)) end)
+        if not runtime.alive then return end
+        local items=ok and NormalizeCatalog(data) or nil
+        runtime.catalogBusy=false
+        if not items then
+            Label(catalogLabel,"Catalog: "..#runtime.catalog.." • offline / update failed")
+            WarnOnce("network","Catalog update failed. The cached or built-in list remains available.")
+            return
+        end
+        warnings.network=nil
+        AdoptCatalog(items,"7yd7 online catalog")
+        if type(write)=="function" then
+            local saved=pcall(function() write(CACHE,HttpService:JSONEncode({version=1,data=items})) end)
+            if not saved then WarnOnce("cache","Could not save the catalog cache; the list still works this session.") end
+        end
+    end)
+end
+runtime.RefreshCatalog=RefreshCatalog
+
+-- Separate, responsive card browser. No access to ODH's private GUI hierarchy.
+do
+    local UI={cards={},connections={},searchToken=0,renderToken=0}
+    runtime.browser=UI
+    local C={navy=Color3.fromRGB(7,20,35),teal=Color3.fromRGB(9,72,76),
+        panel=Color3.fromRGB(10,40,49),accent=Color3.fromRGB(79,235,182),
+        white=Color3.fromRGB(235,247,251),muted=Color3.fromRGB(151,185,195)}
+    local function Make(class,props,parent)
+        local obj=Instance.new(class)
+        for key,value in pairs(props or {}) do obj[key]=value end
+        obj.Parent=parent
+        return obj
+    end
+    local function Round(obj,radius)
+        Make("UICorner",{CornerRadius=UDim.new(0,radius or 12)},obj)
+    end
+    local function Stroke(obj,color,transparency,thickness)
+        return Make("UIStroke",{Color=color or C.accent,Transparency=transparency or .75,Thickness=thickness or 1},obj)
+    end
+    local function Gradient(obj,a,b,rotation)
+        Make("UIGradient",{Color=ColorSequence.new(a,b),Rotation=rotation or 35},obj)
+    end
+    local function Text(parent,text,size,pos,dimensions)
+        return Make("TextLabel",{BackgroundTransparency=1,Text=text,TextColor3=C.white,
+            Font=Enum.Font.GothamMedium,TextSize=size,TextXAlignment=Enum.TextXAlignment.Left,
+            TextTruncate=Enum.TextTruncate.AtEnd,Position=pos,Size=dimensions},parent)
+    end
+    local function Button(parent,text,pos,dimensions)
+        local b=Make("TextButton",{Text=text,TextColor3=C.white,Font=Enum.Font.GothamMedium,TextSize=15,
+            AutoButtonColor=true,Active=true,BackgroundColor3=C.panel,BackgroundTransparency=.08,BorderSizePixel=0,Position=pos,Size=dimensions},parent)
+        Round(b,9);return b
+    end
+    local function Box(parent,placeholder,pos,dimensions)
+        local b=Make("TextBox",{Text="",PlaceholderText=placeholder,PlaceholderColor3=C.muted,TextColor3=C.white,
+            Font=Enum.Font.Gotham,TextSize=15,TextXAlignment=Enum.TextXAlignment.Left,
+            ClearTextOnFocus=false,BackgroundColor3=C.navy,BackgroundTransparency=.08,BorderSizePixel=0,Position=pos,Size=dimensions},parent)
+        Round(b,9)
+        Make("UIPadding",{PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,placeholder=="Search name or ID..." and 40 or 10)},b)
+        return b
+    end
+    local function Connect(signal,fn)
+        local connection=signal:Connect(fn);UI.connections[#UI.connections+1]=connection;return connection
+    end
+    local function SyncNative()
+        if runtime.SyncNative then runtime.SyncNative() end
+    end
+    local function Commit()
+        SaveSettings();SyncNative()
+    end
+    local function Focused(box)
+        local ok,value=pcall(function() return box:IsFocused() end)
+        return ok and value
+    end
+    local function SetChoice(item)
+        prefs.selected={id=item.id,name=item.name};Commit();SelectionLabel()
+    end
+    -- Floating, draggable emote shortcuts. Independent of favorites/playback state.
+    UI.quickButtons={}
+    local function QuickViewport()
+        local viewport=UI.canvas and UI.canvas.AbsoluteSize
+        if not viewport or viewport.X<1 or viewport.Y<1 then
+            viewport=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(900,600)
+        end
+        return viewport
+    end
+    local function PlaceQuick(record)
+        local vp=QuickViewport()
+        local saved=prefs.shortcuts[record.key]
+        if not saved then return end
+        local x=math.clamp(saved.x*vp.X,38,math.max(38,vp.X-38))
+        local y=math.clamp(saved.y*vp.Y,38,math.max(38,vp.Y-38))
+        record.button.Position=UDim2.fromOffset(x,y)
+    end
+    local function RefreshQuickVisuals()
+        for _,record in pairs(UI.quickButtons) do
+            local playing=runtime.track and runtime.playing and runtime.playing.id==record.item.id
+            record.outline.Color=playing and C.accent or C.muted
+            record.outline.Transparency=playing and .05 or .3
+            record.button.Visible=UI.root~=nil and not UI.hidden
+        end
+    end
+    local function CreateQuick(key,saved)
+        local button=Make("ImageButton",{Name="QuickEmote_"..key,AnchorPoint=Vector2.new(.5,.5),
+            Size=UDim2.fromOffset(56,56),BackgroundColor3=C.navy,BackgroundTransparency=.58,
+            Image="rbxthumb://type=Asset&id="..key.."&w=420&h=420",ScaleType=Enum.ScaleType.Fit,
+            BorderSizePixel=0,AutoButtonColor=true,Active=true,ZIndex=50,Visible=false},UI.canvas)
+        Round(button,11)
+        local record={button=button,key=key,item={id=saved.id,name=saved.name},outline=Stroke(button,C.muted,.3,1.5),moved=false}
+        UI.quickButtons[key]=record
+        button.InputBegan:Connect(function(input)
+            if not runtime.alive then return end
+            if input.UserInputType~=Enum.UserInputType.Touch and input.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+            record.moved=false;record.suppressUntil=nil
+            UI.quickDrag={record=record,input=input,start=input.Position,
+                center=Vector2.new(button.Position.X.Offset,button.Position.Y.Offset)}
+        end)
+        button.Activated:Connect(function()
+            if not runtime.alive or not prefs.shortcuts[key] then return end
+            if record.moved or (record.suppressUntil and os.clock()<record.suppressUntil) then return end
+            SetChoice(record.item)
+            -- Every tap starts a new single playback by default; never starts from dragging.
+            Play(record.item,false)
+        end)
+        PlaceQuick(record)
+    end
+    function runtime.SyncQuickButtons()
+        if not UI.canvas or not UI.root then return end
+        for key,record in pairs(UI.quickButtons) do
+            if not prefs.shortcuts[key] then
+                if UI.quickDrag and UI.quickDrag.record==record then UI.quickDrag=nil end
+                record.button:Destroy();UI.quickButtons[key]=nil
+            end
+        end
+        for key,saved in pairs(prefs.shortcuts) do
+            if not UI.quickButtons[key] then CreateQuick(key,saved) end
+        end
+        RefreshQuickVisuals()
+    end
+    function runtime.ClearQuickButtons()
+        prefs.shortcuts={};SaveSettings();runtime.SyncQuickButtons()
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+    local function ToggleQuick(item)
+        local key=IdText(item.id)
+        if prefs.shortcuts[key] then
+            prefs.shortcuts[key]=nil
+        else
+            local count=0
+            for _ in pairs(prefs.shortcuts) do count=count+1 end
+            if count>=MAX_SHORTCUTS then Notify("Up to "..MAX_SHORTCUTS.." screen buttons. Unpin one first.");return end
+            local vp=QuickViewport()
+            local firstY=math.max(48,vp.Y*.3)
+            local rows=math.max(1,math.floor((vp.Y-38-firstY)/78)+1)
+            local x=math.clamp(vp.X-52-math.floor(count/rows)*78,38,math.max(38,vp.X-38))
+            local y=math.clamp(firstY+(count%rows)*78,38,math.max(38,vp.Y-38))
+            prefs.shortcuts[key]={id=item.id,name=item.name,x=x/vp.X,y=y/vp.Y}
+        end
+        -- Pinning does not change native controls. Do not route this through
+        -- SyncNative (which invokes host UI setters and can delay/fail a touch).
+        runtime.SyncQuickButtons()
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+        SaveSettings()
+    end
+    local function QuickInputChanged(input)
+        local drag=UI.quickDrag
+        if not drag then return end
+        if input~=drag.input and not (drag.input.UserInputType==Enum.UserInputType.MouseButton1 and input.UserInputType==Enum.UserInputType.MouseMovement) then return end
+        local dx,dy=input.Position.X-drag.start.X,input.Position.Y-drag.start.Y
+        if not drag.record.moved and dx*dx+dy*dy<64 then return end
+        drag.record.moved=true
+        local saved=prefs.shortcuts[drag.record.key]
+        if not saved then UI.quickDrag=nil;return end
+        local vp=QuickViewport()
+        saved.x=math.clamp((drag.center.X+dx)/vp.X,0,1)
+        saved.y=math.clamp((drag.center.Y+dy)/vp.Y,0,1)
+        PlaceQuick(drag.record)
+    end
+    local function QuickInputEnded(input)
+        local drag=UI.quickDrag
+        if not drag or drag.input~=input then return end
+        UI.quickDrag=nil
+        if drag.record.moved then
+            drag.record.suppressUntil=os.clock()+.3
+            SaveSettings() -- only on drop, never on every drag frame
+        end
+    end
+    local function SetVisible(value)
+        if not UI.root then return end
+        UI.hidden=false
+        UI.screen.Enabled=true
+        UI.root.Visible=value;UI.launcher.Visible=not value
+        if not value and UI.setSettingsVisible then UI.setSettingsVisible(false) end
+        RefreshQuickVisuals()
+        if value and runtime.RenderCards then runtime.RenderCards() end
+    end
+    local function Layout()
+        if not UI.root then return end
+        local viewport=UI.canvas.AbsoluteSize
+        if viewport.X<1 or viewport.Y<1 then
+            viewport=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(900,600)
+        end
+        local width=math.max(240,math.min(1040,viewport.X-24))
+        local height=math.max(240,math.min(650,viewport.Y-24))
+        UI.root.Size=UDim2.fromOffset(width,height)
+        if UI.center then
+            UI.center=Vector2.new(math.clamp(UI.center.X,width/2,math.max(width/2,viewport.X-width/2)),
+                math.clamp(UI.center.Y,height/2,math.max(height/2,viewport.Y-height/2)))
+            UI.root.Position=UDim2.fromOffset(UI.center.X,UI.center.Y)
+        else UI.root.Position=UDim2.fromScale(.5,.5) end
+        local columns=width>=760 and 3 or (width>=500 and 2 or 1)
+        local cellWidth=math.floor((width-48-(columns-1)*12)/columns)
+        local short=height<400
+        local scrollTop=short and 128 or 143
+        local availableHeight=math.max(1,height-scrollTop-68)
+        UI.viewHeight=availableHeight
+        UI.scroll.Position=UDim2.fromOffset(16,scrollTop)
+        UI.scroll.Size=UDim2.new(1,-32,1,-(scrollTop+68))
+        local cellHeight=math.max(120,math.min(250,math.floor(cellWidth*.75),availableHeight-8))
+        UI.grid.CellSize=UDim2.fromOffset(cellWidth,cellHeight)
+        UI.grid.FillDirectionMaxCells=columns
+        UI.columns=columns
+        UI.root.BackgroundTransparency=prefs.windowTransparency/100
+        UI.root.BackgroundColor3=Color3.new(1,1,1) -- gradient supplies color, not a second dark multiplier
+        local rows=math.ceil(#UI.cards/columns)
+        UI.scroll.CanvasSize=UDim2.fromOffset(0,math.max(0,rows*(cellHeight+12)-12)+8)
+        UI.compactCards=cellHeight<180
+        local thumbAreaWidth=math.max(40,cellWidth-(UI.compactCards and 82 or 30))
+        local thumbAreaHeight=math.max(36,cellHeight-(UI.compactCards and 58 or 100))
+        local thumbSize=math.floor(math.min(thumbAreaWidth,thumbAreaHeight)*prefs.thumbnailSize/100)
+        for _,card in ipairs(UI.cards) do
+            card.frame.BackgroundTransparency=math.clamp(prefs.windowTransparency/100*.65,0,.35)
+            card.image.Size=UDim2.fromOffset(thumbSize,thumbSize)
+            if UI.compactCards then
+                card.title.Size=UDim2.new(1,-70,0,34)
+                card.image.Position=UDim2.fromOffset(12+thumbAreaWidth/2,48+thumbAreaHeight/2)
+                local pinHeight=math.min(44,math.max(22,cellHeight-96))
+                local pinTop=44+math.max(0,(cellHeight-95-pinHeight)/2)
+                card.star.Position=UDim2.new(1,-56,0,3)
+                card.pin.Size=UDim2.fromOffset(44,pinHeight)
+                card.pin.Position=UDim2.new(1,-56,0,pinTop)
+                card.dot.Position=UDim2.new(1,-34,0,pinTop+pinHeight/2)
+                card.play.Position=UDim2.new(1,-56,1,-51)
+                card.play.Size=UDim2.fromOffset(44,40)
+                card.play.TextSize=22
+                card.pin.BackgroundTransparency=1
+            else
+                card.title.Size=UDim2.new(1,-24,0,34)
+                card.image.Position=UDim2.fromOffset(cellWidth/2,44+thumbAreaHeight/2)
+                card.star.Position=UDim2.new(0,10,1,-52)
+                card.pin.Size=UDim2.fromOffset(44,44)
+                card.pin.Position=UDim2.new(0,58,1,-52)
+                card.dot.Position=UDim2.new(0,80,1,-30)
+                card.play.Position=UDim2.new(0,110,1,-52)
+                card.play.Size=UDim2.new(1,-122,0,44)
+                card.play.TextSize=14
+                card.pin.BackgroundTransparency=.65
+            end
+        end
+        local narrow=width<500
+        UI.narrow=narrow
+        local searchY=short and 46 or 56
+        local searchHeight=short and 38 or 40
+        UI.search.Position=UDim2.fromOffset(16,searchY)
+        UI.search.Size=UDim2.new(1,narrow and -128 or -162,0,searchHeight)
+        UI.favorites.Position=UDim2.new(1,narrow and -104 or -138,0,searchY)
+        UI.favorites.Size=UDim2.fromOffset(narrow and 88 or 122,searchHeight)
+        UI.summary.Position=UDim2.fromOffset(18,short and 88 or 103)
+        UI.random.Position=UDim2.new(1,-186,0,short and 88 or 102)
+        UI.stop.Position=UDim2.new(1,-94,0,short and 88 or 102)
+        UI.sheet.Size=UDim2.fromOffset(math.min(380,width-24),math.min(460,height-24))
+        if UI.alpha and not Focused(UI.alpha) then UI.alpha.Text=tostring(prefs.windowTransparency) end
+        if UI.thumb and not Focused(UI.thumb) then UI.thumb.Text=tostring(prefs.thumbnailSize) end
+        for _,record in pairs(UI.quickButtons) do PlaceQuick(record) end
+    end
+    runtime.ApplyBrowserAppearance=Layout
+    function runtime.ResetBrowserPosition()
+        UI.center=nil;Layout()
+    end
+    local function UpdateStatus()
+        if not UI.root then return end
+        UI.status.Text=runtime.status or "Ready — tap a card's play button"
+        UI.summary.Text=runtime.filtering and "Searching..." or (#runtime.filtered.." emotes")
+        UI.favorites.Text=prefs.favoritesOnly and (UI.narrow and "★ Saved" or "★ Favorites") or (UI.narrow and "☆ Saved" or "☆ Favorites")
+        UI.favorites.BackgroundColor3=prefs.favoritesOnly and C.teal or C.panel
+        UI.clearSearch.Visible=prefs.query~=""
+        UI.favorites.TextColor3=prefs.favoritesOnly and C.accent or C.white
+        UI.loop.Text=prefs.loop and "Loop: ON" or "Loop: OFF"
+        UI.loop.TextColor3=prefs.loop and C.accent or C.white
+        UI.walk.Text=prefs.walk and "Move: ON" or "Move: OFF"
+        UI.walk.TextColor3=prefs.walk and C.accent or C.white
+        if not Focused(UI.speed) then UI.speed.Text=tostring(prefs.speed) end
+        if not Focused(UI.search) and UI.search.Text~=prefs.query then
+            UI.syncing=true;UI.search.Text=prefs.query;UI.syncing=false
+        end
+        local pages=math.max(1,math.ceil(#runtime.filtered/PAGE_SIZE))
+        UI.page.Text="Page "..runtime.page.." / "..pages.."  ·  tap to jump"
+        UI.previous.TextTransparency=runtime.page<=1 and .6 or 0
+        UI.next.TextTransparency=runtime.page>=pages and .6 or 0
+        for _,card in ipairs(UI.cards) do
+            local selected=prefs.selected and prefs.selected.id==card.item.id
+            local playing=runtime.track and runtime.playing and runtime.playing.id==card.item.id
+            card.outline.Color=selected and C.accent or C.muted
+            card.outline.Transparency=selected and .1 or .82
+            card.star.Text=prefs.favorites[IdText(card.item.id)] and "★" or "☆"
+            card.star.TextColor3=prefs.favorites[IdText(card.item.id)] and C.accent or C.white
+            card.dot.BackgroundTransparency=prefs.shortcuts[IdText(card.item.id)] and 0 or 1
+            card.play.Text=playing and (UI.compactCards and "■" or "■ Stop") or (UI.compactCards and "▶" or "▶ Play")
+            card.play.TextColor3=playing and C.navy or C.teal
+            card.play.BackgroundColor3=playing and C.accent or C.white
+        end
+    end
+    local updateCards=UpdateStatus
+    UpdateStatus=function() updateCards();RefreshQuickVisuals() end
+    runtime.UpdateCardStatus=UpdateStatus
+    local function BuildCard(item,order)
+        local frame=Make("Frame",{Name="Emote_"..IdText(item.id),LayoutOrder=order,
+            BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=.14,BorderSizePixel=0,ClipsDescendants=true},UI.scroll)
+        Round(frame,17);Gradient(frame,Color3.fromRGB(9,33,52),Color3.fromRGB(12,74,77),30)
+        local outline=Stroke(frame,C.muted,.82)
+        local title=Text(frame,item.name,14,UDim2.fromOffset(12,9),UDim2.new(1,-70,0,34))
+        title.TextWrapped=true;title.TextTruncate=Enum.TextTruncate.None;title.TextYAlignment=Enum.TextYAlignment.Top
+        local image=Make("ImageButton",{Name="Thumbnail",BackgroundTransparency=1,AutoButtonColor=false,
+            AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromOffset(80,100),Size=UDim2.fromOffset(90,90),
+            Image="rbxthumb://type=Asset&id="..IdText(item.id).."&w=420&h=420",ScaleType=Enum.ScaleType.Fit},frame)
+        -- Decorative ring is a SIBLING below the hit target, never a child that
+        -- can intercept input. Explicit Active/ZIndex also avoids thumbnail overlap.
+        local dot=Make("Frame",{Name="PinRing",AnchorPoint=Vector2.new(.5,.5),
+            Position=UDim2.new(1,-34,0,64),Size=UDim2.fromOffset(18,18),
+            BackgroundColor3=C.white,BackgroundTransparency=1,BorderSizePixel=0,
+            Active=false,ZIndex=19},frame)
+        Round(dot,30);Stroke(dot,C.accent,0,2)
+        local pin=Make("TextButton",{Name="ToggleScreenButton",Text="",BackgroundTransparency=1,
+            Position=UDim2.new(1,-56,0,44),Size=UDim2.fromOffset(44,44),
+            AutoButtonColor=false,Active=true,Selectable=true,ZIndex=20},frame)
+        pin.BackgroundColor3=C.panel;Round(pin,9)
+        pcall(function() pin.Interactable=true end)
+        local lastPinTap=-math.huge
+        local function PinTap()
+            if not runtime.alive or not UI.root or not UI.root.Visible then return end
+            local now=os.clock()
+            -- Mobile can emit TouchTap + Activated + MouseButton1Click for ONE tap.
+            if now-lastPinTap<.2 then return end
+            lastPinTap=now
+            local ok,err=pcall(ToggleQuick,item)
+            if not ok then
+                warn("[ODH Emotes] Screen button: "..tostring(err))
+                Notify("Could not toggle the screen button: "..tostring(err))
+            end
+        end
+        pin.Activated:Connect(PinTap)
+        pin.MouseButton1Click:Connect(PinTap)
+        pcall(function() pin.TouchTap:Connect(PinTap) end)
+        local star=Button(frame,"☆",UDim2.new(1,-56,0,3),UDim2.fromOffset(44,42))
+        star.BackgroundTransparency=1;star.TextSize=33
+        local play=Button(frame,"▶",UDim2.new(1,-56,1,-51),UDim2.fromOffset(44,40))
+        play.BackgroundColor3=C.white;play.TextColor3=C.teal;play.TextSize=22
+        local card={item=item,frame=frame,title=title,image=image,star=star,play=play,pin=pin,dot=dot,outline=outline}
+        UI.cards[#UI.cards+1]=card
+        image.Activated:Connect(function() if runtime.alive then SetChoice(item);UpdateStatus() end end)
+        star.Activated:Connect(function()
+            if not runtime.alive then return end
+            local key=IdText(item.id)
+            if prefs.favorites[key] then prefs.favorites[key]=nil else prefs.favorites[key]={id=item.id,name=item.name} end
+            Commit()
+            if prefs.favoritesOnly then Filter(false) else UpdateStatus() end
+        end)
+        play.Activated:Connect(function()
+            if not runtime.alive then return end
+            local playing=runtime.track and runtime.playing and runtime.playing.id==item.id
+            SetChoice(item)
+            if playing then StopCurrent("Stopped") else Play(item,false) end
+            UpdateStatus()
+        end)
+    end
+    local function RenderCards()
+        if not UI.root or not UI.root.Visible then return end
+        local first=(runtime.page-1)*PAGE_SIZE+1
+        local last=math.min(runtime.page*PAGE_SIZE,#runtime.filtered)
+        local same=UI.renderPage==runtime.page and #UI.cards==math.max(0,last-first+1)
+        if same then
+            for index,card in ipairs(UI.cards) do
+                if card.item~=runtime.filtered[first+index-1] then same=false;break end
+            end
+        end
+        if not same then
+            for _,card in ipairs(UI.cards) do card.frame:Destroy() end
+            UI.cards={}
+            UI.scroll.CanvasPosition=Vector2.zero
+            for index=first,last do BuildCard(runtime.filtered[index],index-first+1) end
+            UI.renderPage=runtime.page
+        end
+        UI.empty.Visible=#runtime.filtered==0
+        UI.showAll.Visible=#runtime.filtered==0 and not runtime.filtering
+        UI.empty.Text=runtime.filtering and "Searching..." or (prefs.favoritesOnly and "No favorites here yet.\nTap a star on any emote to add it." or "No emotes match this search.")
+        Layout();UpdateStatus()
+        if not same then
+            UI.renderToken=UI.renderToken+1
+            local ticket=UI.renderToken
+            UI.scroll.CanvasPosition=Vector2.zero
+            -- Reassert after layout; never carry an old bottom scroll offset to a new page.
+            task.defer(function()
+                if runtime.alive and UI.root and UI.renderToken==ticket then
+                    UI.scroll.CanvasPosition=Vector2.zero
+                end
+            end)
+        end
+    end
+    runtime.RenderCards=RenderCards
+    local function Build()
+        local gui=Make("ScreenGui",{Name="ODH_Emotes_Cards",ResetOnSpawn=false,IgnoreGuiInset=false,
+            ZIndexBehavior=Enum.ZIndexBehavior.Sibling,DisplayOrder=70})
+        UI.screen=gui
+        local parent
+        if type(gethui)=="function" then
+            local ok,value=pcall(gethui);if ok and typeof(value)=="Instance" then parent=value end
+        end
+        parent=parent or Player:FindFirstChildOfClass("PlayerGui") or Player:WaitForChild("PlayerGui",5)
+        if not parent then error("PlayerGui unavailable") end
+        local parentOK=pcall(function() gui.Parent=parent end)
+        if not parentOK then gui.Parent=Player:WaitForChild("PlayerGui",5) end
+        UI.canvas=Make("Frame",{Name="Canvas",Size=UDim2.fromScale(1,1),BackgroundTransparency=1,
+            Active=false},gui)
+        UI.root=Make("Frame",{Name="CardBrowser",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),
+            Size=UDim2.fromOffset(1000,600),BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=prefs.windowTransparency/100,BorderSizePixel=0,ClipsDescendants=true,Active=true},UI.canvas)
+        Round(UI.root,18);Stroke(UI.root,C.muted,.4);Gradient(UI.root,C.navy,Color3.fromRGB(6,76,78),22)
+        local accent=Make("Frame",{Position=UDim2.fromOffset(0,0),Size=UDim2.new(1,0,0,3),BackgroundColor3=C.accent,BorderSizePixel=0},UI.root)
+        Gradient(accent,C.teal,C.accent,0)
+        local drag=Make("TextButton",{Name="DragHeader",Position=UDim2.fromOffset(0,3),Size=UDim2.new(1,-188,0,46),
+            BackgroundTransparency=1,Text="",AutoButtonColor=false,Active=true},UI.root)
+        Text(drag,"Emotes",23,UDim2.fromOffset(18,3),UDim2.new(1,-22,0,26))
+        Text(drag,"R15 · Overdrive H · v7",10,UDim2.fromOffset(19,29),UDim2.new(1,-24,0,14)).TextColor3=C.muted
+        UI.settings=Button(UI.root,"Settings",UDim2.new(1,-184,0,10),UDim2.fromOffset(80,36));UI.settings.TextSize=13
+        local minimize=Button(UI.root,"—",UDim2.new(1,-96,0,10),UDim2.fromOffset(36,36))
+        local close=Button(UI.root,"×",UDim2.new(1,-52,0,10),UDim2.fromOffset(36,36));close.TextSize=24
+        UI.launcher=Button(UI.canvas,"Emotes  ▶",UDim2.new(0,16,.65,0),UDim2.fromOffset(112,42))
+        UI.launcher.BackgroundColor3=C.teal;Stroke(UI.launcher,C.accent,.2);UI.launcher.Visible=false
+        Connect(minimize.Activated,function() SetVisible(false) end)
+        Connect(close.Activated,function() runtime.CloseBrowser() end)
+        Connect(UI.launcher.Activated,function() SetVisible(true) end)
+        UI.search=Box(UI.root,"Search name or ID...",UDim2.fromOffset(16,56),UDim2.new(1,-162,0,40))
+        UI.search.Text=prefs.query
+        UI.clearSearch=Button(UI.search,"×",UDim2.new(1,-36,0,0),UDim2.fromOffset(36,40))
+        UI.clearSearch.BackgroundTransparency=1;UI.clearSearch.TextSize=22
+        UI.favorites=Button(UI.root,"☆ Favorites",UDim2.new(1,-138,0,56),UDim2.fromOffset(122,40));UI.favorites.TextSize=13
+        Connect(UI.favorites.Activated,function()
+            prefs.favoritesOnly=not prefs.favoritesOnly;Commit();Filter(true);UpdateStatus()
+        end)
+        local function SearchNow()
+            if UI.syncing or not runtime.alive then return end
+            local value=UI.search.Text:sub(1,200)
+            if value==prefs.query then return end
+            prefs.query=value;Commit();Filter(true);UpdateStatus()
+        end
+        Connect(UI.clearSearch.Activated,function()
+            UI.searchToken=UI.searchToken+1;prefs.query="";UI.syncing=true;UI.search.Text="";UI.syncing=false
+            Commit();Filter(true)
+        end)
+        Connect(UI.search:GetPropertyChangedSignal("Text"),function()
+            if UI.syncing then return end
+            UI.clearSearch.Visible=UI.search.Text~=""
+            UI.searchToken=UI.searchToken+1
+            local ticket=UI.searchToken
+            task.delay(.3,function() if runtime.alive and ticket==UI.searchToken then SearchNow() end end)
+        end)
+        Connect(UI.search.FocusLost,SearchNow)
+        UI.summary=Text(UI.root,"Loading...",11,UDim2.fromOffset(18,103),UDim2.new(1,-204,0,26));UI.summary.TextColor3=C.muted
+        local random=Button(UI.root,"Random",UDim2.new(1,-186,0,102),UDim2.fromOffset(84,32));random.TextSize=12
+        local stop=Button(UI.root,"■ Stop",UDim2.new(1,-94,0,102),UDim2.fromOffset(78,32));stop.TextSize=13
+        stop.TextColor3=Color3.fromRGB(255,184,178)
+        Connect(stop.Activated,function() StopCurrent("Stopped") end)
+        Connect(random.Activated,function()
+            if runtime.filtering then Notify("Search is still updating.");return end
+            if #runtime.filtered==0 then Notify("No matching emotes.");return end
+            local item=runtime.filtered[math.random(1,#runtime.filtered)]
+            SetChoice(item);Play(item,false);UpdateStatus()
+        end)
+        UI.scroll=Make("ScrollingFrame",{Name="Cards",Position=UDim2.fromOffset(16,143),Size=UDim2.new(1,-32,1,-211),
+            BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=4,ScrollBarImageColor3=C.accent,
+            AutomaticCanvasSize=Enum.AutomaticSize.None,CanvasSize=UDim2.fromOffset(0,0),ElasticBehavior=Enum.ElasticBehavior.Never,ScrollingDirection=Enum.ScrollingDirection.Y},UI.root)
+        Make("UIPadding",{PaddingTop=UDim.new(0,2),PaddingLeft=UDim.new(0,2),PaddingRight=UDim.new(0,10),PaddingBottom=UDim.new(0,6)},UI.scroll)
+        UI.grid=Make("UIGridLayout",{SortOrder=Enum.SortOrder.LayoutOrder,CellPadding=UDim2.fromOffset(12,12),
+            CellSize=UDim2.fromOffset(300,240)},UI.scroll)
+        UI.empty=Text(UI.root,"No emotes found",16,UDim2.new(0,28,0,149),UDim2.new(1,-56,1,-265))
+        UI.empty.TextWrapped=true;UI.empty.TextXAlignment=Enum.TextXAlignment.Center;UI.empty.Visible=false
+        UI.showAll=Button(UI.root,"Show all emotes",UDim2.new(.5,-85,1,-110),UDim2.fromOffset(170,38));UI.showAll.Visible=false
+        Connect(UI.showAll.Activated,function() prefs.favoritesOnly=false;prefs.query="";Commit();Filter(true) end)
+        local footer=Make("Frame",{Position=UDim2.new(0,16,1,-62),Size=UDim2.new(1,-32,0,56),BackgroundTransparency=1},UI.root)
+        local prev=Button(footer,"‹",UDim2.fromOffset(0,0),UDim2.fromOffset(44,38));prev.TextSize=28
+        local nextButton=Button(footer,"›",UDim2.new(1,-44,0,0),UDim2.fromOffset(44,38));nextButton.TextSize=28
+        UI.page=Button(footer,"Page 1",UDim2.fromOffset(50,0),UDim2.new(1,-100,0,38));UI.page.BackgroundTransparency=1;UI.page.TextSize=12
+        UI.pageEntry=Box(footer,"Go to page...",UDim2.fromOffset(50,0),UDim2.new(1,-100,0,38));UI.pageEntry.Visible=false
+        Connect(UI.page.Activated,function()
+            UI.pageEntry.Text=tostring(runtime.page);UI.pageEntry.Visible=true;UI.page.Visible=false
+            pcall(function() UI.pageEntry:CaptureFocus() end)
+        end)
+        Connect(UI.pageEntry.FocusLost,function()
+            local page=tonumber(UI.pageEntry.Text)
+            if page and page==page and page>0 and page<math.huge then runtime.page=math.floor(page);RenderPage() end
+            UI.pageEntry.Visible=false;UI.page.Visible=true
+        end)
+        UI.status=Text(footer,"Ready",11,UDim2.fromOffset(2,40),UDim2.new(1,-4,0,14));UI.status.TextColor3=C.muted
+        Connect(prev.Activated,function() runtime.page=runtime.page-1;RenderPage() end)
+        Connect(nextButton.Activated,function() runtime.page=runtime.page+1;RenderPage() end)
+        UI.previous=prev;UI.next=nextButton;UI.close=close;UI.minimize=minimize;UI.random=random;UI.stop=stop
+
+        -- One modal settings sheet: everything optional is out of the catalog's way.
+        UI.modal=Make("Frame",{Name="SettingsSheet",Size=UDim2.fromScale(1,1),BackgroundTransparency=1,
+            Visible=false,Active=true,ZIndex=100},UI.root)
+        local dismiss=Make("TextButton",{Text="",Size=UDim2.fromScale(1,1),BackgroundColor3=Color3.new(0,0,0),
+            BackgroundTransparency=.38,BorderSizePixel=0,AutoButtonColor=false,ZIndex=1},UI.modal)
+        UI.sheet=Make("Frame",{AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,-12,.5,0),Size=UDim2.fromOffset(380,420),
+            BackgroundColor3=C.navy,BorderSizePixel=0,Active=true,ZIndex=2},UI.modal)
+        Round(UI.sheet,16);Stroke(UI.sheet,C.muted,.6)
+        Text(UI.sheet,"Settings",19,UDim2.fromOffset(16,12),UDim2.new(1,-100,0,32))
+        UI.done=Button(UI.sheet,"Done",UDim2.new(1,-78,0,12),UDim2.fromOffset(62,34));UI.done.TextColor3=C.accent
+        local function SettingsVisible(visible)
+            UI.modal.Visible=visible;UI.root.ZIndex=visible and 60 or 1
+        end
+        UI.setSettingsVisible=SettingsVisible
+        Connect(UI.settings.Activated,function() SettingsVisible(not UI.modal.Visible) end)
+        Connect(UI.done.Activated,function() SettingsVisible(false) end)
+        Connect(dismiss.Activated,function() SettingsVisible(false) end)
+        UI.controls=Make("ScrollingFrame",{Position=UDim2.fromOffset(14,56),Size=UDim2.new(1,-28,1,-68),
+            BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=3,ScrollBarImageColor3=C.accent,
+            AutomaticCanvasSize=Enum.AutomaticSize.Y,CanvasSize=UDim2.fromOffset(0,0),ScrollingDirection=Enum.ScrollingDirection.Y},UI.sheet)
+        Make("UIListLayout",{FillDirection=Enum.FillDirection.Vertical,Padding=UDim.new(0,10),SortOrder=Enum.SortOrder.LayoutOrder},UI.controls)
+        local order=0
+        local function Row(title,height)
+            order=order+1
+            local row=Make("Frame",{LayoutOrder=order,Size=UDim2.new(1,-6,0,height or 44),BackgroundTransparency=1},UI.controls)
+            if title then Text(row,title,13,UDim2.fromOffset(0,0),UDim2.new(1,-156,1,0)) end
+            return row
+        end
+        local repeatRow=Row("Repeat")
+        UI.loop=Button(repeatRow,"Loop: OFF",UDim2.new(1,-144,0,0),UDim2.fromOffset(144,42))
+        local moveRow=Row("On movement")
+        UI.walk=Button(moveRow,"Move: OFF",UDim2.new(1,-144,0,0),UDim2.fromOffset(144,42))
+        Connect(UI.loop.Activated,function()
+            prefs.loop=not prefs.loop;Commit()
+            if runtime.track then pcall(function() runtime.track.Looped=prefs.loop end) end
+            UpdateStatus()
+        end)
+        Connect(UI.walk.Activated,function() prefs.walk=not prefs.walk;Commit();UpdateStatus() end)
+        local function Stepper(title,key,lo,hi,step)
+            local row=Row(title)
+            local minus=Button(row,"−",UDim2.new(1,-144,0,0),UDim2.fromOffset(38,42))
+            local box=Box(row,tostring(prefs[key]),UDim2.new(1,-100,0,0),UDim2.fromOffset(56,42))
+            box.TextXAlignment=Enum.TextXAlignment.Center
+            local plus=Button(row,"+",UDim2.new(1,-38,0,0),UDim2.fromOffset(38,42))
+            local function Set(value)
+                if value and value==value and value>-math.huge and value<math.huge then
+                    prefs[key]=math.clamp(math.floor(value*100+.5)/100,lo,hi);Commit()
+                    if key=="speed" and runtime.track then pcall(function() runtime.track:AdjustSpeed(prefs.speed) end) end
+                    Layout();UpdateStatus()
+                end
+                box.Text=tostring(prefs[key])
+            end
+            Connect(minus.Activated,function() Set(prefs[key]-step) end)
+            Connect(plus.Activated,function() Set(prefs[key]+step) end)
+            Connect(box.FocusLost,function() Set(tonumber(box.Text)) end)
+            return box,minus,plus
+        end
+        UI.speed,UI.speedMinus,UI.speedPlus=Stepper("Speed", "speed",0,3,.25)
+        UI.alpha,UI.alphaMinus,UI.alphaPlus=Stepper("Transparency %","windowTransparency",0,50,5)
+        UI.thumb,UI.thumbMinus,UI.thumbPlus=Stepper("Image size %","thumbnailSize",50,100,5)
+        local refreshRow=Row(nil)
+        UI.refresh=Button(refreshRow,"Refresh catalog",UDim2.new(),UDim2.new(1,0,0,42))
+        Connect(UI.refresh.Activated,RefreshCatalog)
+        local centerRow=Row(nil)
+        local center=Button(centerRow,"Center window",UDim2.new(),UDim2.new(1,0,0,42))
+        Connect(center.Activated,function() runtime.ResetBrowserPosition() end)
+        local help=Row(nil,74)
+        Text(help,"★ = favorite   ○ = screen button\nTap a page number to jump.\nDrag the header or a screen button.\nMove OFF stops the emote when walking.",11,UDim2.new(),UDim2.fromScale(1,1)).TextWrapped=true
+        local dragInput,dragStart,dragCenter
+        UI.stopDragging=function()
+            dragInput=nil
+            if UI.quickDrag and UI.quickDrag.record.moved then SaveSettings() end
+            UI.quickDrag=nil
+        end
+        local inputService=game:GetService("UserInputService")
+        Connect(drag.InputBegan,function(input)
+            if input.UserInputType~=Enum.UserInputType.MouseButton1 and input.UserInputType~=Enum.UserInputType.Touch then return end
+            dragInput=input;dragStart=input.Position
+            local vp=UI.canvas.AbsoluteSize
+            dragCenter=Vector2.new(UI.root.Position.X.Scale*vp.X+UI.root.Position.X.Offset,
+                UI.root.Position.Y.Scale*vp.Y+UI.root.Position.Y.Offset)
+        end)
+        Connect(inputService.InputChanged,QuickInputChanged)
+        Connect(inputService.InputEnded,QuickInputEnded)
+        Connect(inputService.InputChanged,function(input)
+            if not dragInput then return end
+            if input~=dragInput and not (dragInput.UserInputType==Enum.UserInputType.MouseButton1 and input.UserInputType==Enum.UserInputType.MouseMovement) then return end
+            local delta=input.Position-dragStart
+            UI.center=Vector2.new(dragCenter.X+delta.X,dragCenter.Y+delta.Y);Layout()
+        end)
+        Connect(inputService.InputEnded,function(input) if input==dragInput then dragInput=nil end end)
+        Connect(UI.canvas:GetPropertyChangedSignal("AbsoluteSize"),Layout)
+        Layout();RenderCards();runtime.SyncQuickButtons()
+    end
+    function runtime.OpenBrowser()
+        if not runtime.alive then return end
+        if UI.root then SetVisible(true);return end
+        UI.hidden=false
+        local ok,err=pcall(Build)
+        if not ok then
+            for _,connection in ipairs(UI.connections) do connection:Disconnect() end
+            UI.connections={}
+            if UI.screen then UI.screen:Destroy() end
+            UI.screen=nil;UI.root=nil;UI.cards={};UI.quickButtons={};UI.quickDrag=nil
+            WarnOnce("cards","Could not open the card browser: "..tostring(err)..". Native ODH controls remain available.")
+        end
+    end
+    function runtime.RestoreQuickButtons()
+        if not runtime.alive or UI.hidden or not next(prefs.shortcuts) then return end
+        if UI.root then runtime.SyncQuickButtons();return end
+        runtime.OpenBrowser()
+        if UI.root then SetVisible(false) end
+    end
+    function runtime.CloseBrowser()
+        -- Full hide is distinct from minimize. Disable the ScreenGui so no
+        -- launcher, shortcut or later status update can remain over the game.
+        UI.hidden=true
+        UI.searchToken=UI.searchToken+1
+        if UI.stopDragging then UI.stopDragging() end
+        if UI.setSettingsVisible then UI.setSettingsVisible(false) end
+        if UI.root then UI.root.Visible=false end
+        if UI.launcher then UI.launcher.Visible=false end
+        if UI.screen then UI.screen.Enabled=false end
+        for _,box in ipairs({UI.search,UI.speed,UI.alpha,UI.thumb,UI.pageEntry}) do
+            pcall(function() box:ReleaseFocus() end)
+        end
+        RefreshQuickVisuals()
+    end
+    function runtime.DestroyBrowser()
+        UI.searchToken=UI.searchToken+1
+        for _,connection in ipairs(UI.connections) do connection:Disconnect() end
+        UI.connections={}
+        if UI.screen then UI.screen:Destroy() end
+        UI.screen=nil;UI.root=nil;UI.cards={};UI.quickButtons={};UI.quickDrag=nil
+    end
+end
+
+local nativeVisual={favoritesOnly=false,loop=false,walk=false,browserOnLoad=false}
+local tab=shared.CreateTab("Emotes","/mellnikovden968-web/CFG_PM2/refs/heads/main/icon")
+local browserSection=tab:AddSection("Card Browser","Pictures • favorites • play buttons • mobile layout")
+browserSection:AddButton("Open card browser",function() runtime.OpenBrowser() end)
+browserSection:AddButton("Hide card browser",function() runtime.CloseBrowser() end)
+local browserToggle=browserSection:AddToggle("Open browser on load",function(value)
+    nativeVisual.browserOnLoad=value==true
+    if runtime.initializing or not runtime.alive then return end
+    prefs.browserOnLoad=value==true;SaveSettings()
+end)
+browserSection:AddParagraph("Card browser","Separate window inspired by ODH's emote cards, not an injected native tab. Tap the circle to pin/unpin an on-screen emote button, ▶ to play, ■ to stop, ★ to favorite. Screen buttons appear immediately, even with the browser open; drag them to move. Search, scroll and switch pages; drag the header to move the window. Minus minimizes to an Emotes button. X / Hide hides the entire plugin overlay, including shortcuts; reopen with Open card browser. Native controls below remain available.")
+local alphaSlider=browserSection:AddSlider("Window transparency (%)",0,50,prefs.windowTransparency,function(value)
+    if runtime.initializing or not runtime.alive or type(value)~="number" or value~=value then return end
+    prefs.windowTransparency=math.clamp(value,0,50);SaveSettings();runtime.ApplyBrowserAppearance()
+end)
+local thumbSlider=browserSection:AddSlider("Thumbnail size (%)",50,100,prefs.thumbnailSize,function(value)
+    if runtime.initializing or not runtime.alive or type(value)~="number" or value~=value then return end
+    prefs.thumbnailSize=math.clamp(value,50,100);SaveSettings();runtime.ApplyBrowserAppearance()
+end)
+browserSection:AddButton("Center card browser",function() runtime.ResetBrowserPosition() end)
+browserSection:AddButton("Remove all screen buttons",function() runtime.ClearQuickButtons() end)
+local library=tab:AddSection("Emote Library","7yd7 catalog • native Overdrive H controls")
+catalogLabel=library:AddLabel("Preparing catalog...",true)
+pageLabel=library:AddLabel("Page 1",true)
+selectedLabel=library:AddLabel("Selected: none",true)
+searchLabel=library:AddLabel("Search: "..(prefs.query=="" and "(all)" or prefs.query),true)
+library:AddTextBox("Search name or ID",function(text)
+    if runtime.initializing or not runtime.alive or type(text)~="string" then return end
+    prefs.query=text:sub(1,200);SaveSettings();Filter(true)
+end)
+library:AddButton("Clear search",function()
+    if not runtime.alive then return end
+    prefs.query="";SaveSettings();Filter(true)
+end)
+local favoriteToggle=library:AddToggle("Favorites only",function(value)
+    nativeVisual.favoritesOnly=value==true
+    if runtime.initializing or not runtime.alive then return end
+    prefs.favoritesOnly=value==true;SaveSettings();Filter(true)
+end)
+dropdown=library:AddDropdown("Emote",{SENTINEL},function(text)
+    if runtime.initializing or syncing or not runtime.alive then return end
+    local item=displayed[text]
+    if not item then return end
+    prefs.selected={id=item.id,name=item.name};SaveSettings();SelectionLabel()
+end)
+library:AddButton("Previous page",function()
+    if runtime.alive then runtime.page=runtime.page-1;RenderPage() end
+end)
+library:AddButton("Next page",function()
+    if runtime.alive then runtime.page=runtime.page+1;RenderPage() end
+end)
+library:AddTextBox("Go to page",function(text)
+    if runtime.initializing or not runtime.alive then return end
+    local page=tonumber(text)
+    if page and page==page and page>0 and page<math.huge then runtime.page=math.floor(page);RenderPage() end
+end)
+library:AddButton("Add selected to favorites",function()
+    if not runtime.alive or not prefs.selected then return end
+    prefs.favorites[IdText(prefs.selected.id)]={id=prefs.selected.id,name=prefs.selected.name}
+    SaveSettings();Notify("Added to favorites: "..prefs.selected.name)
+    if prefs.favoritesOnly then Filter(true) end
+end)
+library:AddButton("Remove selected from favorites",function()
+    if not runtime.alive or not prefs.selected then return end
+    prefs.favorites[IdText(prefs.selected.id)]=nil;SaveSettings()
+    Notify("Removed from favorites: "..prefs.selected.name)
+    if prefs.favoritesOnly then Filter(true) end
+end)
+library:AddButton("Refresh catalog",RefreshCatalog)
+
+local playback=tab:AddSection("Emote Playback","R15 • controls only this plugin's emote track")
+statusLabel=playback:AddLabel("Ready — select an emote and press Play",true)
+playback:AddButton("Play selected",function() if runtime.alive then Play(prefs.selected,false) end end)
+playback:AddButton("Stop emote",function() if runtime.alive then StopCurrent("Stopped") end end)
+playback:AddButton("Random from results",function()
+    if not runtime.alive then return end
+    if runtime.filtering then Notify("Search is still updating; try again in a moment.");return end
+    if #runtime.filtered==0 then Notify("No matching emotes.");return end
+    local item=runtime.filtered[math.random(1,#runtime.filtered)]
+    prefs.selected={id=item.id,name=item.name};SaveSettings();RenderPage();Play(item,false)
+end)
+local loopToggle=playback:AddToggle("Loop emote",function(value)
+    nativeVisual.loop=value==true
+    if runtime.initializing or not runtime.alive then return end
+    prefs.loop=value==true;SaveSettings()
+    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    if runtime.track then pcall(function() runtime.track.Looped=prefs.loop end) end
+end)
+local walkToggle=playback:AddToggle("Keep playing while moving",function(value)
+    nativeVisual.walk=value==true
+    if runtime.initializing or not runtime.alive then return end
+    prefs.walk=value==true;SaveSettings()
+    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+end)
+local speed=playback:AddSlider("Emote speed",0,3,prefs.speed,function(value)
+    if runtime.initializing or not runtime.alive or type(value)~="number" or value~=value then return end
+    prefs.speed=math.clamp(value,0,3);SaveSettings()
+    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    if runtime.track then pcall(function() runtime.track:AdjustSpeed(prefs.speed) end) end
+end)
+playback:AddParagraph("Playback behavior","Single playback is the default (Loop OFF). Old versions' Loop ON is reset once; you can enable looping manually. Speed 0 pauses the current track. With Keep playing while moving OFF, movement stops the emote. Play is manual: saved settings never start an emote automatically after joining or respawning.")
+
+local custom=tab:AddSection("Custom Emote","Catalog emote asset ID or raw animation ID")
+customLabel=custom:AddLabel("Saved ID: "..(prefs.customId=="" and "(empty)" or prefs.customId),true)
+custom:AddTextBox("Custom ID",function(text)
+    if runtime.initializing or not runtime.alive or type(text)~="string" then return end
+    prefs.customId=text:sub(1,200);SaveSettings()
+    Label(customLabel,"Saved ID: "..(prefs.customId=="" and "(empty)" or prefs.customId))
+end)
+local kind=custom:AddDropdown("ID type",{"Catalog emote ID","Animation ID"},function(value)
+    if runtime.initializing or not runtime.alive then return end
+    if value~="Catalog emote ID" and value~="Animation ID" then return end
+    prefs.customKind=value;SaveSettings()
+end)
+custom:AddButton("Play custom ID",function()
+    if not runtime.alive then return end
+    local id=ParseId(prefs.customId)
+    if not id then Notify("Enter a numeric ID, rbxassetid URL, or Roblox catalog URL.");return end
+    Play({id=id,name="Custom "..IdText(id)},prefs.customKind=="Animation ID")
+end)
+custom:AddParagraph("About this port","Source: 7yd7/Hub Emotes.lua. A separate card window and native ODH controls replace the original wheel, HUD editor and themes. Walk/run animation bundles are not modified. Some assets are restricted or unavailable; visibility to other players depends on the game. Use one emote player at a time. FE Animations full resets will stop a playing emote.")
+custom:AddParagraph("Saving","Settings, selected emote and favorites: "..FILE..". Catalog cache: "..CACHE..". readfile/writefile are required for cross-session saving. Saved textbox values are shown in the labels because ODH has no documented textbox setter.")
+function runtime.SyncNative()
+    local initializing=runtime.initializing
+    runtime.initializing=true
+    local flips={favoritesOnly=favoriteToggle,loop=loopToggle,walk=walkToggle,browserOnLoad=browserToggle}
+    for key,flip in pairs(flips) do
+        if nativeVisual[key]~=prefs[key] and type(flip)=="function" then pcall(flip) end
+    end
+    if speed then pcall(function() speed:SetValue(prefs.speed) end) end
+    if alphaSlider then pcall(function() alphaSlider:SetValue(prefs.windowTransparency) end) end
+    if thumbSlider then pcall(function() thumbSlider:SetValue(prefs.thumbnailSize) end) end
+    runtime.initializing=initializing
+    SelectionLabel()
+end
+-- Initialize visual values without invoking actions or overwriting saved settings.
+if prefs.browserOnLoad and type(browserToggle)=="function" then pcall(browserToggle) end
+if prefs.favoritesOnly and type(favoriteToggle)=="function" then pcall(favoriteToggle) end
+if prefs.loop and type(loopToggle)=="function" then pcall(loopToggle) end
+if prefs.walk and type(walkToggle)=="function" then pcall(walkToggle) end
+if kind then pcall(function() kind:Select(prefs.customKind) end) end
+runtime.initializing=false
+_G[KEY]=runtime
+local cache=ReadJSON(CACHE)
+local cachedItems=NormalizeCatalog(cache)
+AdoptCatalog(cachedItems or BUILTIN,cachedItems and "saved cache" or "built-in starter list")
+Status("Ready — select an emote and press Play")
+RefreshCatalog()
+
+task.defer(function()
+    if not runtime.alive or (runtime.browser and runtime.browser.hidden) then return end
+    if prefs.browserOnLoad then runtime.OpenBrowser() else runtime.RestoreQuickButtons() end
+end)
+]==]
+    local compiler = loadstring
+    if type(compiler) ~= "function" then
+        warn("[Noir Emotes] loadstring is unavailable; the Emotes tab could not be started.")
+        return
+    end
+    local okCompile, moduleFn = pcall(compiler, __noirEmotesSource)
+    if not okCompile or type(moduleFn) ~= "function" then
+        warn("[Noir Emotes] module compile failed: " .. tostring(moduleFn))
+        return
+    end
+    local okRun, err = xpcall(moduleFn, function(message) return tostring(message) end)
+    if not okRun then warn("[Noir Emotes] module startup failed: " .. tostring(err)) end
 end)
 
 
