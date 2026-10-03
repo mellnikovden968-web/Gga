@@ -2361,11 +2361,9 @@ serverMods:AddButton("Show Murderer Chance", showMurdererChance)
 serverMods:AddButton("Refresh Roles", refreshTarget)
 serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
 
-local autoGGSection = tab:AddSection("WORLD \u{2022} AUTO GG", "Automatically picks up the dropped Gun")
-autoGGSection:AddToggle("Enable Auto GG", setAutoGG)
-autoGGSection:AddLabel("Picks up GunDrop while you do not have a Gun.")
-
-local gunUtilities = tab:AddSection("WORLD \u{2022} GUN UTILITIES", "Manual pickup, aura, notifications and bind button")
+local gunUtilities = tab:AddSection("WORLD \u{2022} GUN", "Auto GG, pickup, aura, notifications and bind button")
+gunUtilities:AddToggle("Enable Auto GG", setAutoGG)
+gunUtilities:AddLabel("Auto GG picks up GunDrop while you do not have a Gun.")
 gunUtilities:AddButton("Grab Gun", requestGrabGun)
 gunUtilities:AddToggle("Gun Aura", setGunAura)
 gunUtilities:AddSlider("Gun Aura Range", 5, 250, gunUtilityState.auraRange, function(value)
@@ -4304,7 +4302,7 @@ function BindableButtons.UpdateBButtonText(id, text, isWaiting, isGold)
         textLabel.Text = text
     end
 
-    local stroke = btn:FindFirstChild("@Stroke")
+    local stroke = btn:FindFirstChild("@Stroke", true)
     if stroke then
         if isGold then
             stroke.Color = isWaiting and __GOLD_WAIT_COLOR or __GOLD_NORMAL_COLOR
@@ -5940,5 +5938,2095 @@ ODHX.Finish()
             warn("[Noir embedded plugin: Pm-Wallhop.lua.txt] " .. tostring(__pluginError))
             notify("Pm-Wallhop.lua.txt failed to load: " .. tostring(__pluginError), 7)
         end
+    end
+end
+
+
+-- Embedded plugin: full user-supplied fling_мой.lua.txt, routed to the World page.
+do
+    local __pluginOk, __pluginError = xpcall(function()
+-- ODH 2026 adapter. Embedded in every plugin; no downloads/dependencies.
+local ODHX = (function()
+    local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=true }
+    X.id, X.title, X.file = "FLING", "ULTIMATE FLING", "Noir Hub/configs/ODH_FLING_settings.json"
+    local host = odh_shared_plugins
+    assert(host and type(host.CreateTab)=="function", X.title .. ": load through the current Overdrive H plugin menu")
+    local env = {}
+    if type(getgenv)=="function" then local ok,g=pcall(getgenv); if ok and type(g)=="table" then env=g end end
+    local rd = type(readfile)=="function" and readfile or env.readfile
+    local wr = type(writefile)=="function" and writefile or env.writefile
+    local exists = type(isfile)=="function" and isfile or env.isfile
+    local http = game:GetService("HttpService")
+    local reported = {}
+    local function report(message)
+        if reported[message] then return end
+        reported[message]=true
+        warn("[" .. X.title .. "] " .. message)
+        if type(host.Notify)=="function" then pcall(host.Notify, X.title .. ": " .. message, 5) end
+    end
+    X.Report = report
+    local function finite(v) return type(v)=="number" and v==v and math.abs(v)<math.huge end
+    local function encode(v, depth)
+        depth=depth or 0
+        if depth>20 then error("settings nesting too deep") end
+        if typeof(v)=="Color3" then return {__odhColor={v.R,v.G,v.B}} end
+        local t=type(v)
+        if t=="boolean" or t=="string" then return v end
+        if t=="number" then if finite(v) then return v end; return nil end
+        if t=="table" then
+            local result={}
+            for k,item in pairs(v) do
+                if type(k)=="string" or type(k)=="number" then result[k]=encode(item,depth+1) end
+            end
+            return result
+        end
+        return nil -- never serialize Instances, connections, functions or players
+    end
+    local function decode(v, depth)
+        depth=depth or 0
+        if depth>20 then error("settings nesting too deep") end
+        if type(v)~="table" then return v end
+        if v.__odhColor then
+            local c=v.__odhColor
+            assert(type(c)=="table" and finite(c[1]) and finite(c[2]) and finite(c[3]),"invalid color")
+            return Color3.new(math.clamp(c[1],0,1),math.clamp(c[2],0,1),math.clamp(c[3],0,1))
+        end
+        local result={}
+        for k,item in pairs(v) do result[k]=decode(item,depth+1) end
+        return result
+    end
+    X.Encode, X.Decode = encode, decode
+    if not X.external then
+        if type(rd)=="function" and type(wr)=="function" then
+            local present=true
+            if type(exists)=="function" then local ok,v=pcall(exists,X.file); if ok then present=v end end
+            if present then
+                local ok,text=pcall(rd,X.file)
+                if ok then
+                    local good,data=pcall(function() return decode(http:JSONDecode(text)) end)
+                    if good and type(data)=="table" and data.version==1 and type(data.controls)=="table" then X.data=data
+                    else X.badFile=true; report("Invalid settings file; defaults loaded. A manual change will replace it.") end
+                elseif type(exists)=="function" then report("Could not read settings file: " .. tostring(text)); X.badFile=true end
+            end
+        else report("readfile/writefile unavailable; settings last only for this session.") end
+    end
+    local tab
+    X.shared=setmetatable({}, {__index=host}) -- never mutate the host API
+    X.shared.Notify=function(text,seconds)
+        if X.restoring then return end
+        if type(host.Notify)=="function" then return host.Notify(text,seconds or 3) end
+    end
+    local function key(section,name,kind) return section .. " / " .. kind .. " / " .. name end
+    local function safeValue(r,v)
+        if r.kind=="Toggle" then if type(v)=="boolean" then return v end
+        elseif r.kind=="Slider" then if finite(v) then return math.clamp(v,r.min,r.max) end
+        elseif r.kind=="Colorpicker" then if typeof(v)=="Color3" then return v end
+        elseif r.kind=="Dropdown" then
+            for _,item in ipairs(r.items) do if v==item then return v end end
+        end
+        return nil
+    end
+    local function show(r,v)
+        if v==nil or r.shown==v then return end
+        local prior=X.silent; X.silent=true
+        local ok,err=pcall(function()
+            if r.kind=="Toggle" then
+                if r.visual~=v then assert(type(r.handle)=="function","AddToggle must return a closure"); r.handle() end
+            elseif r.kind=="Slider" then r.handle:SetValue(v)
+            elseif r.kind=="Colorpicker" then r.handle:SetRGBValue(v)
+            elseif r.kind=="Dropdown" then r.handle:Select(v) end
+        end)
+        X.silent=prior
+        if ok then r.shown=v else report("UI sync failed: " .. r.name .. ": " .. tostring(err)) end
+    end
+    function X.Bind(section,name,kind,getter)
+        local r=X.byKey[key(section,name,kind)]
+        assert(r,"Unknown binding " .. section .. " / " .. name)
+        r.get=getter
+    end
+    function X.Sync()
+        for _,r in ipairs(X.records) do
+            if r.get then
+                local ok,v=pcall(r.get)
+                if ok then
+                    v=safeValue(r,v)
+                    if v~=nil then
+                        r.value=v
+                        if not r.exclude then X.data.controls[r.key]=v end
+                        show(r,v)
+                    end
+                end
+            end
+        end
+    end
+    function X.Commit()
+        if not X.ready or X.silent or X.restoring or X.stopped or X.committing then return end
+        X.committing=true
+        local ok,err=pcall(function()
+            X.Sync()
+            if X.capture then X.data.snapshot=X.capture() end
+            if X.external then
+                if not X.backend or not X.backend(X.data) then error("native settings file could not be saved") end
+            elseif type(wr)=="function" then
+                wr(X.file,http:JSONEncode(encode(X.data)))
+            end
+        end)
+        X.committing=false
+        if not ok then report("Settings save failed: " .. tostring(err)) end
+    end
+    function X.Restore()
+        X.restoring=true
+        -- Options before enabling modules. Actions and player selections are never replayed.
+        for _,togglePass in ipairs({false,true}) do
+            for _,r in ipairs(X.records) do
+                if not r.exclude and ((r.kind=="Toggle")==togglePass) then
+                    local v=safeValue(r,X.data.controls[r.key])
+                    if v==nil and r.get then local ok,x=pcall(r.get); if ok then v=safeValue(r,x) end end
+                    if v==nil then v=r.default end
+                    if v~=nil then
+                        show(r,v)
+                        local ok,err=pcall(r.callback,v)
+                        if not ok then report("Restore failed: " .. r.name .. ": " .. tostring(err)) end
+                        r.value=v; X.data.controls[r.key]=v
+                    end
+                end
+            end
+        end
+        X.restoring=false
+    end
+    function X.Finish()
+        if X.replay then X.Restore() else X.Sync() end
+        X.ready=true
+        if not X.badFile then X.Commit() end
+    end
+    function X.Set(section,name,kind,v,apply)
+        local r=X.byKey[key(section,name,kind)]
+        if not r then return end
+        v=safeValue(r,v); if v==nil then return end
+        show(r,v); r.value=v; X.data.controls[r.key]=v
+        if apply then r.callback(v) end
+    end
+    function X.ResetControls()
+        X.data.controls={}
+        for _,r in ipairs(X.records) do
+            if r.kind=="Toggle" and not r.exclude then X.Set(r.section,r.name,r.kind,false,true) end
+        end
+    end
+    function X.shared.AddSection(name,subtitle)
+        if not tab then tab=host.CreateTab() end
+        -- Route every original Fling card into Noir's existing World page.
+        local raw=tab:AddSection("WORLD \u{2022} " .. name,subtitle or "")
+        local section={Name=name,Raw=raw}
+        local function register(kind,label,callback,default,min,max,items)
+            local r={section=name,name=label,kind=kind,callback=callback,default=default,min=min,max=max,items=items,visual=false}
+            r.key=key(name,label,kind)
+            r.exclude=(name=="🔑 Keys") -- key-capture toggles are actions, not enabled modes
+            X.records[#X.records+1]=r; X.byKey[r.key]=r
+            local function changed(v)
+                if kind=="Toggle" then r.visual=(v==true) end
+                if not X.ready or X.silent or X.restoring or X.stopped then return end
+                v=safeValue(r,v); if v==nil then return end
+                r.shown=v
+                local ok,err=pcall(callback,v)
+                if ok then
+                    r.value=v
+                    if not r.exclude then X.data.controls[r.key]=v end
+                    X.Commit()
+                else report("Callback failed: " .. label .. ": " .. tostring(err)) end
+            end
+            if kind=="Toggle" then r.handle=raw:AddToggle(label,changed)
+            elseif kind=="Slider" then r.handle=raw:AddSlider(label,min,max,default,changed)
+            elseif kind=="Colorpicker" then r.handle=raw:AddColorpicker(label,default,changed)
+            elseif kind=="Dropdown" then r.handle=raw:AddDropdown(label,items,changed) end
+            return r.handle
+        end
+        function section:AddToggle(label,cb) return register("Toggle",label,cb,false) end
+        function section:AddSlider(label,min,max,default,cb) return register("Slider",label,cb,default,min,max) end
+        function section:AddColorpicker(label,default,cb) return register("Colorpicker",label,cb,default) end
+        function section:AddDropdown(label,items,cb) return register("Dropdown",label,cb,items[1],nil,nil,items) end
+        local function action(cb)
+            return function(...)
+                if not X.ready or X.stopped then return end
+                local ok,err=pcall(cb,...)
+                if not ok then report("Action failed: " .. tostring(err)) end
+                X.Commit()
+            end
+        end
+        function section:AddButton(label,cb) return raw:AddButton(label,action(cb)) end
+        function section:AddKeybind(label,default,cb) return raw:AddKeybind(label,default,action(cb)) end
+        function section:AddPlayerDropdown(label,cb) return raw:AddPlayerDropdown(label,action(cb)) end
+        function section:AddTextBox(label,cb) return raw:AddTextBox(label,action(cb)) end
+        function section:AddLabel(...) return raw:AddLabel(...) end
+        function section:AddParagraph(...) return raw:AddParagraph(...) end
+        return section
+    end
+    -- Stable GUI paths, never serialized Instances. Player name is session-independent.
+    function X.Path(object)
+        local parts={}
+        local player=game:GetService("Players").LocalPlayer
+        while object and object~=game do
+            table.insert(parts,1,object==player and "$LocalPlayer" or object.Name)
+            object=object.Parent
+            if #parts>32 then return nil end
+        end
+        if object~=game then return nil end
+        return parts
+    end
+    function X.Resolve(parts)
+        if type(parts)~="table" then return nil end
+        local object=game
+        for _,name in ipairs(parts) do
+            if name=="$LocalPlayer" then object=game:GetService("Players").LocalPlayer
+            elseif type(name)=="string" and object then object=object:FindFirstChild(name)
+            else return nil end
+        end
+        return object
+    end
+    X.connections={}
+    function X.Connect(signal,callback)
+        local c=signal:Connect(function(...) if not X.stopped then return callback(...) end end)
+        X.connections[#X.connections+1]=c
+        return c
+    end
+    function X.Stop()
+        if X.stopped then return end
+        X.Commit()
+        X.stopped=true
+        for _,c in ipairs(X.connections) do pcall(function() c:Disconnect() end) end
+        if X.cleanup then pcall(X.cleanup) end
+    end
+    local registry=rawget(_G,"ODH_2026_PluginRuntimes")
+    if type(registry)~="table" then registry={}; rawset(_G,"ODH_2026_PluginRuntimes",registry) end
+    local previous=registry[X.id]
+    if previous and type(previous.Stop)=="function" then pcall(previous.Stop) end
+    registry[X.id]=X
+    return X
+end)()
+-- END ODH 2026 ADAPTER
+
+--[[
+    ⚡ ULTIMATE FLING • FLING   —   V1.0
+    Ultimate Fling GUI · Overdrive Hub plugin
+    Author: K1LAS1K (original), adapted to ODH 2026
+    =========================================================================
+    Плагин мульти-таргет флинга: выбор игроков, непрерывный флинг,
+    сохранение позиции, FPDH trick, бинды, хоткеи, HUD, настройка силы/длительности.
+
+    ── ВОЗМОЖНОСТИ ────────────────────────────────────────────────────────────
+      • Ручной флинг: Selected, Everyone, Nearest, Cancel
+        и выбор конкретного игрока из списка.
+      • Авто-режимы: Loop (по списку), Aura (по радиусу), Click (флинг кликом).
+      • Плавающие бинды-кружки: перетаскивание с запоминанием позиции, размер,
+        подсветка активности, общий звук клика.
+      • Хоткеи на все действия: захват клавиши тумблером.
+      • HUD-статус: пульс, имя текущей цели, перетаскивание с сохранением позиции.
+      • Списки: выбор цели, список для Loop, вайтлист.
+      • Сохранение настроек (readfile/writefile + JSON): длительность, сила,
+        размеры и позиции кнопок/HUD, хоткеи, вайтлист.
+
+    ── АРХИТЕКТУРА ────────────────────────────────────────────────────────────
+      • Один RenderStepped-диспетчер, общие обработчики ввода.
+      • Мультитач-совместимый драг, FPDH restore, cleanup + watchdog.
+]]
+
+-- ── Идентичность плагина ─────────────────────────
+local AUTHOR            = "K1LAS1K"
+local BRAND             = "ULTIMATE FLING"
+local PLUGIN_ID         = "fling"
+local PLUGIN_NAME       = BRAND .. " • FLING"
+local VERSION           = "V1.0"
+local VERSION_TAG       = "fling"
+local MARKER_PREFIX     = "@fling_"
+local CONFIG_PATH       = CONFIGS_FOLDER .. "/ODH_FLING_settings.json"
+local STORAGE_NAME      = "@" .. PLUGIN_ID
+local UNLOAD_GLOBAL     = "__FLING_UNLOAD"
+local LEGACY_STORAGES   = { "@bindstorage_v6", "@bindstorage_v5", "@flingstorage_v1" }
+local CLEAN_LEGACY_MENU = true
+
+-- ====== Хост-уведомления ======
+local StarterGui = nil
+
+local function hostNotify(text, dur)
+    if odh_shared_plugins and type(odh_shared_plugins.Notify) == "function" then
+        if pcall(odh_shared_plugins.Notify, text, dur or 3) then return end
+    end
+    pcall(function()
+        local sg = StarterGui or game:GetService("StarterGui")
+        sg:SetCore("SendNotification", {
+            Title = BRAND, Text = tostring(text), Duration = dur or 3,
+        })
+    end)
+end
+
+local shared = ODHX.shared
+if not shared then
+    hostNotify(BRAND .. " " .. VERSION .. ": Load through Overdrive H plugin menu", 3)
+    return
+end
+
+-- ====== Повторная загрузка ======
+pcall(function()
+    if type(getgenv) ~= "function" then return end
+    local g = getgenv()
+    if type(g) ~= "table" then return end
+    local prev = rawget(g, UNLOAD_GLOBAL)
+    rawset(g, UNLOAD_GLOBAL, nil)
+    if type(prev) == "function" then pcall(prev) end
+end)
+
+-- ====== Maid ======
+local Maid = {}
+Maid.__index = Maid
+
+function Maid._cleanup(item)
+    local t = typeof(item)
+    if t == "RBXScriptConnection" then
+        pcall(function() item:Disconnect() end)
+    elseif t == "Instance" then
+        pcall(function() item:Destroy() end)
+    elseif t == "function" then
+        local ok, err = pcall(item)
+        if not ok then warn("[" .. BRAND .. "][maid] " .. tostring(err)) end
+    elseif t == "thread" then
+        pcall(task.cancel, item)
+    elseif t == "table" and type(item.Destroy) == "function" then
+        pcall(item.Destroy, item)
+    end
+end
+
+function Maid.new()
+    return setmetatable({ _tasks = {}, _destroyed = false }, Maid)
+end
+
+function Maid:GiveTask(item)
+    if item == nil then return nil end
+    if self._destroyed then
+        Maid._cleanup(item)
+        return nil
+    end
+    local tasks = self._tasks
+    tasks[#tasks + 1] = item
+    return item
+end
+
+function Maid:DoCleaning()
+    if self._destroyed then return end
+    self._destroyed = true
+    local tasks = self._tasks
+    self._tasks = {}
+    for i = #tasks, 1, -1 do
+        Maid._cleanup(tasks[i])
+        tasks[i] = nil
+    end
+end
+
+function Maid:Destroy()
+    self:DoCleaning()
+end
+
+local RootMaid = Maid.new()
+
+-- ====== Сервисы ======
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+local LocalPlayer       = Players.LocalPlayer
+local UserInputService  = game:GetService("UserInputService")
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local TweenService      = game:GetService("TweenService")
+local HttpService       = game:GetService("HttpService")
+local CoreGui           = game:GetService("CoreGui")
+StarterGui              = game:GetService("StarterGui")
+
+-- ====== Шорткаты ======
+local new      = Instance.new
+local clamp    = math.clamp
+local sin, cos, floor = math.sin, math.cos, math.floor
+local now      = os.clock
+local insert   = table.insert
+local ud2      = UDim2.new
+local ud       = UDim.new
+local v2       = Vector2.new
+local v3       = Vector3.new
+local cfr      = CFrame.new
+local rgb      = Color3.fromRGB
+local pclr     = Color3.new
+local cs       = ColorSequence.new
+local csk      = ColorSequenceKeypoint.new
+local tinfo    = TweenInfo.new
+local V3_ZERO  = Vector3.zero
+local UIT      = Enum.UserInputType
+local MOUSE1   = UIT.MouseButton1
+local TOUCH    = UIT.Touch
+local MOUSEMOV = UIT.MouseMovement
+local EASING   = Enum.EasingStyle
+local EDIR     = Enum.EasingDirection
+local FALLBACK_VIEWPORT = v2(1920, 1080)
+
+local function clearTable(t)
+    if table.clear then table.clear(t) else for k in pairs(t) do t[k] = nil end end
+end
+
+-- ====== Конфигурация ======
+local state_whitelist_ref = nil
+local loadedWhitelist = {}
+local persistDisabled = false
+
+local DEFAULTS = {
+    flingDuration     = 2,
+    flingPower        = 1,
+    autoReturn        = true,
+    loopInterval      = 0.4,
+    auraInterval      = 0.4,
+    auraStuds         = 15,
+    bindButtonSize    = 0.11,
+    targetCooldown    = 0.8,
+    autoSheriffDelay  = 0.25,
+    autoMurdererDelay = 0.35,
+    roleCacheTTL      = 0.8,
+    muteSounds        = false,
+    notifications     = true,
+    keybinds          = {},
+    bindPositions     = {},
+    hudPos            = { x = 0.5, y = 6 },
+    pluginUI          = {},
+    whitelist         = {},
+}
+
+local config = {}
+for key, value in pairs(DEFAULTS) do
+    if type(value) == "table" then
+        local copy = {}
+        for kk, vv in pairs(value) do copy[kk] = vv end
+        config[key] = copy
+    else
+        config[key] = value
+    end
+end
+
+local canPersist = (type(writefile) == "function" and type(readfile) == "function")
+local jsonBroken = false
+
+local function jsonEncode(tbl)
+    if jsonBroken then return nil end
+    local ok, res = pcall(function() return HttpService:JSONEncode(tbl) end)
+    if ok and type(res) == "string" then return res end
+    jsonBroken = true
+    return nil
+end
+
+local function jsonDecode(str)
+    if jsonBroken then return nil end
+    local ok, res = pcall(function() return HttpService:JSONDecode(str) end)
+    if ok and type(res) == "table" then return res end
+    return nil
+end
+
+local function packWhitelist(map)
+    local out = {}
+    for id, name in pairs(map) do
+        insert(out, { id = id, name = tostring(name) })
+    end
+    return out
+end
+
+local function unpackWhitelist(list)
+    local map = {}
+    if type(list) == "table" then
+        for _, row in ipairs(list) do
+            if type(row) == "table" and type(row.id) == "number" then
+                map[row.id] = tostring(row.name or row.id)
+            end
+        end
+    end
+    return map
+end
+
+local function serializeConfig()
+    return {
+        flingDuration = config.flingDuration, flingPower = config.flingPower,
+        autoReturn = config.autoReturn,
+        loopInterval = config.loopInterval, auraInterval = config.auraInterval,
+        auraStuds = config.auraStuds, bindButtonSize = config.bindButtonSize,
+        targetCooldown = config.targetCooldown,
+        autoSheriffDelay = config.autoSheriffDelay, autoMurdererDelay = config.autoMurdererDelay,
+        roleCacheTTL = config.roleCacheTTL,
+        muteSounds = config.muteSounds,
+        notifications = config.notifications, pluginUI = config.pluginUI,
+        keybinds = config.keybinds, bindPositions = config.bindPositions,
+        hudPos = config.hudPos, whitelist = packWhitelist(state_whitelist_ref or {}),
+    }
+end
+
+local function applyLoaded(data)
+    if type(data) ~= "table" then return false end
+    local scalars = {
+        "flingDuration", "flingPower", "autoReturn",
+        "loopInterval", "auraInterval", "auraStuds",
+        "bindButtonSize", "targetCooldown",
+        "autoSheriffDelay", "autoMurdererDelay", "roleCacheTTL",
+        "muteSounds", "notifications",
+    }
+    for _, key in ipairs(scalars) do
+        local v = data[key]
+        if v ~= nil and type(v) == type(DEFAULTS[key]) then config[key] = v end
+    end
+    -- clamp after load
+    if type(config.flingDuration)=="number" then config.flingDuration=math.clamp(math.floor(config.flingDuration+0.5),1,5) end
+    if type(config.flingPower)=="number" then config.flingPower=math.clamp(math.floor(config.flingPower+0.5),1,3) end
+    if type(data.keybinds) == "table" then config.keybinds = data.keybinds end
+    if type(data.bindPositions) == "table" then config.bindPositions = data.bindPositions end
+    if type(data.hudPos) == "table" and type(data.hudPos.x) == "number" and type(data.hudPos.y) == "number" then
+        config.hudPos = { x = data.hudPos.x, y = data.hudPos.y }
+    end
+    if type(data.pluginUI)=="table" then config.pluginUI=data.pluginUI end
+    loadedWhitelist = unpackWhitelist(data.whitelist)
+    return true
+end
+
+local function loadConfig()
+    if not canPersist or type(isfile) ~= "function" then return false end
+    local applied = false
+    pcall(function()
+        if not isfile(CONFIG_PATH) then return end
+        applied = applyLoaded(jsonDecode(readfile(CONFIG_PATH))) and true or false
+    end)
+    return applied
+end
+
+local saveQueued, saveThread = false, nil
+
+local function saveConfig(force)
+    if not canPersist or persistDisabled then return false end
+    if force then
+        if saveThread then pcall(task.cancel,saveThread) end
+        saveThread,saveQueued=nil,false
+        local ok,err=pcall(function()
+            local payload=jsonEncode(serializeConfig())
+            assert(payload,"JSON encode failed")
+            writefile(CONFIG_PATH,payload)
+        end)
+        if not ok then ODHX.Report("Could not save " .. CONFIG_PATH .. ": " .. tostring(err)) end
+        return ok
+    end
+    if saveQueued and not force then return true end
+    saveQueued = true
+    if saveThread then pcall(task.cancel, saveThread) end
+    saveThread = task.delay(force and 0 or 0.35, function()
+        saveQueued = false
+        saveThread = nil
+        pcall(function()
+            local payload = jsonEncode(serializeConfig())
+            if payload then writefile(CONFIG_PATH, payload) end
+        end)
+    end)
+    return true
+end
+
+local configLoaded = loadConfig()
+ODHX.data.controls=config.pluginUI or {}
+ODHX.backend=function(data)
+    config.pluginUI=data.controls
+    return saveConfig(true)
+end
+
+-- ====== Состояние ======
+local state = {
+    whitelist       = loadedWhitelist,
+    selectedPlayers = {},
+    selectedSet     = {},
+    resetSelPlr     = nil,
+    lastResetAt     = {},
+}
+state_whitelist_ref = state.whitelist
+
+local maids = {
+    loopPlr = nil, clickFling = nil, aura = nil,
+    autoSheriff = nil, autoMurderer = nil,
+}
+
+-- ====== Уведомления ======
+local lastNotify = { text = nil, at = 0 }
+local function Notify(title, msg, dur)
+    if not config.notifications then return end
+    local text = msg and (title .. ": " .. msg) or title
+    local t = now()
+    if lastNotify.text == text and (t - lastNotify.at) < 0.35 then return end
+    lastNotify.text, lastNotify.at = text, t
+    hostNotify(text, dur or 3)
+end
+
+-- ====== Единый тикер ======
+local Ticker = { _fns = {}, _conn = nil }
+
+function Ticker._start()
+    if Ticker._conn then return end
+    Ticker._conn = RunService.RenderStepped:Connect(function(dt)
+        local fns = Ticker._fns
+        local i = 1
+        while i <= #fns do
+            local fn = fns[i]
+            if fn then
+                local ok, err = xpcall(fn, debug.traceback, dt)
+                if not ok then
+                    warn("[" .. BRAND .. "][ticker] " .. tostring(err))
+                    table.remove(fns, i)
+                    i = i - 1
+                end
+            end
+            i = i + 1
+        end
+        if #fns == 0 and Ticker._conn then
+            Ticker._conn:Disconnect()
+            Ticker._conn = nil
+        end
+    end)
+end
+
+function Ticker.add(fn)
+    if type(fn) ~= "function" then return function() end end
+    local fns = Ticker._fns
+    fns[#fns + 1] = fn
+    Ticker._start()
+    local removed = false
+    return function()
+        if removed then return end
+        removed = true
+        for i = 1, #fns do
+            if fns[i] == fn then
+                table.remove(fns, i)
+                break
+            end
+        end
+    end
+end
+
+RootMaid:GiveTask(function()
+    if Ticker._conn then Ticker._conn:Disconnect(); Ticker._conn = nil end
+    clearTable(Ticker._fns)
+end)
+
+-- ====== Заголовки секций ======
+local LEGACY_TITLES = {
+    ["⚡ Quick Actions"] = true,
+    ["🤖 Automation"] = true,
+    ["📋 Lists Management"] = true,
+    ["⚙️ Reset Settings"] = true,
+    ["⚙ Reset Settings"] = true,
+    ["🔄 Bind Buttons (circles)"] = true,
+    ["📊 Status"] = true,
+    ["ℹ️ Info"] = true,
+    ["⚡ Reset"] = true,
+    ["🤖 Auto"] = true,
+    ["📋 Lists"] = true,
+    ["⚙️ Tuning"] = true,
+    ["⚙ Tuning"] = true,
+    ["🔘 Binds"] = true,
+    ["ℹ️"] = true,
+    ["Ultimate Fling V1"] = true,
+    ["Ultimate Fling"] = true,
+}
+local EXTRA_LEGACY_TITLES = {}
+for _title in pairs(EXTRA_LEGACY_TITLES) do LEGACY_TITLES[_title] = true end
+local CUR_TITLES = {
+    ["💀 " .. BRAND] = true,
+    ["⚡ Fling"] = true,
+    ["🤖 Auto"] = true,
+    ["📋 Lists"] = true,
+    ["⚙️ Tuning"] = true,
+    ["⚙ Tuning"] = true,
+    ["🔘 Binds"] = true,
+    ["🔑 Keys"] = true,
+    ["💾 Config"] = true,
+    ["ℹ️"] = true,
+}
+local HOST_WORDS = {
+    "Looking for a feature", "Plugins", "Overdrive", "Logged in as", "gg/overdrivehub",
+}
+local MAX_CARD_HEIGHT = 520
+
+local RUN_ID = MARKER_PREFIX .. tostring(floor(now() * 1000) % 100000000)
+    .. "_" .. tostring(math.random(1000, 9999))
+
+-- ====== Хранилище GUI ======
+local storageGui = nil
+local function getStorage()
+    if storageGui and storageGui.Parent then return storageGui end
+
+    local parent
+    local ok, res = pcall(function()
+        if gethui then return gethui() end
+        if getcore then return getcore() end
+        return nil
+    end)
+    if ok and typeof(res) == "Instance" then parent = res else parent = CoreGui end
+    if typeof(parent) ~= "Instance" then parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") end
+    if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui", 5) end
+    if typeof(parent) ~= "Instance" then parent = CoreGui end
+
+    pcall(function()
+        for _, legacyName in ipairs(LEGACY_STORAGES) do
+            local legacy = parent:FindFirstChild(legacyName)
+            if legacy then legacy:Destroy() end
+        end
+    end)
+
+    local sg = parent:FindFirstChild(STORAGE_NAME)
+    if not sg then
+        sg = new("ScreenGui")
+        sg.Name = STORAGE_NAME
+        sg.ResetOnSpawn = false
+        sg.IgnoreGuiInset = true
+        pcall(function() sg.ScreenInsets = Enum.ScreenInsets.None end)
+        if syn and syn.protect_gui then pcall(syn.protect_gui, sg) end
+        sg.Parent = parent
+    end
+    storageGui = sg
+    return sg
+end
+
+-- ====== Реестр своих секций ======
+local mySections = {}
+local headlessMode = false
+
+local function stubSection()
+    return setmetatable({}, { __index = function() return function() end end })
+end
+
+local function protectSection(sec)
+    if typeof(sec) ~= "table" then return stubSection() end
+    local proxy = { _raw = sec }
+    return setmetatable(proxy, {
+        __index = function(p, key)
+            local raw = p._raw
+            local value = raw[key]
+            if type(value) == "function" then
+                return function(first, ...)
+                    local ok, err
+                    if first == p then
+                        ok, err = pcall(value, raw, ...)
+                    else
+                        ok, err = pcall(value, raw, first, ...)
+                    end
+                    if not ok then warn("[" .. BRAND .. "][menu] " .. tostring(key) .. ": " .. tostring(err)) end
+                    return ok and err or nil
+                end
+            end
+            return value
+        end,
+    })
+end
+
+local function AddSection(name)
+    local ok, sec = pcall(function() return shared.AddSection(name) end)
+    local obj
+    if ok and sec then
+        obj = protectSection(sec)
+    else
+        headlessMode = true
+        obj = stubSection()
+    end
+    insert(mySections, { name = name, obj = obj })
+    return obj
+end
+
+-- ====== Сканер GUI ======
+local function guiRoots()
+    local roots, seen = {}, {}
+    local function add(r)
+        if typeof(r) == "Instance" and not seen[r] then
+            seen[r] = true
+            roots[#roots + 1] = r
+        end
+    end
+    pcall(function() add(gethui and gethui()) end)
+    pcall(function() add(getcore and getcore()) end)
+    add(CoreGui)
+    pcall(function() add(LocalPlayer:FindFirstChildOfClass("PlayerGui")) end)
+    return roots
+end
+
+local function hasHostWords(node, memo)
+    local cached = memo[node]
+    if cached ~= nil then return cached end
+    local res = false
+    local descendants = node:GetDescendants()
+    for i = 1, #descendants do
+        local d = descendants[i]
+        if d:IsA("TextLabel") then
+            local txt = d.Text
+            for w = 1, #HOST_WORDS do
+                if txt:find(HOST_WORDS[w], 1, true) then
+                    res = true
+                    break
+                end
+            end
+            if res then break end
+        end
+    end
+    memo[node] = res
+    return res
+end
+
+local function findCard(node, memo)
+    for _ = 1, 7 do
+        if not node or typeof(node) ~= "Instance" or node == game then return nil end
+        if node:IsA("Frame") or node:IsA("ScrollingFrame") then
+            local framed = node:FindFirstChildOfClass("UIStroke") or node:FindFirstChildOfClass("UICorner")
+            if framed then
+                local sz = node.AbsoluteSize
+                if sz.Y > 0 and sz.Y < MAX_CARD_HEIGHT and not hasHostWords(node, memo) then
+                    return node
+                end
+            end
+        end
+        node = node.Parent
+    end
+    return nil
+end
+
+local function markerOf(card)
+    if not card then return nil end
+    local descendants = card:GetDescendants()
+    for i = 1, #descendants do
+        local d = descendants[i]
+        if d.Name:sub(1, #MARKER_PREFIX) == MARKER_PREFIX then return d.Name end
+    end
+    return nil
+end
+
+local function attachMarker(card)
+    if not card or markerOf(card) then return false end
+    local ok = pcall(function()
+        local sv = new("StringValue")
+        sv.Name = RUN_ID
+        sv.Value = VERSION
+        sv.Parent = card
+    end)
+    return ok
+end
+
+local lastPurge = 0
+local PURGE_COOLDOWN = 0.5
+
+local function cardIsOurs(card)
+    if markerOf(card) == RUN_ID then return true end
+    local descendants = card:GetDescendants()
+    for i = 1, #descendants do
+        local d = descendants[i]
+        if d:IsA("TextLabel") and d.Text:find(VERSION_TAG, 1, true) then return true end
+    end
+    return false
+end
+
+local function purgeForeign(force)
+    local t = now()
+    if not force and (t - lastPurge) < PURGE_COOLDOWN then return 0 end
+    lastPurge = t
+    local killed = 0
+    for _, root in ipairs(guiRoots()) do
+        local memo = {}
+        local descendants = root:GetDescendants()
+        for i = 1, #descendants do
+            local d = descendants[i]
+            if d.Parent and d:IsA("TextLabel") then
+                local txt = d.Text
+                if CUR_TITLES[txt] or (CLEAN_LEGACY_MENU and LEGACY_TITLES[txt]) then
+                    local card = findCard(d, memo)
+                    if card and not cardIsOurs(card) then
+                        if pcall(function() card:Destroy() end) then killed = killed + 1 end
+                    end
+                end
+            end
+        end
+    end
+    return killed
+end
+
+local markedCount = 0
+local function markOwnCards()
+    local marked = 0
+    for _, root in ipairs(guiRoots()) do
+        local memo = {}
+        local descendants = root:GetDescendants()
+        for i = 1, #descendants do
+            local d = descendants[i]
+            if d.Parent and d:IsA("TextLabel") and CUR_TITLES[d.Text] then
+                local card = findCard(d, memo)
+                if card and markerOf(card) == nil and attachMarker(card) then
+                    marked = marked + 1
+                end
+            end
+        end
+    end
+    markedCount = markedCount + marked
+    return marked
+end
+
+local function removeByTitles()
+    local removed = 0
+    for _, root in ipairs(guiRoots()) do
+        local memo = {}
+        local descendants = root:GetDescendants()
+        for i = 1, #descendants do
+            local d = descendants[i]
+            if d.Parent and d:IsA("TextLabel") and CUR_TITLES[d.Text] then
+                local card = findCard(d, memo)
+                if card and not markerOf(card) then
+                    if pcall(function() card:Destroy() end) then removed = removed + 1 end
+                end
+            end
+        end
+    end
+    return removed
+end
+
+local function removeMySections()
+    local removed = 0
+    for _, root in ipairs(guiRoots()) do
+        local descendants = root:GetDescendants()
+        for i = 1, #descendants do
+            local d = descendants[i]
+            if d.Name == RUN_ID and d.Parent then
+                local card = d.Parent
+                pcall(function() d:Destroy() end)
+                if pcall(function() card:Destroy() end) then removed = removed + 1 end
+            end
+        end
+    end
+    if removed == 0 and markedCount == 0 then removed = removeByTitles() end
+    return removed
+end
+
+pcall(purgeForeign, true)
+
+-- ====== Звук клика ======
+local Audio = { click = nil }
+function Audio.init()
+    local s = new("Sound")
+    s.Name = "@click"
+    s.SoundId = "rbxassetid://3868133279"
+    s.Volume = config.muteSounds and 0 or 0.5
+    s.Parent = getStorage()
+    Audio.click = s
+    RootMaid:GiveTask(s)
+end
+function Audio.play()
+    local s = Audio.click
+    if not s or s.Volume <= 0 then return end
+    pcall(function() s:Play() end)
+end
+function Audio.setMuted(muted)
+    config.muteSounds = muted and true or false
+    if Audio.click then Audio.click.Volume = config.muteSounds and 0 or 0.5 end
+    saveConfig()
+end
+
+-- ====== Bindable Buttons ======
+local BindableButtons = {
+    Buttons = {},
+    Maids   = {},
+    recs    = {},
+    order   = {},
+    Count   = 0,
+    ResetActive = false,
+    CurrentSize = config.bindButtonSize or 0.11,
+}
+
+local __SHAPES = {
+    [0] = "rbxassetid://86221076925479",
+    [1] = "rbxassetid://96242665417546",
+    [2] = "rbxassetid://97129189935336",
+    [3] = "rbxassetid://76165862027868",
+    [4] = "rbxassetid://125868092127496",
+}
+local GLOW_IMG = "rbxassetid://131961136"
+
+local __NORMAL_COLOR = cs({
+    csk(0,   pclr(0.133333, 0.827451, 0.494118)),
+    csk(0.6, pclr(0.231373, 0.509804, 0.498039)),
+    csk(1,   pclr(0.501961, 0.501961, 0.501961)),
+})
+local __WAIT_COLOR = cs({
+    csk(0,   pclr(0.827451, 0.133333, 0.133333)),
+    csk(0.6, pclr(0.509804, 0.231373, 0.231373)),
+    csk(1,   pclr(0.501961, 0.501961, 0.501961)),
+})
+local __GOLD_NORMAL_COLOR = cs({
+    csk(0,   rgb(255, 215, 0)),
+    csk(0.6, rgb(218, 165, 32)),
+    csk(1,   rgb(128, 128, 128)),
+})
+local __GOLD_WAIT_COLOR = cs({
+    csk(0,   rgb(255, 69, 0)),
+    csk(0.6, rgb(139, 0, 0)),
+    csk(1,   rgb(128, 128, 128)),
+})
+
+local function bind_safecallback(callback)
+    if not callback then return end
+    local ok, err = xpcall(callback, debug.traceback)
+    if not ok then warn("[" .. BRAND .. "][bind] " .. tostring(err)) end
+end
+
+function BindableButtons.relayout()
+    local camera = Workspace.CurrentCamera
+    local screen = (camera and camera.ViewportSize) or FALLBACK_VIEWPORT
+    if not screen or screen.X <= 1 or screen.Y <= 1 then
+        screen = FALLBACK_VIEWPORT
+    end
+    local h = BindableButtons.CurrentSize or 0.11
+    local w = h * (screen.Y / screen.X)
+    if w ~= w or w <= 0 or w > 1 then w = h * (FALLBACK_VIEWPORT.Y / FALLBACK_VIEWPORT.X) end
+    local perRow = math.max(1, floor(0.84 / (w + 0.008)))
+    for i = 1, #BindableButtons.order do
+        local id = BindableButtons.order[i]
+        local rec = BindableButtons.recs[id]
+        if rec then
+            local saved = config.bindPositions[id]
+            if saved and type(saved.x) == "number" and type(saved.y) == "number" then
+                rec.x, rec.y = saved.x, saved.y
+            else
+                local row = floor((i - 1) / perRow)
+                local col = (i - 1) % perRow
+                rec.x = 0.08 + col * (w + 0.008)
+                rec.y = 0.88 - row * (h + 0.02)
+            end
+            rec.btn.Position = ud2(rec.x, 0, rec.y, 0)
+        end
+    end
+end
+
+function BindableButtons.setSize(sizeScale)
+    BindableButtons.CurrentSize = clamp(sizeScale or 0.11, 0.02, 0.4)
+    config.bindButtonSize = BindableButtons.CurrentSize
+    BindableButtons.relayout()
+    saveConfig()
+end
+
+local dragState = nil
+local binderGlobalMaid = Maid.new()
+RootMaid:GiveTask(binderGlobalMaid)
+
+local function isDragInput(input)
+    if not dragState then return false end
+    if input == dragState.dragInput then return true end
+    if input == dragState.input then return true end
+    return false
+end
+
+binderGlobalMaid:GiveTask(UserInputService.InputChanged:Connect(function(input)
+    if not dragState then return end
+    if input.UserInputType ~= MOUSEMOV and input.UserInputType ~= TOUCH then return end
+    if not isDragInput(input) then return end
+    local rec = dragState.rec
+    if not rec or not rec.btn then return end
+    local delta = input.Position - dragState.startInput
+    if delta.Magnitude > 7 then dragState.moved = true end
+    local parentGui = rec.btn.Parent
+    if not parentGui then return end
+    local screen = parentGui.AbsoluteSize
+    if screen.X <= 0 or screen.Y <= 0 then return end
+    rec.x = clamp(dragState.startX + (delta.X / screen.X), 0.03, 0.97)
+    rec.y = clamp(dragState.startY + (delta.Y / screen.Y), 0.05, 0.95)
+    rec.btn.Position = ud2(rec.x, 0, rec.y, 0)
+    rec.glow.Position = ud2(rec.x, 0, rec.y, 0)
+end))
+
+binderGlobalMaid:GiveTask(UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType ~= MOUSE1 and input.UserInputType ~= TOUCH then return end
+    for _, rec in pairs(BindableButtons.recs) do rec.targetPress = 0 end
+    if not dragState then return end
+    local mine = (input == dragState.input)
+        or (input == dragState.dragInput)
+        or (dragState.isMouse and input.UserInputType == MOUSE1)
+    if not mine then return end
+    local rec, moved = dragState.rec, dragState.moved
+    dragState = nil
+    if not rec then return end
+    if not moved then
+        Audio.play()
+        bind_safecallback(rec.onClick)
+    else
+        config.bindPositions[rec.id] = { x = rec.x, y = rec.y }
+        saveConfig(true)
+    end
+end))
+
+local function binderStep(dt)
+    local cam = Workspace.CurrentCamera
+    local scr = (cam and cam.ViewportSize) or FALLBACK_VIEWPORT
+    local bh = BindableButtons.CurrentSize or 0.11
+    local bw = bh * (scr.Y / scr.X)
+    local rotStep = BindableButtons.ResetActive and 3.5 or 1.1
+    local kHover = clamp(dt * 12, 0, 1)
+    local kPress = clamp(dt * 16, 0, 1)
+
+    for _, rec in pairs(BindableButtons.recs) do
+        local btn = rec.btn
+        if btn and rec.stroke then
+            rec.hover = rec.hover + (rec.targetHover - rec.hover) * kHover
+            rec.press = rec.press + (rec.targetPress - rec.press) * kPress
+            local scale = 1 + rec.hover * 0.12 - rec.press * 0.08
+            btn.Size = ud2(bw * scale, 0, bh * scale, 0)
+            rec.rot = (rec.rot + rotStep) % 360
+            rec.stroke.Rotation = rec.rot
+            rec.stroke.Color = BindableButtons.ResetActive and __WAIT_COLOR
+                or (rec.isGold and __GOLD_NORMAL_COLOR or __NORMAL_COLOR)
+        end
+    end
+end
+
+local binderTickerOff = nil
+local function binderEnsureTicker()
+    if binderTickerOff then return end
+    binderTickerOff = Ticker.add(binderStep)
+    RootMaid:GiveTask(function()
+        if binderTickerOff then binderTickerOff(); binderTickerOff = nil end
+    end)
+end
+
+function BindableButtons.AddBButton(id, text, clickFunc, isGold)
+    if BindableButtons.Buttons[id] then return BindableButtons.Buttons[id] end
+    binderEnsureTicker()
+
+    local buttonMaid = Maid.new()
+    local storage = getStorage()
+    local camera = Workspace.CurrentCamera
+    local screen = (camera and camera.ViewportSize) or FALLBACK_VIEWPORT
+    local h0 = BindableButtons.CurrentSize or 0.11
+    local w0 = h0 * (screen.Y / screen.X)
+
+    -- Noir-style floating button: dark circle, dual border, animated gradient.
+    local ImageButton = new("ImageButton")
+    ImageButton.Name = id
+    ImageButton.Size = ud2(w0, 0, h0, 0)
+    ImageButton.AnchorPoint = v2(0.5, 0.5)
+    ImageButton.Image = ""
+    ImageButton.BackgroundColor3 = rgb(8, 8, 10)
+    ImageButton.BackgroundTransparency = 0.28
+    ImageButton.BorderSizePixel = 0
+    ImageButton.ClipsDescendants = false
+    ImageButton.AutoButtonColor = false
+    ImageButton.ZIndex = 2
+    ImageButton.Parent = storage
+    buttonMaid:GiveTask(ImageButton)
+    new("UICorner", ImageButton).CornerRadius = ud(1, 0)
+
+    local Aspect = new("UIAspectRatioConstraint", ImageButton)
+    Aspect.AspectRatio = 1
+    pcall(function() Aspect.AspectType = Enum.AspectType.ScaleWithParentSize end)
+
+    local outerStroke = new("UIStroke", ImageButton)
+    outerStroke.Color = rgb(255, 255, 255)
+    outerStroke.Thickness = 2
+    outerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local Stroke = new("UIGradient", outerStroke)
+    Stroke.Name = "@Stroke"
+    Stroke.Color = isGold and __GOLD_NORMAL_COLOR or __NORMAL_COLOR
+    local innerStroke = new("UIStroke", ImageButton)
+    innerStroke.Color = rgb(105, 105, 112)
+    innerStroke.Transparency = 0.5
+    innerStroke.Thickness = 1
+    innerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local innerGradient = Stroke:Clone()
+    innerGradient.Name = "@InnerStroke"
+    innerGradient.Rotation = 180
+    innerGradient.Parent = innerStroke
+
+    local TextLabel = new("TextLabel", ImageButton)
+    TextLabel.Name = "@Text"
+    TextLabel.Size = ud2(0.76, 0, 0.76, 0)
+    TextLabel.Position = ud2(0.5, 0, 0.5, 0)
+    TextLabel.AnchorPoint = v2(0.5, 0.5)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.Font = Enum.Font.Gotham
+    TextLabel.Text = text
+    TextLabel.TextColor3 = pclr(1, 1, 1)
+    TextLabel.TextSize = 13
+    TextLabel.TextWrapped = true
+    TextLabel.ZIndex = 3
+
+    local ripple = new("Frame")
+    ripple.Name = "@ripple"
+    ripple.BackgroundColor3 = isGold and rgb(255, 215, 0) or rgb(0, 155, 255)
+    ripple.BackgroundTransparency = 0.45
+    ripple.Size = ud2(0, 0, 0, 0)
+    ripple.AnchorPoint = v2(0.5, 0.5)
+    ripple.Visible = false
+    ripple.ZIndex = 2
+    ripple.Parent = ImageButton
+    new("UICorner", ripple).CornerRadius = ud(1, 0)
+
+    local rec = {
+        id = id, btn = ImageButton, stroke = Stroke, ripple = ripple,
+        onClick = clickFunc, isGold = isGold and true or false,
+        hover = 0, press = 0, targetHover = 0, targetPress = 0,
+        rot = 0, x = 0.08, y = 0.88,
+    }
+
+    buttonMaid:GiveTask(ImageButton.InputBegan:Connect(function(input)
+        if input.UserInputType ~= MOUSE1 and input.UserInputType ~= TOUCH then return end
+        rec.targetPress = 1
+        dragState = {
+            rec = rec,
+            input = input,
+            dragInput = nil,
+            isMouse = input.UserInputType == MOUSE1,
+            startInput = input.Position,
+            startX = rec.x, startY = rec.y,
+            moved = false,
+        }
+        local absPos = ImageButton.AbsolutePosition
+        ripple.Position = ud2(0, input.Position.X - absPos.X, 0, input.Position.Y - absPos.Y)
+        ripple.Size = ud2(0, 0, 0, 0)
+        ripple.BackgroundTransparency = 0.45
+        ripple.Visible = true
+        TweenService:Create(ripple, tinfo(0.4, EASING.Sine, EDIR.Out), {
+            Size = ud2(0, 45, 0, 45), BackgroundTransparency = 1,
+        }):Play()
+    end))
+
+    buttonMaid:GiveTask(ImageButton.InputChanged:Connect(function(input)
+        if input.UserInputType ~= MOUSEMOV and input.UserInputType ~= TOUCH then return end
+        if dragState and dragState.rec == rec then dragState.dragInput = input end
+    end))
+    buttonMaid:GiveTask(ImageButton.MouseEnter:Connect(function() rec.targetHover = 1 end))
+    buttonMaid:GiveTask(ImageButton.MouseLeave:Connect(function() rec.targetHover = 0 end))
+
+    BindableButtons.Buttons[id] = ImageButton
+    BindableButtons.Maids[id] = buttonMaid
+    BindableButtons.recs[id] = rec
+    insert(BindableButtons.order, id)
+    BindableButtons.Count = #BindableButtons.order
+    BindableButtons.relayout()
+    return ImageButton
+end
+
+function BindableButtons.DeleteBButton(id)
+    local maid = BindableButtons.Maids[id]
+    if maid then maid:Destroy() end
+    BindableButtons.Maids[id] = nil
+    BindableButtons.Buttons[id] = nil
+    BindableButtons.recs[id] = nil
+    for i = 1, #BindableButtons.order do
+        if BindableButtons.order[i] == id then
+            table.remove(BindableButtons.order, i)
+            break
+        end
+    end
+    BindableButtons.Count = #BindableButtons.order
+    if dragState and dragState.rec and dragState.rec.id == id then dragState = nil end
+    BindableButtons.relayout()
+end
+
+function BindableButtons.UpdateBButtonText(id, text, isWaiting, isGold)
+    local btn = BindableButtons.Buttons[id]
+    if not btn then return end
+    local textLabel = btn:FindFirstChild("@Text")
+    if textLabel then textLabel.Text = text end
+    local stroke = btn:FindFirstChild("@Stroke", true)
+    if stroke then
+        if isGold then
+            stroke.Color = isWaiting and __GOLD_WAIT_COLOR or __GOLD_NORMAL_COLOR
+        else
+            stroke.Color = isWaiting and __WAIT_COLOR or __NORMAL_COLOR
+        end
+    end
+end
+
+function BindableButtons.resetLayout()
+    clearTable(config.bindPositions)
+    saveConfig()
+    BindableButtons.relayout()
+end
+
+function BindableButtons.clearAll()
+    local ids = {}
+    for id in pairs(BindableButtons.Buttons) do insert(ids, id) end
+    for _, id in ipairs(ids) do BindableButtons.DeleteBButton(id) end
+end
+
+-- ====== Status HUD disabled by user request ======
+-- Fling state remains fully functional; these no-op hooks preserve the action flow without creating a HUD.
+local StatusHUD = { Set = function() end }
+local function hudApplyPosition() end
+
+-- ====== Цели для флинга ======
+local function isValidTarget(player)
+    if not player or player == LocalPlayer or not player.Parent then return false end
+    if state.whitelist[player.UserId] then return false end
+    local char = player.Character
+    if not char then return false end
+    if not char:FindFirstChild("HumanoidRootPart") then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Health <= 0 then return false end
+    return true
+end
+
+local function getSelectedOrFirst()
+    if isValidTarget(state.resetSelPlr) then return state.resetSelPlr end
+    for _, player in ipairs(state.selectedPlayers) do
+        if isValidTarget(player) then return player end
+    end
+    return nil
+end
+
+local function findNearest()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local best, bestDist = nil, math.huge
+    local players = Players:GetPlayers()
+    for i = 1, #players do
+        local player = players[i]
+        if isValidTarget(player) then
+            local tr = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            if tr then
+                local d = (root.Position - tr.Position).Magnitude
+                if d < bestDist then best, bestDist = player, d end
+            end
+        end
+    end
+    return best
+end
+
+-- ====== Кэш ролей MM2 (для Sheriff / Murderer) ======
+local roleRemote = nil
+local roleRemoteTried = -1e9
+local function getRoleRemote()
+    if roleRemote and roleRemote.Parent then return roleRemote end
+    local t = now()
+    if (t - roleRemoteTried) < 5 then return roleRemote end
+    roleRemoteTried = t
+    pcall(function()
+        local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+        if remote and remote:IsA("RemoteFunction") then roleRemote = remote end
+    end)
+    return roleRemote
+end
+
+local roleCache = { data = nil, timestamp = 0 }
+local function getCachedRoleData()
+    local t = now()
+    local ttl = config.roleCacheTTL or 0.8
+    if roleCache.data and (t - roleCache.timestamp) < ttl then return roleCache.data end
+    local remote = getRoleRemote()
+    if remote then
+        local ok, result = pcall(function() return remote:InvokeServer() end)
+        if ok and type(result) == "table" then
+            roleCache.data, roleCache.timestamp = result, t
+            return result
+        end
+    end
+    roleCache.timestamp = t
+    return roleCache.data
+end
+
+local function invalidateRoleCache()
+    roleCache.data = nil
+    roleCache.timestamp = 0
+end
+
+local function hasGunModel(char)
+    if not char then return false end
+    if char:FindFirstChild("Gun") or char:FindFirstChild("Revolver") then return true end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        local name = tool.Name:lower()
+        if name:find("gun", 1, true) or name:find("revolver", 1, true) then return true end
+    end
+    return false
+end
+
+local function quickScanSheriff()
+    local players = Players:GetPlayers()
+    for i = 1, #players do
+        local player = players[i]
+        if player ~= LocalPlayer and not state.whitelist[player.UserId] then
+            if hasGunModel(player.Character) then return player end
+            local bp = player:FindFirstChild("Backpack")
+            if bp and (bp:FindFirstChild("Gun") or bp:FindFirstChild("Revolver")) then
+                return player
+            end
+        end
+    end
+    return nil
+end
+
+local function findTargetByRole(roleName)
+    local roleData = getCachedRoleData()
+    if not roleData then return nil end
+    for playerName, data in pairs(roleData) do
+        if type(data) == "table" and data.Role == roleName and not data.Killed and not data.Dead then
+            local p = Players:FindFirstChild(playerName)
+            if p and p ~= LocalPlayer and not state.whitelist[p.UserId] then return p end
+        end
+    end
+    return nil
+end
+
+local sheriffCache = { player = nil, at = 0 }
+local function findSheriff()
+    local t = now()
+    if sheriffCache.player and (t - sheriffCache.at) < 0.35 and isValidTarget(sheriffCache.player) then
+        return sheriffCache.player
+    end
+    local found = quickScanSheriff()
+    if not found then found = findTargetByRole("Sheriff") end
+    sheriffCache.player, sheriffCache.at = (isValidTarget(found) and found or nil), t
+    return sheriffCache.player
+end
+
+local function findMurderer()
+    local byRole = findTargetByRole("Murderer")
+    if byRole then return byRole end
+    local players = Players:GetPlayers()
+    for i = 1, #players do
+        local player = players[i]
+        if player ~= LocalPlayer and not state.whitelist[player.UserId] then
+            local char = player.Character
+            if char then
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool then
+                    local name = tool.Name:lower()
+                    if name:find("knife", 1, true) or name:find("murderer", 1, true) then
+                        return player
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ====== Fling ядро (K1LAS1K / zqyDSUWX) ======
+local flingBV = nil
+local flingOldPos = nil
+local flingFPDH = nil
+pcall(function() flingFPDH = Workspace.FallenPartsDestroyHeight end)
+if type(flingFPDH) ~= "number" or flingFPDH ~= flingFPDH then flingFPDH = -500 end
+pcall(function() if getgenv then getgenv().FPDH = flingFPDH end end)
+
+local currentFling = nil
+local massFlingThread = nil
+
+local function CleanupFlingPhysics()
+    if flingBV then pcall(function() flingBV:Destroy() end) flingBV=nil end
+    pcall(function() Workspace.FallenPartsDestroyHeight = flingFPDH end)
+    pcall(function() if getgenv and getgenv().FPDH then Workspace.FallenPartsDestroyHeight=getgenv().FPDH end end)
+    local char = LocalPlayer and LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true) end) end
+    if hum and hum.RootPart then
+        pcall(function() Workspace.CurrentCamera.CameraSubject = hum end)
+    end
+end
+
+local function cancelCurrentFling()
+    if massFlingThread then pcall(task.cancel, massFlingThread); massFlingThread=nil end
+    if currentFling and currentFling.cancel then pcall(currentFling.cancel) end
+    currentFling=nil
+    CleanupFlingPhysics()
+    BindableButtons.ResetActive=false
+    StatusHUD.Set("idle")
+end
+
+-- основная функция - один таргет
+local function SkidFling(TargetPlayer)
+    if not TargetPlayer or not TargetPlayer.Parent then return false end
+    if TargetPlayer == LocalPlayer or state.whitelist[TargetPlayer.UserId] then return false end
+
+    -- кулдаун
+    local last = state.lastResetAt[TargetPlayer.UserId]
+    if last and (now()-last) < (config.targetCooldown or 0) then return false end
+    state.lastResetAt[TargetPlayer.UserId]=now()
+
+    cancelCurrentFling()
+
+    local Character = LocalPlayer and LocalPlayer.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    local RootPart = Humanoid and Humanoid.RootPart
+    local TCharacter = TargetPlayer.Character
+    local THumanoid = TCharacter and TCharacter:FindFirstChildOfClass("Humanoid")
+    local TRootPart = THumanoid and THumanoid.RootPart or nil
+    local THead = TCharacter and TCharacter:FindFirstChild("Head")
+    local Accessory = TCharacter and TCharacter:FindFirstChildOfClass("Accessory")
+    local Handle = Accessory and Accessory:FindFirstChild("Handle") or nil
+
+    if not (Character and Humanoid and RootPart and TCharacter) then return false end
+    if not TCharacter:FindFirstChildWhichIsA("BasePart") then return false end
+
+    if RootPart.Velocity.Magnitude < 50 then
+        flingOldPos = RootPart.CFrame
+        pcall(function() if getgenv then getgenv().OldPos = flingOldPos end end)
+    end
+    if THumanoid and THumanoid.Sit then
+        Notify("Fling", TargetPlayer.Name.." is sitting",2)
+        return false
+    end
+
+    if THead then pcall(function() Workspace.CurrentCamera.CameraSubject = THead end)
+    elseif Handle then pcall(function() Workspace.CurrentCamera.CameraSubject = Handle end)
+    elseif THumanoid and TRootPart then pcall(function() Workspace.CurrentCamera.CameraSubject = THumanoid end) end
+
+    local power = config.flingPower or 1
+    local velMult = power==1 and 1 or (power==2 and 1.5 or 2)
+    local rotMult = velMult
+
+    local savedDestroy = Workspace.FallenPartsDestroyHeight
+    Workspace.FallenPartsDestroyHeight = 0/0 -- NaN trick
+    if flingBV and flingBV.Parent then pcall(function() flingBV:Destroy() end) end
+    flingBV = new("BodyVelocity")
+    flingBV.Velocity = v3(0,0,0)
+    flingBV.MaxForce = v3(9e9,9e9,9e9)
+    flingBV.Parent = RootPart
+    pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false) end)
+
+    local startTime = now()
+    local done=false
+    local flingObj={ bv=flingBV, conn=nil, watchdog=nil }
+    local function cleanup(success, manual)
+        if done then return end
+        done=true
+        if currentFling==flingObj then currentFling=nil end
+        if flingObj.conn then pcall(function() flingObj.conn:Disconnect() end) end
+        if flingObj.watchdog then pcall(task.cancel, flingObj.watchdog) end
+        if flingBV then pcall(function() flingBV:Destroy() end) flingBV=nil end
+        pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true) end)
+        pcall(function() Workspace.CurrentCamera.CameraSubject = Humanoid end)
+        if config.autoReturn and flingOldPos then
+            local tries=0
+            repeat
+                if not RootPart or not RootPart.Parent then break end
+                pcall(function()
+                    RootPart.CFrame = flingOldPos * cfr(0,.5,0)
+                    Character:SetPrimaryPartCFrame(flingOldPos * cfr(0,.5,0))
+                    Humanoid:ChangeState("GettingUp")
+                    for _, part in pairs(Character:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.Velocity, part.RotVelocity = V3_ZERO, V3_ZERO
+                        end
+                    end
+                end)
+                task.wait()
+                tries=tries+1
+                if tries>20 then break end
+            until (RootPart.Position - flingOldPos.p).Magnitude < 25
+        end
+        pcall(function() Workspace.FallenPartsDestroyHeight = flingFPDH end)
+        BindableButtons.ResetActive=false
+        StatusHUD.Set("idle")
+    end
+    flingObj.cancel=function() cleanup(true,true) end
+    currentFling=flingObj
+    BindableButtons.ResetActive=true
+    StatusHUD.Set("active", TargetPlayer.Name)
+    flingObj.watchdog = task.delay((config.flingDuration or 2)+2, function() if not done then cleanup(false) end end)
+
+    local function FPos(BasePart, Pos, Ang)
+        if not RootPart or not RootPart.Parent then return end
+        pcall(function()
+            RootPart.CFrame = cfr(BasePart.Position) * Pos * Ang
+            Character:SetPrimaryPartCFrame(cfr(BasePart.Position) * Pos * Ang)
+            RootPart.Velocity = v3(9e7*velMult, 9e7*10*velMult, 9e7*velMult)
+            RootPart.RotVelocity = v3(9e8*rotMult, 9e8*rotMult, 9e8*rotMult)
+        end)
+    end
+
+    local function SFBasePart(BasePart)
+        local TimeToWait = config.flingDuration or 2
+        local Time = tick()
+        local Angle = 0
+        repeat
+            if done then break end
+            if RootPart and THumanoid and BasePart and BasePart.Parent then
+                if BasePart.Velocity.Magnitude < 50 then
+                    Angle = Angle + 100
+                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                else
+                    FPos(BasePart, cfr(0,1.5,THumanoid.WalkSpeed), CFrame.Angles(math.rad(90),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,-THumanoid.WalkSpeed), CFrame.Angles(0,0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,1.5,THumanoid.WalkSpeed), CFrame.Angles(math.rad(90),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(math.rad(90),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(0,0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(math.rad(90),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(0,0,0))
+                    task.wait()
+                end
+            else
+                task.wait()
+            end
+        until Time + TimeToWait < tick()
+    end
+
+    if TRootPart then SFBasePart(TRootPart)
+    elseif THead then SFBasePart(THead)
+    elseif Handle then SFBasePart(Handle)
+    else Notify("Fling", TargetPlayer.Name.." has no valid parts",2) end
+
+    cleanup(true)
+    return true
+end
+
+-- ====== Авто-модули ======
+local function startAutoModule(maidKey, finderFunc, intervalFn)
+    if maids[maidKey] then maids[maidKey]:Destroy(); maids[maidKey]=nil end
+    local maid=Maid.new()
+    maids[maidKey]=maid
+    local thread=task.spawn(function()
+        while not maid._destroyed do
+            local target=nil
+            pcall(function() target=finderFunc() if target then SkidFling(target) end end)
+            local base=intervalFn()
+            if target then task.wait(math.max(base, (config.flingDuration or 2)+0.08))
+            else task.wait(base) end
+        end
+    end)
+    maid:GiveTask(thread)
+    return maid
+end
+
+local function stopAutoModule(maidKey)
+    if maids[maidKey] then maids[maidKey]:Destroy(); maids[maidKey]=nil; cancelCurrentFling() end
+end
+
+-- ====== Действия ======
+local ACTIONS={}
+
+ACTIONS.sheriff={
+    name="Sheriff", short="Sh", label="🔫 Sheriff",
+    run=function()
+        local t=findSheriff()
+        if t then SkidFling(t) else Notify("Fling","Sheriff not found",3) end
+    end,
+}
+ACTIONS.murderer={
+    name="Murderer", short="Mur", label="🔪 Murderer",
+    run=function()
+        local t=findMurderer()
+        if t then SkidFling(t) else Notify("Fling","Murderer not found",3) end
+    end,
+}
+ACTIONS.selected={
+    name="Selected", short="Sel", label="🎯 Selected",
+    run=function()
+        local t=getSelectedOrFirst()
+        if t then SkidFling(t) else Notify("Fling","No valid selected player",2) end
+    end,
+}
+ACTIONS.all={
+    name="All", short="All", label="👥 Everyone",
+    run=function()
+        if massFlingThread then Notify("Fling","Mass fling already running",2) return end
+        massFlingThread=task.spawn(function()
+            local players=Players:GetPlayers()
+            for i=1,#players do
+                local p=players[i]
+                if isValidTarget(p) then
+                    SkidFling(p)
+                    task.wait((config.flingDuration or 2)+0.1)
+                end
+            end
+            massFlingThread=nil
+        end)
+        Notify("Fling","Flinging all...",2)
+    end,
+}
+ACTIONS.nearest={
+    name="Nearest", short="Nrst", label="📍 Nearest",
+    run=function()
+        local t=findNearest()
+        if t then SkidFling(t) else Notify("Fling","No valid target nearby",2) end
+    end,
+}
+ACTIONS.start={
+    name="Start", short="Go", label="▶ Start",
+    run=function()
+        if maids.loopPlr then Notify("Fling","Loop already active - stop it first",2) return end
+        local count=#state.selectedPlayers
+        if count==0 and not isValidTarget(state.resetSelPlr) then Notify("Fling","No targets for loop",2) return end
+        Notify("Fling","Use 🤖 Auto → Loop toggle for continuous",3)
+        for _,p in ipairs(state.selectedPlayers) do if isValidTarget(p) then SkidFling(p); task.wait(0.2) end end
+        if isValidTarget(state.resetSelPlr) then SkidFling(state.resetSelPlr) end
+    end,
+}
+ACTIONS.cancel={
+    name="Cancel", short="Can", label="⏹ Cancel",
+    run=function() cancelCurrentFling(); Notify("Fling","Cancelled",2) end,
+}
+
+local ACTION_ORDER={"sheriff","murderer","selected","all","nearest","start","cancel"}
+
+local function runAction(id)
+    local a=ACTIONS[id]
+    if not a then return end
+    local ok,err=xpcall(a.run, debug.traceback)
+    if not ok then warn("["..BRAND.."][action:"..id.."] "..tostring(err)); Notify("Error","Action failed: "..id,3) end
+end
+
+-- ====== Хоткеи ======
+local Keybinds={ capture=nil }
+local IGNORED_KEYS={
+    LeftShift=true, RightShift=true, LeftControl=true, RightControl=true,
+    LeftAlt=true, RightAlt=true, LeftMeta=true, RightMeta=true,
+    CapsLock=true, Unknown=true, Escape=true,
+}
+local function keyName(id)
+    local k=config.keybinds[id]
+    return (k and k~="") and k or "—"
+end
+
+RootMaid:GiveTask(UserInputService.InputBegan:Connect(function(input, processed)
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    local name=input.KeyCode.Name
+    if Keybinds.capture then
+        if IGNORED_KEYS[name] then return end
+        local id=Keybinds.capture
+        Keybinds.capture=nil
+        config.keybinds[id]=name
+        saveConfig()
+        Notify("Hotkey", ACTIONS[id].name.." → "..name,3)
+        return
+    end
+    if processed then return end
+    for _,id in ipairs(ACTION_ORDER) do
+        if config.keybinds[id]==name then runAction(id); break end
+    end
+end))
+
+-- ====== МЕНЮ ======
+local mainSection = AddSection("💀 " .. BRAND)
+mainSection:AddLabel("Ultimate Fling • by " .. AUTHOR .. " • " .. VERSION)
+mainSection:AddParagraph("Info","Мульти-таргет флинг с сохранением позиции. Выбери цели в 📋 Lists, жми ▶ в ⚡ Fling или включи Loop/Aura в 🤖 Auto. FPDH и физика чистятся авто.")
+
+-- ⚡ Fling
+local actionSection = AddSection("⚡ Fling")
+actionSection:AddButton("🔫 Sheriff", function() runAction("sheriff") end)
+actionSection:AddButton("🔪 Murderer", function() runAction("murderer") end)
+actionSection:AddButton("🎯 Selected", function() runAction("selected") end)
+actionSection:AddButton("👥 Everyone", function() runAction("all") end)
+actionSection:AddButton("📍 Nearest", function() runAction("nearest") end)
+actionSection:AddButton("▶ Start (list)", function() runAction("start") end)
+actionSection:AddButton("⏹ Cancel", function() runAction("cancel") end)
+actionSection:AddPlayerDropdown("▸ Fling player", function(p)
+    if p and p ~= LocalPlayer then
+        state.resetSelPlr = p
+        if state.whitelist[p.UserId] then Notify("Whitelist", p.Name.." is whitelisted!",3)
+        else SkidFling(p); Notify("Fling","Flinging "..p.Name,2) end
+    end
+end)
+
+-- 🤖 Auto
+local autoSection = AddSection("🤖 Auto")
+autoSection:AddToggle("Auto Sheriff", function(enabled)
+    if enabled then
+        startAutoModule("autoSheriff", findSheriff, function() return config.autoSheriffDelay end)
+    else
+        stopAutoModule("autoSheriff")
+    end
+end)
+autoSection:AddToggle("Auto Murderer", function(enabled)
+    if enabled then
+        startAutoModule("autoMurderer", findMurderer, function() return config.autoMurdererDelay end)
+    else
+        stopAutoModule("autoMurderer")
+    end
+end)
+autoSection:AddToggle("Loop", function(enabled)
+    if not enabled then stopAutoModule("loopPlr") return end
+    local idx=1
+    startAutoModule("loopPlr", function()
+        if isValidTarget(state.resetSelPlr) then return state.resetSelPlr end
+        local list=state.selectedPlayers
+        for _=1,#list do
+            idx=((idx-1)%#list)+1
+            local p=list[idx]
+            if isValidTarget(p) then return p end
+        end
+        return nil
+    end, function() return config.loopInterval end)
+end)
+autoSection:AddToggle("Aura", function(enabled)
+    if not enabled then stopAutoModule("aura") return end
+    startAutoModule("aura", function()
+        local char=LocalPlayer.Character
+        local root=char and char:FindFirstChild("HumanoidRootPart")
+        if not root then return nil end
+        local myPos=root.Position
+        local maxSq=(config.auraStuds or 15)^2
+        local best,bestDist=nil,maxSq
+        local players=Players:GetPlayers()
+        for i=1,#players do
+            local player=players[i]
+            if isValidTarget(player) then
+                local tr=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                if tr then
+                    local d=(myPos-tr.Position).Magnitude
+                    local dsq=d*d
+                    if dsq<=bestDist then best,bestDist=player,dsq end
+                end
+            end
+        end
+        return best
+    end, function() return config.auraInterval end)
+end)
+autoSection:AddToggle("Click", function(enabled)
+    if maids.clickFling then maids.clickFling:Destroy(); maids.clickFling=nil end
+    if not enabled then return end
+    maids.clickFling=Maid.new()
+    local camera=Workspace.CurrentCamera
+    local rayParams=RaycastParams.new()
+    rayParams.FilterType=Enum.RaycastFilterType.Exclude
+    rayParams.IgnoreWater=true
+    local function resolveTarget()
+        local char=LocalPlayer.Character
+        rayParams.FilterDescendantsInstances=char and {char} or {}
+        local mouse=LocalPlayer:GetMouse()
+        if camera and mouse then
+            local unit=camera:ViewportPointToRay(mouse.X, mouse.Y, 1000)
+            local hit=Workspace:Raycast(unit.Origin, unit.Direction*1000, rayParams)
+            if hit and hit.Instance then
+                local model=hit.Instance:FindFirstAncestorWhichIsA("Model")
+                local player=model and Players:GetPlayerFromCharacter(model)
+                if player then return player end
+            end
+        end
+        local target=mouse and mouse.Target
+        local model=target and target:FindFirstAncestorWhichIsA("Model")
+        local player=model and Players:GetPlayerFromCharacter(model)
+        return player or nil
+    end
+    local function onInput(input, processed)
+        if processed then return end
+        if input.UserInputType ~= MOUSE1 and input.UserInputType ~= TOUCH then return end
+        local ok, player=pcall(resolveTarget)
+        if not ok or not player or player==LocalPlayer then return end
+        state.resetSelPlr=player
+        if state.whitelist[player.UserId] then Notify("Click", player.Name.." is whitelisted!",3)
+        else SkidFling(player); Notify("Click","Flinging "..player.Name,2) end
+    end
+    maids.clickFling:GiveTask(UserInputService.InputBegan:Connect(onInput))
+end)
+
+-- 📋 Lists
+local listSection = AddSection("📋 Lists")
+listSection:AddPlayerDropdown("🎯 Select", function(p)
+    if p and p ~= LocalPlayer then state.resetSelPlr=p; Notify("Selected", p.Name.." set",3) end
+end)
+listSection:AddPlayerDropdown("➕ Loop", function(p)
+    if p and p ~= LocalPlayer then
+        state.resetSelPlr=p
+        if not state.selectedSet[p.UserId] then
+            state.selectedSet[p.UserId]=true
+            insert(state.selectedPlayers,p)
+            Notify("Selected", p.Name.." added",3)
+        end
+    end
+end)
+listSection:AddButton("🧹 Clear loop", function()
+    clearTable(state.selectedPlayers); clearTable(state.selectedSet)
+    Notify("Selected","Cleared",3)
+end)
+listSection:AddPlayerDropdown("🛡 Whitelist", function(p)
+    if p and p ~= LocalPlayer then state.whitelist[p.UserId]=p.Name; Notify("Whitelist", p.Name.." added",3); saveConfig() end
+end)
+listSection:AddPlayerDropdown("🛡 Un-whitelist", function(p)
+    if p and state.whitelist[p.UserId] then state.whitelist[p.UserId]=nil; Notify("Whitelist", p.Name.." removed",3); saveConfig()
+    elseif p then Notify("Whitelist", p.Name.." is not whitelisted",3) end
+end)
+listSection:AddButton("🧹 Clear WL", function() clearTable(state.whitelist); Notify("Whitelist","Cleared",3); saveConfig() end)
+
+-- ⚙️ Tuning
+local settingsSection = AddSection("⚙️ Tuning")
+settingsSection:AddSlider("Fling Duration", 1, 5, config.flingDuration, function(v) config.flingDuration=v; saveConfig() end)
+settingsSection:AddSlider("Fling Power", 1, 3, config.flingPower, function(v) config.flingPower=v; saveConfig() end)
+settingsSection:AddSlider("Aura Radius", 5, 50, config.auraStuds, function(v) config.auraStuds=v; saveConfig() end)
+settingsSection:AddSlider("Loop Interval", 0.1, 1.0, config.loopInterval, function(v) config.loopInterval=v; saveConfig() end)
+settingsSection:AddSlider("Aura Interval", 0.1, 1.0, config.auraInterval, function(v) config.auraInterval=v; saveConfig() end)
+settingsSection:AddSlider("Target Cooldown", 0, 3, config.targetCooldown, function(v) config.targetCooldown=v; saveConfig() end)
+settingsSection:AddSlider("Auto Sheriff Delay", 0.1, 1.0, config.autoSheriffDelay, function(v) config.autoSheriffDelay=v; saveConfig() end)
+settingsSection:AddSlider("Auto Murderer Delay", 0.1, 1.0, config.autoMurdererDelay, function(v) config.autoMurdererDelay=v; saveConfig() end)
+settingsSection:AddSlider("Role Cache TTL", 0.2, 3.0, config.roleCacheTTL, function(v) config.roleCacheTTL=v; saveConfig() end)
+settingsSection:AddToggle("Auto Return", function(enabled) config.autoReturn=enabled and true or false; saveConfig() end)
+settingsSection:AddToggle("Notifications", function(enabled) config.notifications=enabled and true or false; saveConfig() end)
+
+-- 🔘 Binds
+local floatSection = AddSection("🔘 Binds")
+floatSection:AddToggle("SFX 🔇", function(bool) Audio.setMuted(bool) end)
+
+local function toggleBindButton(actionId)
+    return function(enabled)
+        local id="bind_"..actionId
+        if enabled then
+            BindableButtons.AddBButton(id, ACTIONS[actionId].short, function() runAction(actionId) end, actionId=="selected")
+        else
+            BindableButtons.DeleteBButton(id)
+        end
+    end
+end
+
+for _,id in ipairs(ACTION_ORDER) do
+    floatSection:AddToggle("Bind "..ACTIONS[id].name, toggleBindButton(id))
+end
+floatSection:AddSlider("Bind Size (%)", 5, 25, math.floor((config.bindButtonSize or 0.11)*100), function(value)
+    BindableButtons.setSize(value/100)
+end)
+floatSection:AddButton("🧩 Reset bind layout", function() BindableButtons.resetLayout(); Notify("Binds","Layout reset",2) end)
+floatSection:AddButton("🛑 Panic", function()
+    cancelCurrentFling()
+    for _,key in ipairs({"loopPlr","clickFling","aura","autoSheriff","autoMurderer"}) do stopAutoModule(key) end
+    BindableButtons.clearAll()
+    for _,r in ipairs(ODHX.records) do
+        if r.kind=="Toggle" and (r.section=="🤖 Auto" or (r.section=="🔘 Binds" and r.name:sub(1,5)=="Bind ")) then
+            ODHX.Set(r.section,r.name,r.kind,false,false)
+        end
+    end
+    Notify("Panic","All modules stopped",3)
+end)
+
+-- 🔑 Keys
+local keySection = AddSection("🔑 Keys")
+for _,id in ipairs(ACTION_ORDER) do
+    keySection:AddToggle("Key "..ACTIONS[id].name.." ["..keyName(id).."]", function(enabled)
+        if enabled then Keybinds.capture=id; Notify("Hotkey","Press a key for "..ACTIONS[id].name.."...",5)
+        else config.keybinds[id]=nil; if Keybinds.capture==id then Keybinds.capture=nil end; saveConfig(); Notify("Hotkey", ACTIONS[id].name.." key cleared",3) end
+    end)
+end
+keySection:AddButton("🧹 Clear keys", function() clearTable(config.keybinds); Keybinds.capture=nil; saveConfig(); Notify("Hotkey","All hotkeys cleared",3) end)
+
+-- 💾 Config
+local configSection = AddSection("💾 Config")
+configSection:AddButton("💾 Save", function()
+    if saveConfig(true) then Notify("Config","Saved → "..CONFIG_PATH,3)
+    else Notify("Config","Filesystem unavailable",4) end
+end)
+configSection:AddButton("📂 Reload", function()
+    if loadConfig() then
+        ODHX.data.controls=config.pluginUI or {}
+        ODHX.Restore()
+        BindableButtons.setSize(config.bindButtonSize or 0.11)
+        hudApplyPosition()
+        Notify("Config","Reloaded",3)
+    else Notify("Config","Nothing to load",3) end
+end)
+configSection:AddButton("♻ Reset config", function()
+    for k,v in pairs(DEFAULTS) do
+        if type(v)=="table" then clearTable(config[k]); for k2,v2 in pairs(v) do config[k][k2]=v2 end
+        else config[k]=v end
+    end
+    clearTable(state.whitelist)
+    ODHX.ResetControls()
+    BindableButtons.setSize(config.bindButtonSize)
+    hudApplyPosition()
+    saveConfig(true)
+    Notify("Config","Defaults restored",3)
+end)
+
+-- ℹ️
+local infoSection = AddSection("ℹ️")
+infoSection:AddButton("🧹 Clean duplicates", function()
+    local n=purgeForeign(true); markOwnCards(); Notify("Clean","Removed "..n.." duplicate section(s)",3)
+end)
+infoSection:AddLabel(PLUGIN_NAME.." • "..VERSION.." • by "..AUTHOR)
+infoSection:AddLabel("HUD drag • Binds drag • config saved → "..CONFIG_PATH)
+
+-- ====== Пометить свои карточки ======
+markOwnCards()
+
+RootMaid:GiveTask(task.spawn(function()
+    for _,delay in ipairs({1.5,2.5,3.0,5.0}) do
+        task.wait(delay)
+        pcall(markOwnCards)
+        pcall(purgeForeign, true)
+    end
+end))
+
+-- ====== Init ======
+Audio.init()
+-- Fling HUD intentionally disabled.
+BindableButtons.setSize(config.bindButtonSize or 0.11)
+hudApplyPosition()
+if configLoaded then Notify(BRAND, VERSION.." loaded (config restored)",3)
+else Notify(BRAND, VERSION.." loaded. Duplicates auto-cleaned.",3) end
+if headlessMode then Notify(BRAND,"Menu API missing — headless mode (binds/hotkeys work)",5) end
+
+RootMaid:GiveTask(Players.PlayerRemoving:Connect(function(player)
+    if not player then return end
+    state.lastResetAt[player.UserId]=nil
+    state.selectedSet[player.UserId]=nil
+    for i=#state.selectedPlayers,1,-1 do if state.selectedPlayers[i]==player then table.remove(state.selectedPlayers,i) end end
+    if state.resetSelPlr==player then state.resetSelPlr=nil end
+    if sheriffCache and sheriffCache.player==player then sheriffCache.player=nil end
+    invalidateRoleCache()
+end))
+RootMaid:GiveTask(Players.PlayerAdded:Connect(function() invalidateRoleCache() end))
+
+-- ====== Очистка ======
+RootMaid:GiveTask(function()
+    persistDisabled=true
+    if saveThread then pcall(task.cancel, saveThread) end
+    saveThread,saveQueued=nil,false
+    cancelCurrentFling()
+    for _,m in pairs(maids) do if m then m:Destroy() end end
+    clearTable(maids)
+    clearTable(state.whitelist)
+    clearTable(state.selectedPlayers)
+    clearTable(state.selectedSet)
+    clearTable(state.lastResetAt)
+    Keybinds.capture=nil
+    BindableButtons.clearAll()
+    pcall(removeMySections)
+    pcall(function() if storageGui then storageGui:Destroy() end; storageGui=nil end)
+end)
+
+local function unload()
+    RootMaid:DoCleaning()
+end
+
+pcall(function()
+    if type(getgenv) ~= "function" then return end
+    local g=getgenv()
+    if type(g)~="table" then return end
+    rawset(g, UNLOAD_GLOBAL, ODHX.Stop)
+end)
+
+ODHX.Bind("⚙️ Tuning", "Auto Return", "Toggle", function() return config.autoReturn end)
+ODHX.Bind("⚙️ Tuning", "Notifications", "Toggle", function() return config.notifications end)
+ODHX.Bind("🔘 Binds", "SFX 🔇", "Toggle", function() return config.muteSounds end)
+ODHX.Bind("⚙️ Tuning", "Fling Duration", "Slider", function() return config.flingDuration end)
+ODHX.Bind("⚙️ Tuning", "Fling Power", "Slider", function() return config.flingPower end)
+ODHX.Bind("⚙️ Tuning", "Aura Radius", "Slider", function() return config.auraStuds end)
+ODHX.Bind("⚙️ Tuning", "Loop Interval", "Slider", function() return config.loopInterval end)
+ODHX.Bind("⚙️ Tuning", "Aura Interval", "Slider", function() return config.auraInterval end)
+ODHX.Bind("⚙️ Tuning", "Target Cooldown", "Slider", function() return config.targetCooldown end)
+ODHX.Bind("⚙️ Tuning", "Auto Sheriff Delay", "Slider", function() return config.autoSheriffDelay end)
+ODHX.Bind("⚙️ Tuning", "Auto Murderer Delay", "Slider", function() return config.autoMurdererDelay end)
+ODHX.Bind("⚙️ Tuning", "Role Cache TTL", "Slider", function() return config.roleCacheTTL end)
+ODHX.Bind("🔘 Binds", "Bind Size (%)", "Slider", function() return config.bindButtonSize*100 end)
+ODHX.cleanup=unload
+ODHX.Finish()
+
+    end, function(__error) return tostring(__error) end)
+    if not __pluginOk then
+        warn("[Noir embedded plugin: fling_мой.lua.txt] " .. tostring(__pluginError))
+        notify("fling_мой.lua.txt failed to load: " .. tostring(__pluginError), 7)
     end
 end
