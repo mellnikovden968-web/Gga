@@ -2278,6 +2278,7 @@ do
     end
 end
 
+local remoteConnections = {}
 function connectRemote(name, handler)
     local wanted = string.lower(tostring(name))
     local first
