@@ -2383,7 +2383,10 @@ do
         table.clear(universalState.invisibleOriginals)
         if not current then return end
         for _, instance in ipairs(current:GetDescendants()) do
-            if instance:IsA("BasePart") then universalState.invisibleOriginals[instance] = instance.Transparency end
+            -- Keep already-hidden parts such as HumanoidRootPart hidden; only fade visible body/accessory parts.
+            if instance:IsA("BasePart") and instance.Transparency == 0 then
+                universalState.invisibleOriginals[instance] = instance.Transparency
+            end
         end
     end
 
