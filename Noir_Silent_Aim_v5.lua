@@ -22,6 +22,64 @@ local function isPrimaryPress(input)
         or input.UserInputType == Enum.UserInputType.Touch
 end
 
+local STORAGE_ROOT = "Noir Hub"
+local ASSETS_FOLDER = STORAGE_ROOT .. "/assets"
+local CONFIGS_FOLDER = STORAGE_ROOT .. "/configs"
+local PRESETS_FOLDER = STORAGE_ROOT .. "/presets"
+local LEGACY_STORAGE_ROOT = "NOIR.CONFIG"
+
+local function ensureFolder(path)
+    if type(makefolder) ~= "function" then return end
+    if type(isfolder) == "function" then
+        local ok, exists = pcall(isfolder, path)
+        if ok and exists then return end
+    end
+    pcall(makefolder, path)
+end
+
+local function ensureStorageFolders()
+    ensureFolder(STORAGE_ROOT)
+    ensureFolder(ASSETS_FOLDER)
+    ensureFolder(CONFIGS_FOLDER)
+    ensureFolder(PRESETS_FOLDER)
+end
+
+local function fileExists(path)
+    if type(isfile) ~= "function" then return false end
+    local ok, exists = pcall(isfile, path)
+    return ok and exists == true
+end
+
+local function copyLegacyFile(source, destination)
+    if type(readfile) ~= "function" or type(writefile) ~= "function" then return end
+    if not fileExists(source) or fileExists(destination) then return end
+    local ok, contents = pcall(readfile, source)
+    if ok then pcall(writefile, destination, contents) end
+end
+
+local function migrateLegacyStorage()
+    copyLegacyFile(LEGACY_STORAGE_ROOT .. "/autosave.json", CONFIGS_FOLDER .. "/autosave.json")
+    for _, name in ipairs({
+        "ODH_FEAnimations_settings.json",
+        "ODH_BJP_settings.json",
+        "ODH_InventoryUnlimiter_settings.json",
+        "ODH_Pm-Wallhop_settings.json",
+    }) do
+        copyLegacyFile(name, CONFIGS_FOLDER .. "/" .. name)
+    end
+    if type(listfiles) ~= "function" or type(readfile) ~= "function" or type(writefile) ~= "function" then return end
+    local ok, files = pcall(listfiles, LEGACY_STORAGE_ROOT)
+    if not ok or type(files) ~= "table" then return end
+    for _, source in ipairs(files) do
+        local normalized = tostring(source):gsub("\\", "/")
+        local name = normalized:match("([^/]+%.preset)$")
+        if name then copyLegacyFile(source, PRESETS_FOLDER .. "/" .. name) end
+    end
+end
+
+ensureStorageFolders()
+migrateLegacyStorage()
+
 local guiParent = CoreGui
 if type(gethui) == "function" then local ok,v=pcall(gethui); if ok and typeof(v)=="Instance" then guiParent=v end end
 pcall(function() local old=guiParent:FindFirstChild("NoirSilentAimUI"); if old then old:Destroy() end end)
@@ -29,7 +87,7 @@ pcall(function() local old=guiParent:FindFirstChild("NoirSilentAimUI"); if old t
 local NoirPersistence = {
     data = { toggles = {}, sliders = {}, dropdowns = {}, textboxes = {}, keybinds = {}, positions = {} },
     token = 0,
-    path = "NOIR.CONFIG/autosave.json",
+    path = CONFIGS_FOLDER .. "/autosave.json",
     safeLegacy = {
         Enabled=true, ["Wall Check"]=true, ["Show Shoot Murder Button"]=true,
         ["Lock Shoot Murder Button"]=true, ["Knife Silent Aim"]=true, ["Knife Wall Check"]=true,
@@ -61,7 +119,7 @@ function NoirPersistence.Save()
     task.delay(.35, function()
         if token ~= NoirPersistence.token then return end
         pcall(function()
-            if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder("NOIR.CONFIG") then makefolder("NOIR.CONFIG") end
+            ensureStorageFolders()
             writefile(NoirPersistence.path, HttpService:JSONEncode(NoirPersistence.data))
         end)
     end)
@@ -200,8 +258,9 @@ do
             for i = 1, 8 do c = c + (x:sub(i, i) == "1" and 2 ^ (8 - i) or 0) end
             return string.char(c)
         end)
-        pcall(writefile, "NOIR_CREATOR.jpg", decoded)
-        local ok, asset = pcall(customAsset, "NOIR_CREATOR.jpg")
+        local imagePath = ASSETS_FOLDER .. "/NOIR_CREATOR.jpg"
+        pcall(writefile, imagePath, decoded)
+        local ok, asset = pcall(customAsset, imagePath)
         if ok then creatorImage = asset end
     end
 end
@@ -402,7 +461,7 @@ local infoCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(
 corner(infoCard, 18); stroke(infoCard, C.border, .5)
 text(infoCard, "QUICK START", 18, UDim2.fromOffset(24, 22))
 text(infoCard, "Open Main for player tools, World for gun & fling tools, Visuals for ESP.", 14, UDim2.fromOffset(25, 54), true)
-text(infoCard, "Settings are saved automatically to NOIR.CONFIG.", 14, UDim2.fromOffset(25, 78), true)
+text(infoCard, "Settings are saved automatically to Noir Hub/configs.", 14, UDim2.fromOffset(25, 78), true)
 local frameCounter, lastFps = 0, os.clock()
 RunService.RenderStepped:Connect(function()
     frameCounter += 1
@@ -843,7 +902,7 @@ local running = true
 local shootButton, shootGui, shootBusy = nil, nil, false
 local buttonShotActive, buttonShotTarget = false, nil
 local presetName = "default"
-local PRESET_FOLDER = "NOIR.CONFIG"
+local PRESET_FOLDER = PRESETS_FOLDER
 local revertControls, revertToggleStates, syncRevertControls = {}, {}, nil
 local noirMirrorControls = {}
 local presetDropdown
@@ -2681,12 +2740,7 @@ function cleanPresetName(name)
     return name ~= "" and name or "default"
 end
 function ensurePresetFolder()
-    if type(makefolder) ~= "function" then return end
-    if type(isfolder) == "function" then
-        local ok, exists = pcall(isfolder, PRESET_FOLDER)
-        if ok and exists then return end
-    end
-    pcall(makefolder, PRESET_FOLDER)
+    ensureStorageFolders()
 end
 function xorPreset(data)
     local output = table.create(#data)
@@ -3195,7 +3249,7 @@ if not LocalPlayer then warn("[FE Animations] LocalPlayer unavailable."); return
 local HttpService = game:GetService("HttpService")
 local runtime = {version=3,alive=true, initializing=true, enabled=false, generation=0,
     selections={all="Default",idle="Default",walk="Default",run="Default",jump="Default",climb="Default",fall="Default"}}
-local FILE = "ODH_FEAnimations_settings.json"
+local FILE = "Noir Hub/configs/ODH_FEAnimations_settings.json"
 runtime.settingsFile=FILE
 local warnings={}
 local function WarnOnce(key,text)
@@ -4037,7 +4091,7 @@ RequestApply()
         local __pluginOk, __pluginError = xpcall(function()
 local ODHX = (function()
     local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
-    X.id, X.title, X.file = "BJP", "Bomb Jump+", "ODH_BJP_settings.json"
+    X.id, X.title, X.file = "BJP", "Bomb Jump+", "Noir Hub/configs/ODH_BJP_settings.json"
     local host = odh_shared_plugins
     assert(host and type(host.CreateTab)=="function", X.title .. ": load through the current Overdrive H plugin menu")
     local env = {}
@@ -5326,7 +5380,7 @@ end
 local fileRead = type(readfile)=="function" and readfile or environment.readfile
 local fileWrite = type(writefile)=="function" and writefile or environment.writefile
 local fileExists = type(isfile)=="function" and isfile or environment.isfile
-local FILE = "ODH_InventoryUnlimiter_settings.json"
+local FILE = "Noir Hub/configs/ODH_InventoryUnlimiter_settings.json"
 local httpOK, HttpService = pcall(function() return game:GetService("HttpService") end)
 local canPersist = type(fileRead)=="function" and type(fileWrite)=="function" and httpOK and HttpService~=nil
 runtime.settingsFile=FILE
@@ -5612,7 +5666,7 @@ print("[Inventory Unlimiter V5] Loaded | Settings: " .. FILE .. " | " .. runtime
         local __pluginOk, __pluginError = xpcall(function()
 local ODHX = (function()
     local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
-    X.id, X.title, X.file = "Pm-Wallhop", "Pm-WallHop", "ODH_Pm-Wallhop_settings.json"
+    X.id, X.title, X.file = "Pm-Wallhop", "Pm-WallHop", "Noir Hub/configs/ODH_Pm-Wallhop_settings.json"
     local host = odh_shared_plugins
     assert(host and type(host.CreateTab)=="function", X.title .. ": load through the current Overdrive H plugin menu")
     local env = {}
