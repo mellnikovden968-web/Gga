@@ -2346,6 +2346,234 @@ end
 
 local tab = host.CreateTab()
 
+-- Main universal utilities: all state stays in this scope while the connections retain only what they need.
+do
+    local universalState = {
+        infiniteJump = false,
+        secondLife = false,
+        secondLifeConnections = {},
+        secondLifeHumanoid = nil,
+        secondLifeDeadState = true,
+        secondLifeBreakJoints = true,
+        invisible = false,
+        invisibleOriginals = {},
+        invisibleDescendantConnection = nil,
+        invisibleBindEnabled = false,
+        invisibleBindGui = nil,
+        invisibleBindButton = nil,
+        invisibleBindConnections = {},
+    }
+
+    local function disconnectAll(list)
+        for _, connection in ipairs(list) do pcall(function() connection:Disconnect() end) end
+        table.clear(list)
+    end
+
+    local function restoreSecondLife()
+        disconnectAll(universalState.secondLifeConnections)
+        local humanoid = universalState.secondLifeHumanoid
+        if humanoid and humanoid.Parent then
+            pcall(function() humanoid.BreakJointsOnDeath = universalState.secondLifeBreakJoints end)
+            pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, universalState.secondLifeDeadState) end)
+        end
+        universalState.secondLifeHumanoid = nil
+    end
+
+    local function armSecondLife(character)
+        restoreSecondLife()
+        if not universalState.secondLife then return end
+        local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+        if not humanoid then return end
+        universalState.secondLifeHumanoid = humanoid
+        universalState.secondLifeBreakJoints = humanoid.BreakJointsOnDeath
+        local ok, deadState = pcall(function() return humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) end)
+        universalState.secondLifeDeadState = ok and deadState or true
+        pcall(function()
+            humanoid.BreakJointsOnDeath = false
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        end)
+        universalState.secondLifeConnections[#universalState.secondLifeConnections + 1] = humanoid.HealthChanged:Connect(function(health)
+            if not universalState.secondLife or not humanoid.Parent or health > 0 then return end
+            pcall(function()
+                humanoid.Health = math.max(humanoid.MaxHealth, 100)
+                humanoid:ChangeState(Enum.HumanoidStateType.Running)
+            end)
+        end)
+        task.spawn(function()
+            while universalState.secondLife and humanoid.Parent and LocalPlayer.Character == character do
+                if humanoid.Health <= 0 then
+                    pcall(function()
+                        humanoid.Health = math.max(humanoid.MaxHealth, 100)
+                        humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                    end)
+                end
+                task.wait(.05)
+            end
+        end)
+    end
+
+    local function setSecondLife(enabled)
+        universalState.secondLife = enabled == true
+        if universalState.secondLife then armSecondLife(LocalPlayer.Character) else restoreSecondLife() end
+    end
+
+    local function restoreInvisible()
+        if universalState.invisibleDescendantConnection then
+            universalState.invisibleDescendantConnection:Disconnect()
+            universalState.invisibleDescendantConnection = nil
+        end
+        for instance, saved in pairs(universalState.invisibleOriginals) do
+            if instance and instance.Parent then
+                pcall(function()
+                    instance.Transparency = saved.transparency
+                    if instance:IsA("BasePart") then instance.LocalTransparencyModifier = saved.localTransparency end
+                end)
+            end
+        end
+        table.clear(universalState.invisibleOriginals)
+    end
+
+    local function hideInvisibleInstance(instance)
+        if not (instance:IsA("BasePart") or instance:IsA("Decal") or instance:IsA("Texture")) then return end
+        if universalState.invisibleOriginals[instance] then return end
+        local saved = { transparency = instance.Transparency, localTransparency = 0 }
+        if instance:IsA("BasePart") then saved.localTransparency = instance.LocalTransparencyModifier end
+        universalState.invisibleOriginals[instance] = saved
+        pcall(function()
+            instance.Transparency = 1
+            if instance:IsA("BasePart") then instance.LocalTransparencyModifier = 1 end
+        end)
+    end
+
+    local function applyInvisible()
+        restoreInvisible()
+        if not universalState.invisible then return end
+        local character = LocalPlayer.Character
+        if not character then return end
+        for _, instance in ipairs(character:GetDescendants()) do hideInvisibleInstance(instance) end
+        universalState.invisibleDescendantConnection = character.DescendantAdded:Connect(function(instance)
+            if universalState.invisible then hideInvisibleInstance(instance) end
+        end)
+    end
+
+    local function updateInvisibleBindText()
+        local button = universalState.invisibleBindButton
+        if not button then return end
+        local label = button:FindFirstChild("Text")
+        if label then label.Text = universalState.invisible and "Invisible\nON" or "Invisible\nOFF" end
+    end
+
+    local function setInvisible(enabled)
+        universalState.invisible = enabled == true
+        applyInvisible()
+        updateInvisibleBindText()
+    end
+
+    local function removeInvisibleBindButton()
+        disconnectAll(universalState.invisibleBindConnections)
+        if universalState.invisibleBindGui then universalState.invisibleBindGui:Destroy() end
+        universalState.invisibleBindGui, universalState.invisibleBindButton = nil, nil
+        for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+            if typeof(parent) == "Instance" then
+                local stale = parent:FindFirstChild("NoirInvisibleBindButton")
+                if stale then stale:Destroy() end
+            end
+        end
+    end
+
+    local function createInvisibleBindButton()
+        if universalState.invisibleBindButton then return end
+        removeInvisibleBindButton()
+        local parent = guiParent
+        if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
+        local bindGui = Instance.new("ScreenGui")
+        bindGui.Name, bindGui.ResetOnSpawn, bindGui.IgnoreGuiInset, bindGui.DisplayOrder = "NoirInvisibleBindButton", false, true, 82
+        bindGui.Parent = parent
+
+        local button = Instance.new("ImageButton")
+        button.Name = "Invisible"
+        button.AnchorPoint = Vector2.new(.5, .5)
+        button.Position = NoirPersistence.GetPosition("invisible_bind_v1", UDim2.new(.24, 0, .88, 0))
+        button.Size = UDim2.new(.105, 0, .105, 0)
+        button.BackgroundColor3, button.BackgroundTransparency, button.BorderSizePixel = Color3.fromRGB(8, 8, 10), .28, 0
+        button.Image, button.AutoButtonColor, button.ZIndex = "", false, 5
+        button.Parent = bindGui
+        local round = Instance.new("UICorner"); round.CornerRadius = UDim.new(1, 0); round.Parent = button
+        local aspect = Instance.new("UIAspectRatioConstraint"); aspect.AspectRatio = 1; aspect.Parent = button
+        local outerStroke = Instance.new("UIStroke")
+        outerStroke.Color, outerStroke.Thickness, outerStroke.ApplyStrokeMode, outerStroke.Parent = Color3.fromRGB(255, 255, 255), 2, Enum.ApplyStrokeMode.Border, button
+        local outerGradient = Instance.new("UIGradient")
+        outerGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(35,35,40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250,250,252)),
+            ColorSequenceKeypoint.new(.48, Color3.fromRGB(70,70,78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255,255,255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(45,45,52)),
+        })
+        outerGradient.Parent = outerStroke
+        local innerStroke = Instance.new("UIStroke")
+        innerStroke.Color, innerStroke.Transparency, innerStroke.Thickness, innerStroke.Parent = Color3.fromRGB(105,105,112), .5, 1, button
+        local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = innerStroke
+        local label = Instance.new("TextLabel")
+        label.Name, label.AnchorPoint, label.Position, label.Size = "Text", Vector2.new(.5,.5), UDim2.fromScale(.5,.5), UDim2.fromScale(.76,.76)
+        label.BackgroundTransparency, label.TextColor3, label.TextSize, label.TextWrapped, label.Font, label.ZIndex = 1, Color3.fromRGB(245,245,248), 14, true, Enum.Font.Gotham, 6
+        label.Parent = button
+
+        local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = button.InputBegan:Connect(function(input)
+            if not isPrimaryPress(input) then return end
+            dragging, moved, dragStart, startPosition = true, false, input.Position, button.Position
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = button.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = UIS.InputChanged:Connect(function(input)
+            if not dragging or input ~= dragInput then return end
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 7 then moved = true end
+            button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = UIS.InputEnded:Connect(function(input)
+            if not dragging or not isPrimaryPress(input) then return end
+            dragging = false
+            NoirPersistence.SetPosition("invisible_bind_v1", button.Position)
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = button.Activated:Connect(function()
+            if not moved then setInvisible(not universalState.invisible) end
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = RunService.RenderStepped:Connect(function()
+            if outerGradient.Parent then outerGradient.Rotation = (outerGradient.Rotation + 1) % 360 end
+        end)
+        universalState.invisibleBindGui, universalState.invisibleBindButton = bindGui, button
+        updateInvisibleBindText()
+    end
+
+    local function setInvisibleBindButton(enabled)
+        universalState.invisibleBindEnabled = enabled == true
+        if universalState.invisibleBindEnabled then createInvisibleBindButton() else removeInvisibleBindButton() end
+    end
+
+    UIS.JumpRequest:Connect(function()
+        if not universalState.infiniteJump then return end
+        local humanoid = localHumanoid()
+        if humanoid and humanoid.Health > 0 then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end)
+    LocalPlayer.CharacterAdded:Connect(function(character)
+        task.wait(.2)
+        if universalState.secondLife then armSecondLife(character) end
+        if universalState.invisible then applyInvisible() end
+    end)
+
+    local universalMods = tab:AddSection("MAIN \u{2022} UNIVERSAL", "Movement and survival utilities")
+    universalMods:AddToggle("Infinite Jump", function(enabled) universalState.infiniteJump = enabled == true end)
+    universalMods:AddToggle("Second Life", setSecondLife)
+
+    local invisibleMods = tab:AddSection("MAIN \u{2022} INVISIBLE", "Character visibility and floating bind button")
+    invisibleMods:AddToggle("Invisible", setInvisible)
+    invisibleMods:AddToggle("Enable Invisible Bind Button", setInvisibleBindButton)
+    invisibleMods:AddLabel("Round Invisible button: tap to toggle; drag it to move. Its position is saved.")
+    removeInvisibleBindButton()
+end
+
+
 -- Visuals are compiled in a separate deferred chunk.  The primary UI stays identical to the last verified mobile-safe build.
 local __noirVisualContext = {
     tab = tab, players = Players, workspace = Workspace, runService = RunService,
