@@ -4234,13 +4234,28 @@ do
         record.button.Position = UDim2.fromOffset(math.clamp(saved.x * screen.X, 38, math.max(38, screen.X - 38)), math.clamp(saved.y * screen.Y, 38, math.max(38, screen.Y - 38)))
     end
     local function createQuick(key, saved)
-        local button = Instance.new("ImageButton")
-        button.Name, button.AnchorPoint, button.Size = "Emote_" .. key, Vector2.new(.5,.5), UDim2.fromOffset(64,64)
-        button.BackgroundColor3, button.BackgroundTransparency, button.BorderSizePixel = C.base, .12, 0
-        button.Image, button.ScaleType, button.AutoButtonColor, button.ZIndex = "rbxthumb://type=Asset&id=" .. key .. "&w=420&h=420", Enum.ScaleType.Fit, false, 91
+        -- Rounded-square photo control using the same dark body and metallic double border as Shoot Murder.
+        local button = Instance.new("TextButton")
+        button.Name, button.AnchorPoint, button.Size = "Emote_" .. key, Vector2.new(.5,.5), UDim2.fromOffset(88,88)
+        button.BackgroundColor3, button.BackgroundTransparency, button.BorderSizePixel = Color3.fromRGB(8,8,10), .28, 0
+        button.Text, button.AutoButtonColor, button.ZIndex = "", false, 91
         button.Parent = ensureQuickGui()
-        local circle = Instance.new("UICorner"); circle.CornerRadius = UDim.new(1,0); circle.Parent = button
-        local outline = Instance.new("UIStroke"); outline.Color, outline.Thickness, outline.Transparency, outline.Parent = C.accent, 2, .08, button
+        local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0,16); corner.Parent = button
+        local outline = Instance.new("UIStroke"); outline.Color, outline.Thickness, outline.ApplyStrokeMode, outline.Parent = Color3.fromRGB(255,255,255), 2, Enum.ApplyStrokeMode.Border, button
+        local shine = Instance.new("UIGradient")
+        shine.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(35,35,40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250,250,252)),
+            ColorSequenceKeypoint.new(.48, Color3.fromRGB(70,70,78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255,255,255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(45,45,52)),
+        })
+        shine.Parent = outline
+        local inner = Instance.new("UIStroke"); inner.Color, inner.Transparency, inner.Thickness, inner.Parent = Color3.fromRGB(105,105,112), .5, 1, button
+        local innerShine = shine:Clone(); innerShine.Rotation = 180; innerShine.Parent = inner
+        local image = Instance.new("ImageLabel")
+        image.Name, image.AnchorPoint, image.Position, image.Size = "Photo", Vector2.new(.5,.5), UDim2.fromScale(.5,.5), UDim2.fromOffset(62,62)
+        image.BackgroundTransparency, image.Image, image.ScaleType, image.ZIndex = 1, "rbxthumb://type=Asset&id=" .. key .. "&w=420&h=420", Enum.ScaleType.Fit, 92
+        image.Parent = button
+        local imageCorner = Instance.new("UICorner"); imageCorner.CornerRadius = UDim.new(0,11); imageCorner.Parent = image
         local record = { key = key, item = { id = saved.id, name = saved.name }, button = button, dragging = false, moved = false }
         quickRecords[key] = record
         positionQuick(record)
@@ -4324,10 +4339,11 @@ do
         UI.footer.Size = UDim2.new(1, -36, 0, 40)
         -- Use the full Noir tab width, matching the supplied menu's three-card gallery on wider screens.
         local available = math.max(1, size.X - 48)
-        local columns = size.X >= 600 and 3 or (size.X >= 400 and 2 or 1)
-        local padding = 12
-        local cellWidth = math.floor((available - padding * (columns - 1)) / columns)
-        local cellHeight = veryNarrow and 155 or math.clamp(math.floor(cellWidth * .82), 180, 245)
+        -- Five compact cards across on mobile landscape, as requested.
+        local columns = 5
+        local padding = 10
+        local cellWidth = math.max(76, math.floor((available - padding * (columns - 1)) / columns))
+        local cellHeight = math.clamp(math.floor(cellWidth * 1.34), 128, 205)
         UI.grid.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
         UI.grid.FillDirectionMaxCells = columns
         local rows = math.ceil(#UI.cards / columns)
@@ -4485,7 +4501,11 @@ do
         Connect(UI.search.FocusLost, function() prefs.query = UI.search.Text:sub(1,200); Save(); Filter(true) end)
         Connect(UI.root:GetPropertyChangedSignal("AbsoluteSize"), function() task.defer(Layout) end)
         Connect(UI.cardsScroll:GetPropertyChangedSignal("AbsoluteSize"), function() task.defer(Layout) end)
+        Connect(container:GetPropertyChangedSignal("Visible"), function()
+            if container.Visible then task.delay(.05, function() if runtime.alive and UI.root then Layout(); RenderCards() end end) end
+        end)
         Layout(); RenderCards(); RefreshQuickButtons()
+        task.delay(.15, function() if runtime.alive and UI.root then Layout(); RenderCards() end end)
     end
     function runtime.OpenBrowser()
         if not runtime.alive then return end
