@@ -3060,9 +3060,10 @@ local function startFly()
     state.flyHumanoid, state.flyAutoRotate, state.flyPlatformStand = humanoid, humanoid.AutoRotate, humanoid.PlatformStand
     humanoid.AutoRotate = false
 
-    -- Yaw-only gyro turns the avatar with the camera without forcing pitch/roll, avoiding the earlier shaking.
+    -- Full 3D camera orientation: the avatar can pitch up/down as well as turn sideways while flying.
+    -- PlatformStand is not used, so this remains stable when the Fly toggle is turned off.
     local gyro = Instance.new("BodyGyro")
-    gyro.Name, gyro.P, gyro.D, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 30000, 900, Vector3.new(0,4e5,0), root.CFrame
+    gyro.Name, gyro.P, gyro.D, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 26000, 1100, Vector3.new(3e5,3e5,3e5), root.CFrame
     gyro.Parent = root
     local velocity = Instance.new("BodyVelocity")
     velocity.Name, velocity.P, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", 15000, Vector3.zero, Vector3.new(9e9,9e9,9e9)
@@ -3079,7 +3080,7 @@ local function startFly()
         local right = camera.CFrame.RightVector
         local flatLook = Vector3.new(look.X, 0, look.Z)
         local flatRight = Vector3.new(right.X, 0, right.Z)
-        if flatLook.Magnitude > .001 then gyro.CFrame = CFrame.new(root.Position, root.Position + flatLook) end
+        gyro.CFrame = CFrame.new(root.Position, root.Position + look)
         local input = humanoid.MoveDirection
         local desiredVelocity = Vector3.zero
         if input.Magnitude > .001 then
