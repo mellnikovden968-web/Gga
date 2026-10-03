@@ -574,7 +574,7 @@ function refreshCanvas()
         visualContent.CanvasSize = UDim2.fromOffset(0, math.max(visualCols[1].AbsoluteSize.Y, visualCols[2].AbsoluteSize.Y) + 165)
         mainContent.CanvasSize = UDim2.fromOffset(0, math.max(mainCols[1].AbsoluteSize.Y, mainCols[2].AbsoluteSize.Y) + 165)
         worldContent.CanvasSize = UDim2.fromOffset(0, math.max(worldCols[1].AbsoluteSize.Y, worldCols[2].AbsoluteSize.Y) + 130)
-        local embeddedEmotes = emotesContent:FindFirstChild("NoirEmbeddedEmotesCanvas")
+        local embeddedEmotes = emotesContent:FindFirstChild("NoirEmotesNative") or emotesContent:FindFirstChild("NoirEmbeddedEmotesCanvas")
         if embeddedEmotes then
             emotesContent.CanvasSize = UDim2.fromOffset(0, embeddedEmotes.Position.Y.Offset + embeddedEmotes.Size.Y.Offset + 16)
         else
@@ -3463,8 +3463,9 @@ end)
 -- Full 7yd7 Emotes port, hosted in Noir's native Emotes page instead of as an external ODH plugin.
 getgenv().__NoirEmotesContext = {
     container = emotesContent,
+    theme = { base = C.base, panel = C.panel, surface = C.surface, card = C.card, button = C.btn, accent = C.accent, text = C.text, dim = C.dim, border = C.border },
     SetCanvasHeight = function(height)
-        emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(200, tonumber(height) or 656))
+        emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(200, tonumber(height) or 664))
     end,
     Notify = function(textValue, duration) notify("Emotes: " .. tostring(textValue), duration or 3) end,
 }
@@ -4115,603 +4116,291 @@ local function RefreshCatalog()
 end
 runtime.RefreshCatalog=RefreshCatalog
 
--- Separate, responsive card browser. No access to ODH's private GUI hierarchy.
+-- Native Noir-styled Emotes page. It uses the supplied script's catalog, persistence and playback core.
 do
-    local UI={cards={},connections={},searchToken=0,renderToken=0}
-    runtime.browser=UI
-    local C={navy=Color3.fromRGB(7,20,35),teal=Color3.fromRGB(9,72,76),
-        panel=Color3.fromRGB(10,40,49),accent=Color3.fromRGB(79,235,182),
-        white=Color3.fromRGB(235,247,251),muted=Color3.fromRGB(151,185,195)}
-    local function Make(class,props,parent)
-        local obj=Instance.new(class)
-        for key,value in pairs(props or {}) do obj[key]=value end
-        obj.Parent=parent
-        return obj
+    local UI = { connections = {}, cards = {}, settingsOpen = false, searchToken = 0 }
+    runtime.browser = UI
+    local theme = shared.theme or {}
+    local C = {
+        base = theme.base or Color3.fromRGB(9, 10, 13),
+        panel = theme.panel or Color3.fromRGB(16, 18, 22),
+        surface = theme.surface or Color3.fromRGB(24, 27, 32),
+        card = theme.card or Color3.fromRGB(20, 24, 28),
+        button = theme.button or Color3.fromRGB(34, 38, 44),
+        accent = theme.accent or Color3.fromRGB(98, 230, 144),
+        text = theme.text or Color3.fromRGB(240, 243, 246),
+        dim = theme.dim or Color3.fromRGB(147, 156, 166),
+        border = theme.border or Color3.fromRGB(68, 75, 84),
+        danger = Color3.fromRGB(245, 142, 142),
+    }
+    local function Make(class, properties, parent)
+        local instance = Instance.new(class)
+        for key, value in pairs(properties or {}) do instance[key] = value end
+        instance.Parent = parent
+        return instance
     end
-    local function Round(obj,radius)
-        Make("UICorner",{CornerRadius=UDim.new(0,radius or 12)},obj)
+    local function Round(instance, radius)
+        return Make("UICorner", { CornerRadius = UDim.new(0, radius or 10) }, instance)
     end
-    local function Stroke(obj,color,transparency,thickness)
-        return Make("UIStroke",{Color=color or C.accent,Transparency=transparency or .75,Thickness=thickness or 1},obj)
+    local function Stroke(instance, color, transparency, thickness)
+        return Make("UIStroke", { Color = color or C.border, Transparency = transparency or .45, Thickness = thickness or 1 }, instance)
     end
-    local function Gradient(obj,a,b,rotation)
-        Make("UIGradient",{Color=ColorSequence.new(a,b),Rotation=rotation or 35},obj)
+    local function Text(parent, value, size, position, dimensions, color)
+        return Make("TextLabel", {
+            BackgroundTransparency = 1, Text = value or "", TextColor3 = color or C.text,
+            Font = Enum.Font.Gotham, TextSize = size or 14, TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Center, Position = position or UDim2.new(), Size = dimensions or UDim2.new(1,0,1,0),
+        }, parent)
     end
-    local function Text(parent,text,size,pos,dimensions)
-        return Make("TextLabel",{BackgroundTransparency=1,Text=text,TextColor3=C.white,
-            Font=Enum.Font.GothamMedium,TextSize=size,TextXAlignment=Enum.TextXAlignment.Left,
-            TextTruncate=Enum.TextTruncate.AtEnd,Position=pos,Size=dimensions},parent)
+    local function Button(parent, value, position, dimensions)
+        local button = Make("TextButton", {
+            BackgroundColor3 = C.button, BackgroundTransparency = .06, BorderSizePixel = 0,
+            Text = value or "", TextColor3 = C.text, Font = Enum.Font.GothamMedium,
+            TextSize = 13, AutoButtonColor = false, Position = position or UDim2.new(), Size = dimensions or UDim2.new(),
+        }, parent)
+        Round(button, 10); Stroke(button, C.border, .52)
+        button.MouseEnter:Connect(function() if button.Parent then button.BackgroundColor3 = C.surface end end)
+        button.MouseLeave:Connect(function() if button.Parent then button.BackgroundColor3 = C.button end end)
+        return button
     end
-    local function Button(parent,text,pos,dimensions)
-        local b=Make("TextButton",{Text=text,TextColor3=C.white,Font=Enum.Font.GothamMedium,TextSize=15,
-            AutoButtonColor=true,Active=true,BackgroundColor3=C.panel,BackgroundTransparency=.08,BorderSizePixel=0,Position=pos,Size=dimensions},parent)
-        Round(b,9);return b
+    local function Connect(signal, callback)
+        local connection = signal:Connect(callback)
+        UI.connections[#UI.connections + 1] = connection
+        return connection
     end
-    local function Box(parent,placeholder,pos,dimensions)
-        local b=Make("TextBox",{Text="",PlaceholderText=placeholder,PlaceholderColor3=C.muted,TextColor3=C.white,
-            Font=Enum.Font.Gotham,TextSize=15,TextXAlignment=Enum.TextXAlignment.Left,
-            ClearTextOnFocus=false,BackgroundColor3=C.navy,BackgroundTransparency=.08,BorderSizePixel=0,Position=pos,Size=dimensions},parent)
-        Round(b,9)
-        Make("UIPadding",{PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,placeholder=="Search name or ID..." and 40 or 10)},b)
-        return b
-    end
-    local function Connect(signal,fn)
-        local connection=signal:Connect(fn);UI.connections[#UI.connections+1]=connection;return connection
-    end
-    local function SyncNative()
-        if runtime.SyncNative then runtime.SyncNative() end
-    end
-    local function Commit()
-        SaveSettings();SyncNative()
-    end
-    local function Focused(box)
-        local ok,value=pcall(function() return box:IsFocused() end)
-        return ok and value
-    end
-    local function SetChoice(item)
-        prefs.selected={id=item.id,name=item.name};Commit();SelectionLabel()
-    end
-    -- Floating, draggable emote shortcuts. Independent of favorites/playback state.
-    UI.quickButtons={}
-    local function QuickViewport()
-        local viewport=UI.canvas and UI.canvas.AbsoluteSize
-        if not viewport or viewport.X<1 or viewport.Y<1 then
-            viewport=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(900,600)
-        end
-        return viewport
-    end
-    local function PlaceQuick(record)
-        local vp=QuickViewport()
-        local saved=prefs.shortcuts[record.key]
-        if not saved then return end
-        local x=math.clamp(saved.x*vp.X,38,math.max(38,vp.X-38))
-        local y=math.clamp(saved.y*vp.Y,38,math.max(38,vp.Y-38))
-        record.button.Position=UDim2.fromOffset(x,y)
-    end
-    local function RefreshQuickVisuals()
-        for _,record in pairs(UI.quickButtons) do
-            local playing=runtime.track and runtime.playing and runtime.playing.id==record.item.id
-            record.outline.Color=playing and C.accent or C.muted
-            record.outline.Transparency=playing and .05 or .3
-            record.button.Visible=UI.root~=nil and not UI.hidden
-        end
-    end
-    local function CreateQuick(key,saved)
-        local button=Make("ImageButton",{Name="QuickEmote_"..key,AnchorPoint=Vector2.new(.5,.5),
-            Size=UDim2.fromOffset(56,56),BackgroundColor3=C.navy,BackgroundTransparency=.58,
-            Image="rbxthumb://type=Asset&id="..key.."&w=420&h=420",ScaleType=Enum.ScaleType.Fit,
-            BorderSizePixel=0,AutoButtonColor=true,Active=true,ZIndex=50,Visible=false},UI.canvas)
-        Round(button,11)
-        local record={button=button,key=key,item={id=saved.id,name=saved.name},outline=Stroke(button,C.muted,.3,1.5),moved=false}
-        UI.quickButtons[key]=record
-        button.InputBegan:Connect(function(input)
-            if not runtime.alive then return end
-            if input.UserInputType~=Enum.UserInputType.Touch and input.UserInputType~=Enum.UserInputType.MouseButton1 then return end
-            record.moved=false;record.suppressUntil=nil
-            UI.quickDrag={record=record,input=input,start=input.Position,
-                center=Vector2.new(button.Position.X.Offset,button.Position.Y.Offset)}
-        end)
-        button.Activated:Connect(function()
-            if not runtime.alive or not prefs.shortcuts[key] then return end
-            if record.moved or (record.suppressUntil and os.clock()<record.suppressUntil) then return end
-            SetChoice(record.item)
-            -- Every tap starts a new single playback by default; never starts from dragging.
-            Play(record.item,false)
-        end)
-        PlaceQuick(record)
-    end
-    function runtime.SyncQuickButtons()
-        if not UI.canvas or not UI.root then return end
-        for key,record in pairs(UI.quickButtons) do
-            if not prefs.shortcuts[key] then
-                if UI.quickDrag and UI.quickDrag.record==record then UI.quickDrag=nil end
-                record.button:Destroy();UI.quickButtons[key]=nil
-            end
-        end
-        for key,saved in pairs(prefs.shortcuts) do
-            if not UI.quickButtons[key] then CreateQuick(key,saved) end
-        end
-        RefreshQuickVisuals()
-    end
-    function runtime.ClearQuickButtons()
-        prefs.shortcuts={};SaveSettings();runtime.SyncQuickButtons()
-        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
-    end
-    local function ToggleQuick(item)
-        local key=IdText(item.id)
-        if prefs.shortcuts[key] then
-            prefs.shortcuts[key]=nil
-        else
-            local count=0
-            for _ in pairs(prefs.shortcuts) do count=count+1 end
-            if count>=MAX_SHORTCUTS then Notify("Up to "..MAX_SHORTCUTS.." screen buttons. Unpin one first.");return end
-            local vp=QuickViewport()
-            local firstY=math.max(48,vp.Y*.3)
-            local rows=math.max(1,math.floor((vp.Y-38-firstY)/78)+1)
-            local x=math.clamp(vp.X-52-math.floor(count/rows)*78,38,math.max(38,vp.X-38))
-            local y=math.clamp(firstY+(count%rows)*78,38,math.max(38,vp.Y-38))
-            prefs.shortcuts[key]={id=item.id,name=item.name,x=x/vp.X,y=y/vp.Y}
-        end
-        -- Pinning does not change native controls. Do not route this through
-        -- SyncNative (which invokes host UI setters and can delay/fail a touch).
-        runtime.SyncQuickButtons()
-        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    local function Save()
         SaveSettings()
     end
-    local function QuickInputChanged(input)
-        local drag=UI.quickDrag
-        if not drag then return end
-        if input~=drag.input and not (drag.input.UserInputType==Enum.UserInputType.MouseButton1 and input.UserInputType==Enum.UserInputType.MouseMovement) then return end
-        local dx,dy=input.Position.X-drag.start.X,input.Position.Y-drag.start.Y
-        if not drag.record.moved and dx*dx+dy*dy<64 then return end
-        drag.record.moved=true
-        local saved=prefs.shortcuts[drag.record.key]
-        if not saved then UI.quickDrag=nil;return end
-        local vp=QuickViewport()
-        saved.x=math.clamp((drag.center.X+dx)/vp.X,0,1)
-        saved.y=math.clamp((drag.center.Y+dy)/vp.Y,0,1)
-        PlaceQuick(drag.record)
+    local function SetSelected(item)
+        if not item then return end
+        prefs.selected = { id = item.id, name = item.name }
+        Save()
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
     end
-    local function QuickInputEnded(input)
-        local drag=UI.quickDrag
-        if not drag or drag.input~=input then return end
-        UI.quickDrag=nil
-        if drag.record.moved then
-            drag.record.suppressUntil=os.clock()+.3
-            SaveSettings() -- only on drop, never on every drag frame
-        end
+    local function ToggleFavorite(item)
+        local key = IdText(item.id)
+        if prefs.favorites[key] then prefs.favorites[key] = nil else prefs.favorites[key] = { id = item.id, name = item.name } end
+        Save()
+        if prefs.favoritesOnly then Filter(false) elseif runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
     end
-    local function SetVisible(value)
-        if not UI.root then return end
-        UI.hidden=false
-        UI.root.Visible=value
-        if UI.launcher then UI.launcher.Visible=false end
-        if not value and UI.setSettingsVisible then UI.setSettingsVisible(false) end
-        RefreshQuickVisuals()
-        if value and runtime.RenderCards then runtime.RenderCards() end
+    local function SetLoop(value)
+        prefs.loop = value == true
+        Save()
+        if runtime.track then pcall(function() runtime.track.Looped = prefs.loop end) end
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+    local function SetMove(value)
+        prefs.walk = value == true
+        Save()
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+    local function SetSpeed(value)
+        prefs.speed = math.clamp(math.floor((tonumber(value) or prefs.speed) * 100 + .5) / 100, 0, 3)
+        Save()
+        if runtime.track then pcall(function() runtime.track:AdjustSpeed(prefs.speed) end) end
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
     end
     local function Layout()
-        if not UI.root then return end
-        local viewport=UI.canvas.AbsoluteSize
-        if viewport.X<1 or viewport.Y<1 then
-            viewport=workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(900,600)
-        end
-        local width=math.max(240,math.min(1040,viewport.X-24))
-        local height=math.max(240,math.min(650,viewport.Y-24))
-        UI.root.Size=UDim2.fromOffset(width,height)
-        if UI.center then
-            UI.center=Vector2.new(math.clamp(UI.center.X,width/2,math.max(width/2,viewport.X-width/2)),
-                math.clamp(UI.center.Y,height/2,math.max(height/2,viewport.Y-height/2)))
-            UI.root.Position=UDim2.fromOffset(UI.center.X,UI.center.Y)
-        else UI.root.Position=UDim2.fromScale(.5,.5) end
-        local columns=width>=760 and 3 or (width>=500 and 2 or 1)
-        local cellWidth=math.floor((width-48-(columns-1)*12)/columns)
-        local short=height<400
-        local scrollTop=short and 128 or 143
-        local availableHeight=math.max(1,height-scrollTop-68)
-        UI.viewHeight=availableHeight
-        UI.scroll.Position=UDim2.fromOffset(16,scrollTop)
-        UI.scroll.Size=UDim2.new(1,-32,1,-(scrollTop+68))
-        local cellHeight=math.max(120,math.min(250,math.floor(cellWidth*.75),availableHeight-8))
-        UI.grid.CellSize=UDim2.fromOffset(cellWidth,cellHeight)
-        UI.grid.FillDirectionMaxCells=columns
-        UI.columns=columns
-        UI.root.BackgroundTransparency=prefs.windowTransparency/100
-        UI.root.BackgroundColor3=Color3.new(1,1,1) -- gradient supplies color, not a second dark multiplier
-        local rows=math.ceil(#UI.cards/columns)
-        UI.scroll.CanvasSize=UDim2.fromOffset(0,math.max(0,rows*(cellHeight+12)-12)+8)
-        UI.compactCards=cellHeight<180
-        local thumbAreaWidth=math.max(40,cellWidth-(UI.compactCards and 82 or 30))
-        local thumbAreaHeight=math.max(36,cellHeight-(UI.compactCards and 58 or 100))
-        local thumbSize=math.floor(math.min(thumbAreaWidth,thumbAreaHeight)*prefs.thumbnailSize/100)
-        for _,card in ipairs(UI.cards) do
-            card.frame.BackgroundTransparency=math.clamp(prefs.windowTransparency/100*.65,0,.35)
-            card.image.Size=UDim2.fromOffset(thumbSize,thumbSize)
-            if UI.compactCards then
-                card.title.Size=UDim2.new(1,-70,0,34)
-                card.image.Position=UDim2.fromOffset(12+thumbAreaWidth/2,48+thumbAreaHeight/2)
-                local pinHeight=math.min(44,math.max(22,cellHeight-96))
-                local pinTop=44+math.max(0,(cellHeight-95-pinHeight)/2)
-                card.star.Position=UDim2.new(1,-56,0,3)
-                card.pin.Size=UDim2.fromOffset(44,pinHeight)
-                card.pin.Position=UDim2.new(1,-56,0,pinTop)
-                card.dot.Position=UDim2.new(1,-34,0,pinTop+pinHeight/2)
-                card.play.Position=UDim2.new(1,-56,1,-51)
-                card.play.Size=UDim2.fromOffset(44,40)
-                card.play.TextSize=22
-                card.pin.BackgroundTransparency=1
-            else
-                card.title.Size=UDim2.new(1,-24,0,34)
-                card.image.Position=UDim2.fromOffset(cellWidth/2,44+thumbAreaHeight/2)
-                card.star.Position=UDim2.new(0,10,1,-52)
-                card.pin.Size=UDim2.fromOffset(44,44)
-                card.pin.Position=UDim2.new(0,58,1,-52)
-                card.dot.Position=UDim2.new(0,80,1,-30)
-                card.play.Position=UDim2.new(0,110,1,-52)
-                card.play.Size=UDim2.new(1,-122,0,44)
-                card.play.TextSize=14
-                card.pin.BackgroundTransparency=.65
-            end
-        end
-        local narrow=width<500
-        UI.narrow=narrow
-        local searchY=short and 46 or 56
-        local searchHeight=short and 38 or 40
-        UI.search.Position=UDim2.fromOffset(16,searchY)
-        UI.search.Size=UDim2.new(1,narrow and -128 or -162,0,searchHeight)
-        UI.favorites.Position=UDim2.new(1,narrow and -104 or -138,0,searchY)
-        UI.favorites.Size=UDim2.fromOffset(narrow and 88 or 122,searchHeight)
-        UI.summary.Position=UDim2.fromOffset(18,short and 88 or 103)
-        UI.random.Position=UDim2.new(1,-186,0,short and 88 or 102)
-        UI.stop.Position=UDim2.new(1,-94,0,short and 88 or 102)
-        UI.sheet.Size=UDim2.fromOffset(math.min(380,width-24),math.min(460,height-24))
-        if UI.alpha and not Focused(UI.alpha) then UI.alpha.Text=tostring(prefs.windowTransparency) end
-        if UI.thumb and not Focused(UI.thumb) then UI.thumb.Text=tostring(prefs.thumbnailSize) end
-        for _,record in pairs(UI.quickButtons) do PlaceQuick(record) end
+        if not (UI.root and UI.cardsScroll) then return end
+        local size = UI.root.AbsoluteSize
+        if size.X < 1 or size.Y < 1 then return end
+        local narrow = size.X < 570
+        local veryNarrow = size.X < 410
+        UI.search.Position = UDim2.fromOffset(18, 68)
+        UI.search.Size = UDim2.new(1, narrow and -138 or -268, 0, 38)
+        UI.favoriteFilter.Position = UDim2.new(1, narrow and -112 or -242, 0, 68)
+        UI.favoriteFilter.Size = UDim2.fromOffset(narrow and 94 or 118, 38)
+        UI.settingsButton.Position = UDim2.new(1, narrow and -18 or -116, 0, 18)
+        UI.settingsButton.AnchorPoint = Vector2.new(1, 0)
+        UI.settingsButton.Size = UDim2.fromOffset(narrow and 86 or 98, 32)
+        UI.random.Position = UDim2.new(1, narrow and -18 or -18, 0, 110)
+        UI.random.AnchorPoint = Vector2.new(1, 0)
+        UI.random.Size = UDim2.fromOffset(narrow and 82 or 94, 30)
+        UI.stop.Position = UDim2.new(1, narrow and -108 or -122, 0, 110)
+        UI.stop.AnchorPoint = Vector2.new(1, 0)
+        UI.stop.Size = UDim2.fromOffset(narrow and 82 or 94, 30)
+        UI.summary.Position = UDim2.fromOffset(20, 112)
+        UI.summary.Size = UDim2.new(1, narrow and -200 or -260, 0, 28)
+        local top, footer = 148, 58
+        UI.cardsScroll.Position = UDim2.fromOffset(18, top)
+        UI.cardsScroll.Size = UDim2.new(1, -36, 1, -(top + footer + 10))
+        UI.footer.Position = UDim2.new(0, 18, 1, -54)
+        UI.footer.Size = UDim2.new(1, -36, 0, 40)
+        local available = math.max(1, UI.cardsScroll.AbsoluteSize.X - 12)
+        local columns = available >= 780 and 3 or (available >= 470 and 2 or 1)
+        local padding = 12
+        local cellWidth = math.floor((available - padding * (columns - 1)) / columns)
+        local cellHeight = veryNarrow and 150 or math.clamp(math.floor(cellWidth * .72), 155, 230)
+        UI.grid.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
+        UI.grid.FillDirectionMaxCells = columns
+        local rows = math.ceil(#UI.cards / columns)
+        UI.cardsScroll.CanvasSize = UDim2.fromOffset(0, math.max(0, rows * (cellHeight + padding) - padding + 8))
+        UI.settings.Size = UDim2.fromOffset(math.min(290, math.max(230, size.X - 36)), math.min(470, math.max(250, size.Y - 96)))
+        UI.settings.Position = UDim2.new(1, -18, 0, 58)
+        UI.settings.AnchorPoint = Vector2.new(1, 0)
     end
-    runtime.ApplyBrowserAppearance=Layout
-    function runtime.ResetBrowserPosition()
-        UI.center=nil;Layout()
-    end
+    runtime.ApplyBrowserAppearance = Layout
+    runtime.ResetBrowserPosition = function() Layout() end
     local function UpdateStatus()
         if not UI.root then return end
-        UI.status.Text=runtime.status or "Ready — tap a card's play button"
-        UI.summary.Text=runtime.filtering and "Searching..." or (#runtime.filtered.." emotes")
-        UI.favorites.Text=prefs.favoritesOnly and (UI.narrow and "★ Saved" or "★ Favorites") or (UI.narrow and "☆ Saved" or "☆ Favorites")
-        UI.favorites.BackgroundColor3=prefs.favoritesOnly and C.teal or C.panel
-        UI.clearSearch.Visible=prefs.query~=""
-        UI.favorites.TextColor3=prefs.favoritesOnly and C.accent or C.white
-        UI.loop.Text=prefs.loop and "Loop: ON" or "Loop: OFF"
-        UI.loop.TextColor3=prefs.loop and C.accent or C.white
-        UI.walk.Text=prefs.walk and "Move: ON" or "Move: OFF"
-        UI.walk.TextColor3=prefs.walk and C.accent or C.white
-        if not Focused(UI.speed) then UI.speed.Text=tostring(prefs.speed) end
-        if not Focused(UI.search) and UI.search.Text~=prefs.query then
-            UI.syncing=true;UI.search.Text=prefs.query;UI.syncing=false
-        end
-        local pages=math.max(1,math.ceil(#runtime.filtered/PAGE_SIZE))
-        UI.page.Text="Page "..runtime.page.." / "..pages.."  ·  tap to jump"
-        UI.previous.TextTransparency=runtime.page<=1 and .6 or 0
-        UI.next.TextTransparency=runtime.page>=pages and .6 or 0
-        for _,card in ipairs(UI.cards) do
-            local selected=prefs.selected and prefs.selected.id==card.item.id
-            local playing=runtime.track and runtime.playing and runtime.playing.id==card.item.id
-            card.outline.Color=selected and C.accent or C.muted
-            card.outline.Transparency=selected and .1 or .82
-            card.star.Text=prefs.favorites[IdText(card.item.id)] and "★" or "☆"
-            card.star.TextColor3=prefs.favorites[IdText(card.item.id)] and C.accent or C.white
-            card.dot.BackgroundTransparency=prefs.shortcuts[IdText(card.item.id)] and 0 or 1
-            card.play.Text=playing and (UI.compactCards and "■" or "■ Stop") or (UI.compactCards and "▶" or "▶ Play")
-            card.play.TextColor3=playing and C.navy or C.teal
-            card.play.BackgroundColor3=playing and C.accent or C.white
+        local pages = math.max(1, math.ceil(#runtime.filtered / PAGE_SIZE))
+        UI.page.Text = "Page " .. runtime.page .. " / " .. pages
+        UI.status.Text = runtime.status or "Ready — select an emote and press Play"
+        UI.summary.Text = runtime.filtering and "Searching emotes..." or (tostring(#runtime.filtered) .. " emotes")
+        UI.favoriteFilter.Text = prefs.favoritesOnly and "★ Saved" or "☆ Saved"
+        UI.favoriteFilter.TextColor3 = prefs.favoritesOnly and C.accent or C.text
+        UI.favoriteFilter.BackgroundColor3 = prefs.favoritesOnly and C.surface or C.button
+        UI.loop.Text = prefs.loop and "Loop  ON" or "Loop  OFF"
+        UI.loop.TextColor3 = prefs.loop and C.accent or C.text
+        UI.move.Text = prefs.walk and "Move  ON" or "Move  OFF"
+        UI.move.TextColor3 = prefs.walk and C.accent or C.text
+        UI.speedValue.Text = "Speed " .. tostring(prefs.speed)
+        for _, card in ipairs(UI.cards) do
+            local selected = prefs.selected and prefs.selected.id == card.item.id
+            local playing = runtime.track and runtime.playing and runtime.playing.id == card.item.id
+            card.stroke.Color = selected and C.accent or C.border
+            card.stroke.Transparency = selected and .08 or .62
+            card.star.Text = prefs.favorites[IdText(card.item.id)] and "★" or "☆"
+            card.star.TextColor3 = prefs.favorites[IdText(card.item.id)] and C.accent or C.text
+            card.play.Text = playing and "■  Stop" or "▶  Play"
+            card.play.BackgroundColor3 = playing and Color3.fromRGB(71, 91, 78) or C.button
+            card.play.TextColor3 = playing and C.accent or C.text
         end
     end
-    local updateCards=UpdateStatus
-    UpdateStatus=function() updateCards();RefreshQuickVisuals() end
-    runtime.UpdateCardStatus=UpdateStatus
-    local function BuildCard(item,order)
-        local frame=Make("Frame",{Name="Emote_"..IdText(item.id),LayoutOrder=order,
-            BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=.14,BorderSizePixel=0,ClipsDescendants=true},UI.scroll)
-        Round(frame,17);Gradient(frame,Color3.fromRGB(9,33,52),Color3.fromRGB(12,74,77),30)
-        local outline=Stroke(frame,C.muted,.82)
-        local title=Text(frame,item.name,14,UDim2.fromOffset(12,9),UDim2.new(1,-70,0,34))
-        title.TextWrapped=true;title.TextTruncate=Enum.TextTruncate.None;title.TextYAlignment=Enum.TextYAlignment.Top
-        local image=Make("ImageButton",{Name="Thumbnail",BackgroundTransparency=1,AutoButtonColor=false,
-            AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromOffset(80,100),Size=UDim2.fromOffset(90,90),
-            Image="rbxthumb://type=Asset&id="..IdText(item.id).."&w=420&h=420",ScaleType=Enum.ScaleType.Fit},frame)
-        -- Decorative ring is a SIBLING below the hit target, never a child that
-        -- can intercept input. Explicit Active/ZIndex also avoids thumbnail overlap.
-        local dot=Make("Frame",{Name="PinRing",AnchorPoint=Vector2.new(.5,.5),
-            Position=UDim2.new(1,-34,0,64),Size=UDim2.fromOffset(18,18),
-            BackgroundColor3=C.white,BackgroundTransparency=1,BorderSizePixel=0,
-            Active=false,ZIndex=19},frame)
-        Round(dot,30);Stroke(dot,C.accent,0,2)
-        local pin=Make("TextButton",{Name="ToggleScreenButton",Text="",BackgroundTransparency=1,
-            Position=UDim2.new(1,-56,0,44),Size=UDim2.fromOffset(44,44),
-            AutoButtonColor=false,Active=true,Selectable=true,ZIndex=20},frame)
-        pin.BackgroundColor3=C.panel;Round(pin,9)
-        pcall(function() pin.Interactable=true end)
-        local lastPinTap=-math.huge
-        local function PinTap()
-            if not runtime.alive or not UI.root or not UI.root.Visible then return end
-            local now=os.clock()
-            -- Mobile can emit TouchTap + Activated + MouseButton1Click for ONE tap.
-            if now-lastPinTap<.2 then return end
-            lastPinTap=now
-            local ok,err=pcall(ToggleQuick,item)
-            if not ok then
-                warn("[ODH Emotes] Screen button: "..tostring(err))
-                Notify("Could not toggle the screen button: "..tostring(err))
-            end
-        end
-        pin.Activated:Connect(PinTap)
-        pin.MouseButton1Click:Connect(PinTap)
-        pcall(function() pin.TouchTap:Connect(PinTap) end)
-        local star=Button(frame,"☆",UDim2.new(1,-56,0,3),UDim2.fromOffset(44,42))
-        star.BackgroundTransparency=1;star.TextSize=33
-        local play=Button(frame,"▶",UDim2.new(1,-56,1,-51),UDim2.fromOffset(44,40))
-        play.BackgroundColor3=C.white;play.TextColor3=C.teal;play.TextSize=22
-        local card={item=item,frame=frame,title=title,image=image,star=star,play=play,pin=pin,dot=dot,outline=outline}
-        UI.cards[#UI.cards+1]=card
-        image.Activated:Connect(function() if runtime.alive then SetChoice(item);UpdateStatus() end end)
-        star.Activated:Connect(function()
-            if not runtime.alive then return end
-            local key=IdText(item.id)
-            if prefs.favorites[key] then prefs.favorites[key]=nil else prefs.favorites[key]={id=item.id,name=item.name} end
-            Commit()
-            if prefs.favoritesOnly then Filter(false) else UpdateStatus() end
-        end)
-        play.Activated:Connect(function()
-            if not runtime.alive then return end
-            local playing=runtime.track and runtime.playing and runtime.playing.id==item.id
-            SetChoice(item)
-            if playing then StopCurrent("Stopped") else Play(item,false) end
+    runtime.UpdateCardStatus = UpdateStatus
+    local function BuildCard(item, order)
+        local card = Make("Frame", { Name = "Emote_" .. IdText(item.id), LayoutOrder = order, BackgroundColor3 = C.card, BorderSizePixel = 0, ClipsDescendants = true }, UI.cardsScroll)
+        Round(card, 14)
+        local outline = Stroke(card, C.border, .62, 1)
+        Make("Frame", { BackgroundColor3 = C.accent, BackgroundTransparency = .92, BorderSizePixel = 0, Size = UDim2.new(1,0,0,3) }, card)
+        local title = Text(card, item.name, 15, UDim2.fromOffset(12, 10), UDim2.new(1, -68, 0, 36))
+        title.TextWrapped = true; title.TextTruncate = Enum.TextTruncate.AtEnd; title.Font = Enum.Font.GothamMedium; title.TextYAlignment = Enum.TextYAlignment.Top
+        local star = Button(card, "☆", UDim2.new(1, -50, 0, 8), UDim2.fromOffset(38, 36))
+        star.BackgroundTransparency = 1; star.TextSize = 27
+        local image = Make("ImageButton", { BackgroundTransparency = 1, AutoButtonColor = false, AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5, 0, .52, 0), Size = UDim2.fromOffset(74,74), Image = "rbxthumb://type=Asset&id=" .. IdText(item.id) .. "&w=420&h=420", ScaleType = Enum.ScaleType.Fit }, card)
+        local play = Button(card, "▶  Play", UDim2.new(0, 12, 1, -48), UDim2.new(1, -24, 0, 36))
+        local record = { item = item, stroke = outline, star = star, play = play }
+        UI.cards[#UI.cards + 1] = record
+        Connect(image.Activated, function() SetSelected(item) end)
+        Connect(star.Activated, function() ToggleFavorite(item) end)
+        Connect(play.Activated, function()
+            local playing = runtime.track and runtime.playing and runtime.playing.id == item.id
+            SetSelected(item)
+            if playing then StopCurrent("Stopped") else Play(item, false) end
             UpdateStatus()
         end)
     end
     local function RenderCards()
-        if not UI.root or not UI.root.Visible then return end
-        local first=(runtime.page-1)*PAGE_SIZE+1
-        local last=math.min(runtime.page*PAGE_SIZE,#runtime.filtered)
-        local same=UI.renderPage==runtime.page and #UI.cards==math.max(0,last-first+1)
-        if same then
-            for index,card in ipairs(UI.cards) do
-                if card.item~=runtime.filtered[first+index-1] then same=false;break end
-            end
+        if not UI.root then return end
+        for _, record in ipairs(UI.cards) do
+            if record.frame then record.frame:Destroy() end
         end
-        if not same then
-            for _,card in ipairs(UI.cards) do card.frame:Destroy() end
-            UI.cards={}
-            UI.scroll.CanvasPosition=Vector2.zero
-            for index=first,last do BuildCard(runtime.filtered[index],index-first+1) end
-            UI.renderPage=runtime.page
+        -- Frame references are retained only by UI.cards, so use child cleanup and rebuild the compact page.
+        for _, child in ipairs(UI.cardsScroll:GetChildren()) do
+            if child:IsA("Frame") and string.sub(child.Name, 1, 6) == "Emote_" then child:Destroy() end
         end
-        UI.empty.Visible=#runtime.filtered==0
-        UI.showAll.Visible=#runtime.filtered==0 and not runtime.filtering
-        UI.empty.Text=runtime.filtering and "Searching..." or (prefs.favoritesOnly and "No favorites here yet.\nTap a star on any emote to add it." or "No emotes match this search.")
-        Layout();UpdateStatus()
-        if not same then
-            UI.renderToken=UI.renderToken+1
-            local ticket=UI.renderToken
-            UI.scroll.CanvasPosition=Vector2.zero
-            -- Reassert after layout; never carry an old bottom scroll offset to a new page.
-            task.defer(function()
-                if runtime.alive and UI.root and UI.renderToken==ticket then
-                    UI.scroll.CanvasPosition=Vector2.zero
-                end
-            end)
-        end
+        UI.cards = {}
+        local first = (runtime.page - 1) * PAGE_SIZE + 1
+        local last = math.min(runtime.page * PAGE_SIZE, #runtime.filtered)
+        for index = first, last do BuildCard(runtime.filtered[index], index - first + 1) end
+        UI.empty.Visible = #runtime.filtered == 0
+        UI.empty.Text = runtime.filtering and "Searching..." or (prefs.favoritesOnly and "No saved emotes yet." or "No emotes match your search.")
+        UI.cardsScroll.CanvasPosition = Vector2.zero
+        Layout(); UpdateStatus()
     end
-    runtime.RenderCards=RenderCards
+    runtime.RenderCards = RenderCards
     local function Build()
-        local oldCanvas=container:FindFirstChild("NoirEmbeddedEmotesCanvas")
-        if oldCanvas then oldCanvas:Destroy() end
-        -- This is the browser from the supplied script, now drawn directly inside Noir's Emotes page.
-        UI.canvas=Make("Frame",{Name="NoirEmbeddedEmotesCanvas",Position=UDim2.fromOffset(8,8),Size=UDim2.new(1,-16,0,640),
-            BackgroundTransparency=1,Active=true},container)
-        if shared.SetCanvasHeight then shared.SetCanvasHeight(656) end
-        UI.root=Make("Frame",{Name="CardBrowser",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),
-            Size=UDim2.fromOffset(1000,600),BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=prefs.windowTransparency/100,BorderSizePixel=0,ClipsDescendants=true,Active=true},UI.canvas)
-        Round(UI.root,18);Stroke(UI.root,C.muted,.4);Gradient(UI.root,C.navy,Color3.fromRGB(6,76,78),22)
-        local accent=Make("Frame",{Position=UDim2.fromOffset(0,0),Size=UDim2.new(1,0,0,3),BackgroundColor3=C.accent,BorderSizePixel=0},UI.root)
-        Gradient(accent,C.teal,C.accent,0)
-        local drag=Make("TextButton",{Name="DragHeader",Position=UDim2.fromOffset(0,3),Size=UDim2.new(1,-188,0,46),
-            BackgroundTransparency=1,Text="",AutoButtonColor=false,Active=true},UI.root)
-        Text(drag,"Emotes",23,UDim2.fromOffset(18,3),UDim2.new(1,-22,0,26))
-        Text(drag,"R15 · Noir Hub · v7",10,UDim2.fromOffset(19,29),UDim2.new(1,-24,0,14)).TextColor3=C.muted
-        UI.settings=Button(UI.root,"Settings",UDim2.new(1,-96,0,10),UDim2.fromOffset(80,36));UI.settings.TextSize=13
-        -- The browser permanently lives in the native Emotes tab; no separate minimize/close overlay is created.
-        local minimize=Button(UI.root,"—",UDim2.new(1,-52,0,10),UDim2.fromOffset(36,36));minimize.Visible=false
-        local close=Button(UI.root,"×",UDim2.new(1,-52,0,10),UDim2.fromOffset(36,36));close.Visible=false
-        UI.search=Box(UI.root,"Search name or ID...",UDim2.fromOffset(16,56),UDim2.new(1,-162,0,40))
-        UI.search.Text=prefs.query
-        UI.clearSearch=Button(UI.search,"×",UDim2.new(1,-36,0,0),UDim2.fromOffset(36,40))
-        UI.clearSearch.BackgroundTransparency=1;UI.clearSearch.TextSize=22
-        UI.favorites=Button(UI.root,"☆ Favorites",UDim2.new(1,-138,0,56),UDim2.fromOffset(122,40));UI.favorites.TextSize=13
-        Connect(UI.favorites.Activated,function()
-            prefs.favoritesOnly=not prefs.favoritesOnly;Commit();Filter(true);UpdateStatus()
-        end)
-        local function SearchNow()
-            if UI.syncing or not runtime.alive then return end
-            local value=UI.search.Text:sub(1,200)
-            if value==prefs.query then return end
-            prefs.query=value;Commit();Filter(true);UpdateStatus()
+        local old = container:FindFirstChild("NoirEmotesNative")
+        if old then old:Destroy() end
+        UI.root = Make("Frame", { Name = "NoirEmotesNative", Position = UDim2.fromOffset(12, 12), Size = UDim2.new(1, -24, 0, 640), BackgroundColor3 = C.base, BorderSizePixel = 0, ClipsDescendants = true }, container)
+        if shared.SetCanvasHeight then shared.SetCanvasHeight(664) end
+        Round(UI.root, 18); Stroke(UI.root, C.border, .35, 1.2)
+        local gradient = Make("UIGradient", { Color = ColorSequence.new(C.base, Color3.fromRGB(7, 30, 31)), Rotation = 20 }, UI.root)
+        Make("Frame", { BackgroundColor3 = C.accent, BorderSizePixel = 0, Size = UDim2.new(1,0,0,3) }, UI.root)
+        Text(UI.root, "EMOTES", 21, UDim2.fromOffset(18, 14), UDim2.new(1,-150,0,24)).Font = Enum.Font.GothamBold
+        Text(UI.root, "R15 ANIMATION LIBRARY", 10, UDim2.fromOffset(19, 39), UDim2.new(1,-150,0,16), C.dim)
+        UI.settingsButton = Button(UI.root, "Settings", UDim2.new(1,-116,0,18), UDim2.fromOffset(98,32))
+        UI.search = Make("TextBox", { BackgroundColor3 = C.surface, BorderSizePixel = 0, Text = prefs.query, PlaceholderText = "Search emote or ID...", PlaceholderColor3 = C.dim, TextColor3 = C.text, Font = Enum.Font.Gotham, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false }, UI.root)
+        Round(UI.search, 10); Stroke(UI.search, C.border, .55); Make("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 8) }, UI.search)
+        UI.favoriteFilter = Button(UI.root, "☆ Saved", UDim2.new(), UDim2.fromOffset(118,38))
+        UI.random = Button(UI.root, "Random", UDim2.new(), UDim2.fromOffset(94,30))
+        UI.stop = Button(UI.root, "■ Stop", UDim2.new(), UDim2.fromOffset(94,30)); UI.stop.TextColor3 = C.danger
+        UI.summary = Text(UI.root, "Loading emotes...", 12, UDim2.fromOffset(20,112), UDim2.new(1,-260,0,28), C.dim)
+        UI.cardsScroll = Make("ScrollingFrame", { BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = C.accent, CanvasSize = UDim2.fromOffset(0,0), ScrollingDirection = Enum.ScrollingDirection.Y, ElasticBehavior = Enum.ElasticBehavior.Never }, UI.root)
+        Make("UIPadding", { PaddingLeft = UDim.new(0,2), PaddingRight = UDim.new(0,8), PaddingTop = UDim.new(0,2), PaddingBottom = UDim.new(0,6) }, UI.cardsScroll)
+        UI.grid = Make("UIGridLayout", { SortOrder = Enum.SortOrder.LayoutOrder, CellPadding = UDim2.fromOffset(12,12), CellSize = UDim2.fromOffset(240,170) }, UI.cardsScroll)
+        UI.empty = Text(UI.root, "No emotes found", 16, UDim2.fromOffset(26,185), UDim2.new(1,-52,0,200), C.dim)
+        UI.empty.TextXAlignment = Enum.TextXAlignment.Center; UI.empty.TextYAlignment = Enum.TextYAlignment.Center; UI.empty.Visible = false
+        UI.footer = Make("Frame", { BackgroundTransparency = 1 }, UI.root)
+        UI.previous = Button(UI.footer, "‹", UDim2.fromOffset(0,0), UDim2.fromOffset(46,38)); UI.previous.TextSize = 28
+        UI.next = Button(UI.footer, "›", UDim2.new(1,-46,0,0), UDim2.fromOffset(46,38)); UI.next.TextSize = 28
+        UI.page = Text(UI.footer, "Page 1 / 1", 12, UDim2.fromOffset(54,0), UDim2.new(1,-108,0,38), C.dim); UI.page.TextXAlignment = Enum.TextXAlignment.Center
+        UI.status = Text(UI.footer, "Ready", 11, UDim2.fromOffset(2,39), UDim2.new(1,-4,0,14), C.dim)
+        UI.settings = Make("Frame", { BackgroundColor3 = C.panel, BorderSizePixel = 0, Visible = false, ZIndex = 20, ClipsDescendants = true }, UI.root)
+        Round(UI.settings, 14); Stroke(UI.settings, C.border, .2, 1.2)
+        Text(UI.settings, "EMOTE SETTINGS", 15, UDim2.fromOffset(16,14), UDim2.new(1,-32,0,24)).Font = Enum.Font.GothamBold
+        local function SettingsButton(label, y)
+            local button = Button(UI.settings, label, UDim2.fromOffset(16,y), UDim2.new(1,-32,0,36)); button.ZIndex = 21; return button
         end
-        Connect(UI.clearSearch.Activated,function()
-            UI.searchToken=UI.searchToken+1;prefs.query="";UI.syncing=true;UI.search.Text="";UI.syncing=false
-            Commit();Filter(true)
+        UI.loop = SettingsButton("Loop  OFF", 52)
+        UI.move = SettingsButton("Move  OFF", 96)
+        UI.speedMinus = SettingsButton("−", 140); UI.speedMinus.Size = UDim2.fromOffset(38,36)
+        UI.speedValue = SettingsButton("Speed 1", 140); UI.speedValue.Position = UDim2.fromOffset(62,140); UI.speedValue.Size = UDim2.new(1,-124,0,36)
+        UI.speedPlus = SettingsButton("+", 140); UI.speedPlus.Position = UDim2.new(1,-54,0,140); UI.speedPlus.Size = UDim2.fromOffset(38,36)
+        UI.custom = Make("TextBox", { BackgroundColor3 = C.surface, BorderSizePixel = 0, Position = UDim2.fromOffset(16,188), Size = UDim2.new(1,-32,0,36), Text = prefs.customId, PlaceholderText = "Custom animation ID", PlaceholderColor3 = C.dim, TextColor3 = C.text, Font = Enum.Font.Gotham, TextSize = 13, ClearTextOnFocus = false, ZIndex = 21 }, UI.settings)
+        Round(UI.custom, 9); Stroke(UI.custom, C.border, .5); Make("UIPadding", { PaddingLeft = UDim.new(0,10) }, UI.custom)
+        UI.playCustom = SettingsButton("Play custom animation", 232)
+        UI.refresh = SettingsButton("Refresh catalog", 276)
+        UI.closeSettings = SettingsButton("Close settings", 320)
+        Connect(UI.settingsButton.Activated, function() UI.settingsOpen = not UI.settingsOpen; UI.settings.Visible = UI.settingsOpen end)
+        Connect(UI.closeSettings.Activated, function() UI.settingsOpen = false; UI.settings.Visible = false end)
+        Connect(UI.loop.Activated, function() SetLoop(not prefs.loop) end)
+        Connect(UI.move.Activated, function() SetMove(not prefs.walk) end)
+        Connect(UI.speedMinus.Activated, function() SetSpeed(prefs.speed - .25) end)
+        Connect(UI.speedPlus.Activated, function() SetSpeed(prefs.speed + .25) end)
+        Connect(UI.refresh.Activated, RefreshCatalog)
+        Connect(UI.playCustom.Activated, function()
+            prefs.customId = UI.custom.Text:sub(1,200); Save()
+            local id = ParseId(prefs.customId)
+            if not id then Notify("Enter a valid animation ID."); return end
+            Play({ id = id, name = "Custom " .. IdText(id) }, true)
         end)
-        Connect(UI.search:GetPropertyChangedSignal("Text"),function()
-            if UI.syncing then return end
-            UI.clearSearch.Visible=UI.search.Text~=""
-            UI.searchToken=UI.searchToken+1
-            local ticket=UI.searchToken
-            task.delay(.3,function() if runtime.alive and ticket==UI.searchToken then SearchNow() end end)
+        Connect(UI.custom.FocusLost, function() prefs.customId = UI.custom.Text:sub(1,200); Save() end)
+        Connect(UI.favoriteFilter.Activated, function() prefs.favoritesOnly = not prefs.favoritesOnly; Save(); Filter(true) end)
+        Connect(UI.random.Activated, function()
+            if runtime.filtering or #runtime.filtered == 0 then Notify("No emotes available yet."); return end
+            local item = runtime.filtered[math.random(1,#runtime.filtered)]; SetSelected(item); Play(item,false)
         end)
-        Connect(UI.search.FocusLost,SearchNow)
-        UI.summary=Text(UI.root,"Loading...",11,UDim2.fromOffset(18,103),UDim2.new(1,-204,0,26));UI.summary.TextColor3=C.muted
-        local random=Button(UI.root,"Random",UDim2.new(1,-186,0,102),UDim2.fromOffset(84,32));random.TextSize=12
-        local stop=Button(UI.root,"■ Stop",UDim2.new(1,-94,0,102),UDim2.fromOffset(78,32));stop.TextSize=13
-        stop.TextColor3=Color3.fromRGB(255,184,178)
-        Connect(stop.Activated,function() StopCurrent("Stopped") end)
-        Connect(random.Activated,function()
-            if runtime.filtering then Notify("Search is still updating.");return end
-            if #runtime.filtered==0 then Notify("No matching emotes.");return end
-            local item=runtime.filtered[math.random(1,#runtime.filtered)]
-            SetChoice(item);Play(item,false);UpdateStatus()
+        Connect(UI.stop.Activated, function() StopCurrent("Stopped") end)
+        Connect(UI.previous.Activated, function() runtime.page = math.max(1, runtime.page - 1); RenderPage() end)
+        Connect(UI.next.Activated, function() runtime.page = runtime.page + 1; RenderPage() end)
+        Connect(UI.search:GetPropertyChangedSignal("Text"), function()
+            UI.searchToken = UI.searchToken + 1
+            local ticket = UI.searchToken
+            task.delay(.25, function()
+                if not runtime.alive or ticket ~= UI.searchToken then return end
+                prefs.query = UI.search.Text:sub(1,200); Save(); Filter(true)
+            end)
         end)
-        UI.scroll=Make("ScrollingFrame",{Name="Cards",Position=UDim2.fromOffset(16,143),Size=UDim2.new(1,-32,1,-211),
-            BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=4,ScrollBarImageColor3=C.accent,
-            AutomaticCanvasSize=Enum.AutomaticSize.None,CanvasSize=UDim2.fromOffset(0,0),ElasticBehavior=Enum.ElasticBehavior.Never,ScrollingDirection=Enum.ScrollingDirection.Y},UI.root)
-        Make("UIPadding",{PaddingTop=UDim.new(0,2),PaddingLeft=UDim.new(0,2),PaddingRight=UDim.new(0,10),PaddingBottom=UDim.new(0,6)},UI.scroll)
-        UI.grid=Make("UIGridLayout",{SortOrder=Enum.SortOrder.LayoutOrder,CellPadding=UDim2.fromOffset(12,12),
-            CellSize=UDim2.fromOffset(300,240)},UI.scroll)
-        UI.empty=Text(UI.root,"No emotes found",16,UDim2.new(0,28,0,149),UDim2.new(1,-56,1,-265))
-        UI.empty.TextWrapped=true;UI.empty.TextXAlignment=Enum.TextXAlignment.Center;UI.empty.Visible=false
-        UI.showAll=Button(UI.root,"Show all emotes",UDim2.new(.5,-85,1,-110),UDim2.fromOffset(170,38));UI.showAll.Visible=false
-        Connect(UI.showAll.Activated,function() prefs.favoritesOnly=false;prefs.query="";Commit();Filter(true) end)
-        local footer=Make("Frame",{Position=UDim2.new(0,16,1,-62),Size=UDim2.new(1,-32,0,56),BackgroundTransparency=1},UI.root)
-        local prev=Button(footer,"‹",UDim2.fromOffset(0,0),UDim2.fromOffset(44,38));prev.TextSize=28
-        local nextButton=Button(footer,"›",UDim2.new(1,-44,0,0),UDim2.fromOffset(44,38));nextButton.TextSize=28
-        UI.page=Button(footer,"Page 1",UDim2.fromOffset(50,0),UDim2.new(1,-100,0,38));UI.page.BackgroundTransparency=1;UI.page.TextSize=12
-        UI.pageEntry=Box(footer,"Go to page...",UDim2.fromOffset(50,0),UDim2.new(1,-100,0,38));UI.pageEntry.Visible=false
-        Connect(UI.page.Activated,function()
-            UI.pageEntry.Text=tostring(runtime.page);UI.pageEntry.Visible=true;UI.page.Visible=false
-            pcall(function() UI.pageEntry:CaptureFocus() end)
-        end)
-        Connect(UI.pageEntry.FocusLost,function()
-            local page=tonumber(UI.pageEntry.Text)
-            if page and page==page and page>0 and page<math.huge then runtime.page=math.floor(page);RenderPage() end
-            UI.pageEntry.Visible=false;UI.page.Visible=true
-        end)
-        UI.status=Text(footer,"Ready",11,UDim2.fromOffset(2,40),UDim2.new(1,-4,0,14));UI.status.TextColor3=C.muted
-        Connect(prev.Activated,function() runtime.page=runtime.page-1;RenderPage() end)
-        Connect(nextButton.Activated,function() runtime.page=runtime.page+1;RenderPage() end)
-        UI.previous=prev;UI.next=nextButton;UI.close=close;UI.minimize=minimize;UI.random=random;UI.stop=stop
-
-        -- One modal settings sheet: everything optional is out of the catalog's way.
-        UI.modal=Make("Frame",{Name="SettingsSheet",Size=UDim2.fromScale(1,1),BackgroundTransparency=1,
-            Visible=false,Active=true,ZIndex=100},UI.root)
-        local dismiss=Make("TextButton",{Text="",Size=UDim2.fromScale(1,1),BackgroundColor3=Color3.new(0,0,0),
-            BackgroundTransparency=.38,BorderSizePixel=0,AutoButtonColor=false,ZIndex=1},UI.modal)
-        UI.sheet=Make("Frame",{AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,-12,.5,0),Size=UDim2.fromOffset(380,420),
-            BackgroundColor3=C.navy,BorderSizePixel=0,Active=true,ZIndex=2},UI.modal)
-        Round(UI.sheet,16);Stroke(UI.sheet,C.muted,.6)
-        Text(UI.sheet,"Settings",19,UDim2.fromOffset(16,12),UDim2.new(1,-100,0,32))
-        UI.done=Button(UI.sheet,"Done",UDim2.new(1,-78,0,12),UDim2.fromOffset(62,34));UI.done.TextColor3=C.accent
-        local function SettingsVisible(visible)
-            UI.modal.Visible=visible;UI.root.ZIndex=visible and 60 or 1
-        end
-        UI.setSettingsVisible=SettingsVisible
-        Connect(UI.settings.Activated,function() SettingsVisible(not UI.modal.Visible) end)
-        Connect(UI.done.Activated,function() SettingsVisible(false) end)
-        Connect(dismiss.Activated,function() SettingsVisible(false) end)
-        UI.controls=Make("ScrollingFrame",{Position=UDim2.fromOffset(14,56),Size=UDim2.new(1,-28,1,-68),
-            BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=3,ScrollBarImageColor3=C.accent,
-            AutomaticCanvasSize=Enum.AutomaticSize.Y,CanvasSize=UDim2.fromOffset(0,0),ScrollingDirection=Enum.ScrollingDirection.Y},UI.sheet)
-        Make("UIListLayout",{FillDirection=Enum.FillDirection.Vertical,Padding=UDim.new(0,10),SortOrder=Enum.SortOrder.LayoutOrder},UI.controls)
-        local order=0
-        local function Row(title,height)
-            order=order+1
-            local row=Make("Frame",{LayoutOrder=order,Size=UDim2.new(1,-6,0,height or 44),BackgroundTransparency=1},UI.controls)
-            if title then Text(row,title,13,UDim2.fromOffset(0,0),UDim2.new(1,-156,1,0)) end
-            return row
-        end
-        local repeatRow=Row("Repeat")
-        UI.loop=Button(repeatRow,"Loop: OFF",UDim2.new(1,-144,0,0),UDim2.fromOffset(144,42))
-        local moveRow=Row("On movement")
-        UI.walk=Button(moveRow,"Move: OFF",UDim2.new(1,-144,0,0),UDim2.fromOffset(144,42))
-        Connect(UI.loop.Activated,function()
-            prefs.loop=not prefs.loop;Commit()
-            if runtime.track then pcall(function() runtime.track.Looped=prefs.loop end) end
-            UpdateStatus()
-        end)
-        Connect(UI.walk.Activated,function() prefs.walk=not prefs.walk;Commit();UpdateStatus() end)
-        local function Stepper(title,key,lo,hi,step)
-            local row=Row(title)
-            local minus=Button(row,"−",UDim2.new(1,-144,0,0),UDim2.fromOffset(38,42))
-            local box=Box(row,tostring(prefs[key]),UDim2.new(1,-100,0,0),UDim2.fromOffset(56,42))
-            box.TextXAlignment=Enum.TextXAlignment.Center
-            local plus=Button(row,"+",UDim2.new(1,-38,0,0),UDim2.fromOffset(38,42))
-            local function Set(value)
-                if value and value==value and value>-math.huge and value<math.huge then
-                    prefs[key]=math.clamp(math.floor(value*100+.5)/100,lo,hi);Commit()
-                    if key=="speed" and runtime.track then pcall(function() runtime.track:AdjustSpeed(prefs.speed) end) end
-                    Layout();UpdateStatus()
-                end
-                box.Text=tostring(prefs[key])
-            end
-            Connect(minus.Activated,function() Set(prefs[key]-step) end)
-            Connect(plus.Activated,function() Set(prefs[key]+step) end)
-            Connect(box.FocusLost,function() Set(tonumber(box.Text)) end)
-            return box,minus,plus
-        end
-        UI.speed,UI.speedMinus,UI.speedPlus=Stepper("Speed", "speed",0,3,.25)
-        UI.alpha,UI.alphaMinus,UI.alphaPlus=Stepper("Transparency %","windowTransparency",0,50,5)
-        UI.thumb,UI.thumbMinus,UI.thumbPlus=Stepper("Image size %","thumbnailSize",50,100,5)
-        local refreshRow=Row(nil)
-        UI.refresh=Button(refreshRow,"Refresh catalog",UDim2.new(),UDim2.new(1,0,0,42))
-        Connect(UI.refresh.Activated,RefreshCatalog)
-        local centerRow=Row(nil)
-        local center=Button(centerRow,"Center window",UDim2.new(),UDim2.new(1,0,0,42))
-        Connect(center.Activated,function() runtime.ResetBrowserPosition() end)
-        local help=Row(nil,74)
-        Text(help,"★ = favorite   ○ = screen button\nTap a page number to jump.\nDrag the header or a screen button.\nMove OFF stops the emote when walking.",11,UDim2.new(),UDim2.fromScale(1,1)).TextWrapped=true
-        local dragInput,dragStart,dragCenter
-        UI.stopDragging=function()
-            dragInput=nil
-            if UI.quickDrag and UI.quickDrag.record.moved then SaveSettings() end
-            UI.quickDrag=nil
-        end
-        local inputService=game:GetService("UserInputService")
-        Connect(drag.InputBegan,function(input)
-            if input.UserInputType~=Enum.UserInputType.MouseButton1 and input.UserInputType~=Enum.UserInputType.Touch then return end
-            dragInput=input;dragStart=input.Position
-            local vp=UI.canvas.AbsoluteSize
-            dragCenter=Vector2.new(UI.root.Position.X.Scale*vp.X+UI.root.Position.X.Offset,
-                UI.root.Position.Y.Scale*vp.Y+UI.root.Position.Y.Offset)
-        end)
-        Connect(inputService.InputChanged,QuickInputChanged)
-        Connect(inputService.InputEnded,QuickInputEnded)
-        Connect(inputService.InputChanged,function(input)
-            if not dragInput then return end
-            if input~=dragInput and not (dragInput.UserInputType==Enum.UserInputType.MouseButton1 and input.UserInputType==Enum.UserInputType.MouseMovement) then return end
-            local delta=input.Position-dragStart
-            UI.center=Vector2.new(dragCenter.X+delta.X,dragCenter.Y+delta.Y);Layout()
-        end)
-        Connect(inputService.InputEnded,function(input) if input==dragInput then dragInput=nil end end)
-        Connect(UI.canvas:GetPropertyChangedSignal("AbsoluteSize"),Layout)
-        Layout();RenderCards();runtime.SyncQuickButtons()
+        Connect(UI.search.FocusLost, function() prefs.query = UI.search.Text:sub(1,200); Save(); Filter(true) end)
+        Connect(UI.root:GetPropertyChangedSignal("AbsoluteSize"), Layout)
+        Layout(); RenderCards()
     end
     function runtime.OpenBrowser()
         if not runtime.alive then return end
-        if UI.root then SetVisible(true);return end
-        UI.hidden=false
-        local ok,err=pcall(Build)
-        if not ok then
-            for _,connection in ipairs(UI.connections) do connection:Disconnect() end
-            UI.connections={}
-            if UI.canvas then UI.canvas:Destroy() end
-            UI.canvas=nil;UI.root=nil;UI.cards={};UI.quickButtons={};UI.quickDrag=nil
-            WarnOnce("cards","Could not open the embedded browser: "..tostring(err))
-        end
+        if UI.root and UI.root.Parent then UI.root.Visible = true; RenderCards(); return end
+        local ok, err = pcall(Build)
+        if not ok then WarnOnce("native_ui", "Could not build the Noir Emotes page: " .. tostring(err)) end
     end
-    function runtime.RestoreQuickButtons()
-        if not runtime.alive or UI.hidden or not next(prefs.shortcuts) then return end
-        if UI.root then runtime.SyncQuickButtons();return end
-        runtime.OpenBrowser()
-        if UI.root then SetVisible(false) end
-    end
-    function runtime.CloseBrowser()
-        -- Kept for compatibility with the source API. The browser is the Emotes tab itself, so it stays available.
-        if UI.setSettingsVisible then UI.setSettingsVisible(false) end
-    end
+    function runtime.CloseBrowser() end
+    function runtime.RestoreQuickButtons() end
+    function runtime.SyncQuickButtons() end
+    function runtime.ClearQuickButtons() prefs.shortcuts = {}; Save() end
     function runtime.DestroyBrowser()
-        UI.searchToken=UI.searchToken+1
-        for _,connection in ipairs(UI.connections) do connection:Disconnect() end
-        UI.connections={}
-        if UI.canvas then UI.canvas:Destroy() end
-        UI.canvas=nil;UI.screen=nil;UI.root=nil;UI.cards={};UI.quickButtons={};UI.quickDrag=nil
+        for _, connection in ipairs(UI.connections) do pcall(function() connection:Disconnect() end) end
+        UI.connections = {}
+        if UI.root then UI.root:Destroy() end
+        UI.root = nil; UI.cards = {}
     end
 end
 
