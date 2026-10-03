@@ -2558,7 +2558,8 @@ do
         updateInvisibleBindButtonSize()
     end)
     invisibleMods:AddLabel("Round Invisible button: tap to toggle; drag it to move. Its size and position are saved.")
-    removeInvisibleBindButton()
+    -- AddToggle restores saved state synchronously; do not remove an Invisible button that was restored as enabled.
+    if not universalState.invisibleBindEnabled then removeInvisibleBindButton() end
 end
 
 
