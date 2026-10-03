@@ -2363,6 +2363,17 @@ local visualRegistry = {}
 local objectVisualRegistry = {}
 local visualDrawing = (typeof(Drawing) == "table") and Drawing or nil
 local VISUAL_PREFIX = "NoirV4Visual_"
+local visualRuntimeError = nil
+
+local function visualGuard(scope, callback)
+    local ok, err = xpcall(callback, function(message) return tostring(message) end)
+    if not ok and visualRuntimeError ~= tostring(err) then
+        visualRuntimeError = tostring(err)
+        warn("[Noir Visuals] " .. tostring(scope) .. ": " .. visualRuntimeError)
+        notify("Visuals error: " .. tostring(scope), 4)
+    end
+    return ok
+end
 
 local function visualRoleColor(role)
     if role == "murderer" then return Color3.fromRGB(255, 72, 82) end
@@ -2606,49 +2617,64 @@ local function refreshObjectVisuals()
 end
 
 local function setVisualFilter(feature, filter, enabled)
-    visualState.features[feature][filter] = enabled == true
+    local value = enabled == true
+    visualState.features[feature][filter] = value
     visualState.version += 1
-    task.spawn(refreshTarget)
-    refreshPlayerVisuals()
+    if value then
+        task.spawn(function() pcall(refreshTarget) end)
+    end
+    if value or next(visualRegistry) then
+        visualGuard("player refresh", refreshPlayerVisuals)
+    end
 end
 
 local function setObjectVisual(kind, enabled)
-    visualState.objects[kind] = enabled == true
-    refreshObjectVisuals()
+    local value = enabled == true
+    visualState.objects[kind] = value
+    if value or next(objectVisualRegistry) then
+        visualGuard("object refresh", refreshObjectVisuals)
+    end
 end
 
 RunService.RenderStepped:Connect(function()
-    local camera = Workspace.CurrentCamera
-    if not camera then return end
-    local viewport = camera.ViewportSize
-    local origin = Vector2.new(viewport.X * .5, viewport.Y)
-    for player, entry in pairs(visualRegistry) do
-        local tracer = entry.tracer
-        if tracer then
-            local root = entry.character and entry.character:FindFirstChild("HumanoidRootPart")
-            if root then
-                local point, visible = camera:WorldToViewportPoint(root.Position)
-                tracer.From = origin
-                tracer.To = Vector2.new(point.X, point.Y)
-                tracer.Color = entry.color
-                tracer.Visible = visible and point.Z > 0
-            else
-                tracer.Visible = false
+    if not next(visualRegistry) then return end
+    visualGuard("tracer render", function()
+        local camera = Workspace.CurrentCamera
+        if not camera then return end
+        local viewport = camera.ViewportSize
+        local origin = Vector2.new(viewport.X * .5, viewport.Y)
+        for _, entry in pairs(visualRegistry) do
+            local tracer = entry.tracer
+            if tracer then
+                local root = entry.character and entry.character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local point, visible = camera:WorldToViewportPoint(root.Position)
+                    tracer.From = origin
+                    tracer.To = Vector2.new(point.X, point.Y)
+                    tracer.Color = entry.color
+                    tracer.Visible = visible and point.Z > 0
+                else
+                    tracer.Visible = false
+                end
             end
         end
-    end
+    end)
 end)
 
 task.spawn(function()
     while running do
-        refreshPlayerVisuals()
-        refreshObjectVisuals()
+        if visualAnyPlayerFeatureEnabled() or next(visualRegistry) then
+            visualGuard("player refresh", refreshPlayerVisuals)
+        end
+        if visualState.objects.gun or visualState.objects.knife or next(objectVisualRegistry) then
+            visualGuard("object refresh", refreshObjectVisuals)
+        end
         task.wait(.35)
     end
 end)
 
 Players.PlayerRemoving:Connect(function(player)
-    destroyVisualEntry(player)
+    visualGuard("player cleanup", function() destroyVisualEntry(player) end)
 end)
 
 local tab = host.CreateTab()
