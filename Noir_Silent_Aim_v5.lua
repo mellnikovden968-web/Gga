@@ -2352,6 +2352,13 @@ local __noirVisualContext = {
     localPlayer = LocalPlayer, getPlayers = getPlayers, roleCache = roleCache,
     getMurderer = function() return murderer end, getSheriff = function() return sheriff end,
     getHero = function() return hero end, getRoundState = function() return roundState end,
+    isRoleRevealActive = function()
+        if murderer or sheriff or hero then return true end
+        for _, role in pairs(roleCache) do
+            if role == "murderer" or role == "sheriff" or role == "hero" then return true end
+        end
+        return false
+    end,
     isRunning = function() return running end,
 }
 getgenv().__NoirV4VisualContext = __noirVisualContext
@@ -2375,6 +2382,8 @@ local state = {
     object = {gun=false,knife=false},
 }
 local entries, objectEntries = {}, {}
+-- Players who join after role reveal are lobby spectators until the next role reveal.
+local joinedLobby, roleRevealActive = {}, false
 local drawingState = nil
 local prefix = "NoirSatelliteVisual_"
 
@@ -2391,10 +2400,11 @@ local function color(role)
     return Color3.fromRGB(86,230,145)
 end
 local function isInactive(player, character, cached)
-    if cached == "dead" then return true end
+    if cached == "dead" or joinedLobby[player] then return true end
     local round = V.getRoundState and V.getRoundState() or "waiting"
-    -- Map voting/lobby must not be rendered as a living innocent player.
-    if round == "waiting" then return true end
+    -- During map voting there are no assigned roles yet: all players are lobby/inactive.
+    -- Once the 10-second role reveal has started, known players can use their actual roles.
+    if round == "waiting" and not (V.isRoleRevealActive and V.isRoleRevealActive()) then return true end
     local teamName = player.Team and string.lower(tostring(player.Team.Name)) or ""
     if string.find(teamName,"lobby",1,true) or string.find(teamName,"spectat",1,true)
         or string.find(teamName,"waiting",1,true) or string.find(teamName,"observer",1,true) then return true end
@@ -2595,9 +2605,20 @@ V.runService.RenderStepped:Connect(function()
         end
     end)
 end)
-V.players.PlayerRemoving:Connect(function(player) safe("cleanup",function() clearPlayer(player) end) end)
+V.players.PlayerAdded:Connect(function(player)
+    -- A user arriving after roles have been dealt is in the lobby for this round.
+    if V.isRoleRevealActive and V.isRoleRevealActive() then joinedLobby[player] = true end
+end)
+V.players.PlayerRemoving:Connect(function(player)
+    joinedLobby[player] = nil
+    safe("cleanup",function() clearPlayer(player) end)
+end)
 task.spawn(function()
     while V.isRunning() do
+        local revealing = V.isRoleRevealActive and V.isRoleRevealActive() or false
+        -- The first role reveal of a new round admits players that were waiting before it.
+        if revealing and not roleRevealActive then table.clear(joinedLobby) end
+        roleRevealActive = revealing
         if anyPlayerVisual() or next(entries) then safe("player update",refreshPlayers) end
         if state.object.gun or state.object.knife or next(objectEntries) then safe("object update",refreshObjects) end
         task.wait(.35)
