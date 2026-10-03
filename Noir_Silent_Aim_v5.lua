@@ -2094,6 +2094,17 @@ end
 -- Auto GG must start disabled on every fresh script load, even if it was enabled in autosave previously.
 NoirPersistence.data.toggles["WORLD \u{2022} AUTO GG::Enable Auto GG"] = false
 local autoGGState = { enabled = false, token = 0 }
+local gunUtilityState = {
+    auraEnabled = false,
+    auraRange = 25,
+    droppedGunNotify = false,
+    gunPickupNotify = false,
+    bindEnabled = false,
+    touchNoticeAt = 0,
+    bindGui = nil,
+    bindButton = nil,
+    bindConnections = {}
+}
 
 local function hasGunInInventory()
     return playerHasTool(LocalPlayer, "Gun") ~= nil
@@ -2106,23 +2117,172 @@ local function getDroppedGunPart()
     return drop:FindFirstChildWhichIsA("BasePart", true)
 end
 
-local function grabDroppedGun()
-    if hasGunInInventory() then return true end
+local function touchDroppedGun()
     local root = localRoot()
     local drop = getDroppedGunPart()
     if not root or not drop then return false end
     if type(firetouchinterest) ~= "function" then
-        notify("Auto GG: firetouchinterest is unavailable", 3)
+        if os.clock() - gunUtilityState.touchNoticeAt > 5 then
+            gunUtilityState.touchNoticeAt = os.clock()
+            notify("Gun pickup requires firetouchinterest support", 3)
+        end
         return false
     end
-    local ok = pcall(function()
+    return pcall(function()
         firetouchinterest(root, drop, 0)
         firetouchinterest(root, drop, 1)
     end)
-    if not ok then return false end
+end
+
+local function grabDroppedGun()
+    if hasGunInInventory() then return true end
+    if not touchDroppedGun() then return false end
     task.wait(0.5)
     return hasGunInInventory()
 end
+
+local function requestGrabGun()
+    task.spawn(function()
+        if hasGunInInventory() then
+            notify("You already have the Gun", 3)
+        elseif not getDroppedGunPart() then
+            notify("No dropped Gun found", 3)
+        elseif grabDroppedGun() then
+            notify("Gun picked up", 3)
+        else
+            notify("Gun pickup failed", 3)
+        end
+    end)
+end
+
+local function setGunAura(enabled)
+    gunUtilityState.auraEnabled = enabled == true
+    gunUtilityState.auraToken = (gunUtilityState.auraToken or 0) + 1
+    local token = gunUtilityState.auraToken
+    if not gunUtilityState.auraEnabled then return end
+    task.spawn(function()
+        while running and gunUtilityState.auraEnabled and gunUtilityState.auraToken == token do
+            if not hasGunInInventory() then
+                local root, drop = localRoot(), getDroppedGunPart()
+                if root and drop and (root.Position - drop.Position).Magnitude <= gunUtilityState.auraRange then
+                    touchDroppedGun()
+                end
+            end
+            task.wait(0.18)
+        end
+    end)
+end
+
+local function disconnectGrabGunBind()
+    for _, connection in ipairs(gunUtilityState.bindConnections) do
+        pcall(function() connection:Disconnect() end)
+    end
+    table.clear(gunUtilityState.bindConnections)
+end
+
+local function removeGrabGunBindButton()
+    disconnectGrabGunBind()
+    if gunUtilityState.bindGui then gunUtilityState.bindGui:Destroy() end
+    gunUtilityState.bindGui, gunUtilityState.bindButton = nil, nil
+    for _, parent in ipairs({guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
+        if typeof(parent) == "Instance" then
+            local stale = parent:FindFirstChild("NoirGrabGunBindButton")
+            if stale then stale:Destroy() end
+        end
+    end
+end
+
+local function createGrabGunBindButton()
+    if gunUtilityState.bindButton then return end
+    removeGrabGunBindButton()
+    local parent = guiParent
+    if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
+    local bindGui = Instance.new("ScreenGui")
+    bindGui.Name = "NoirGrabGunBindButton"
+    bindGui.ResetOnSpawn = false
+    bindGui.IgnoreGuiInset = true
+    bindGui.DisplayOrder = 81
+    bindGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    bindGui.Parent = parent
+
+    local button = Instance.new("TextButton")
+    button.Name = "GrabGun"
+    button.AnchorPoint = Vector2.new(.5, .5)
+    button.Position = NoirPersistence.GetPosition("grab_gun_bind_v1", UDim2.new(0, 116, 1, -128))
+    button.Size = UDim2.fromOffset(122, 52)
+    button.BackgroundColor3 = Color3.fromRGB(12, 15, 20)
+    button.BackgroundTransparency = .16
+    button.BorderSizePixel = 0
+    button.Text = "GRAB GUN"
+    button.TextColor3 = Color3.fromRGB(245, 245, 248)
+    button.TextSize = 15
+    button.Font = Enum.Font.GothamBold
+    button.AutoButtonColor = false
+    button.ZIndex = 5
+    button.Parent = bindGui
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 15)
+    buttonCorner.Parent = button
+    local buttonStroke = Instance.new("UIStroke")
+    buttonStroke.Color = Color3.fromRGB(99, 183, 255)
+    buttonStroke.Thickness = 1.5
+    buttonStroke.Transparency = .18
+    buttonStroke.Parent = button
+
+    local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = button.InputBegan:Connect(function(input)
+        if not isPrimaryPress(input) then return end
+        dragging, moved = true, false
+        dragStart, startPosition = input.Position, button.Position
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = button.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = UIS.InputChanged:Connect(function(input)
+        if not dragging or input ~= dragInput then return end
+        local delta = input.Position - dragStart
+        if delta.Magnitude > 7 then moved = true end
+        button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = UIS.InputEnded:Connect(function(input)
+        if not dragging or not isPrimaryPress(input) then return end
+        dragging = false
+        NoirPersistence.SetPosition("grab_gun_bind_v1", button.Position)
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = button.Activated:Connect(function()
+        if not moved then requestGrabGun() end
+    end)
+    gunUtilityState.bindGui, gunUtilityState.bindButton = bindGui, button
+end
+
+local function setGrabGunBindButton(enabled)
+    gunUtilityState.bindEnabled = enabled == true
+    if gunUtilityState.bindEnabled then createGrabGunBindButton() else removeGrabGunBindButton() end
+end
+
+removeGrabGunBindButton()
+
+task.spawn(function()
+    local previousDrop, previouslyHadGun = nil, hasGunInInventory()
+    while running do
+        local drop = getDroppedGunPart()
+        if drop ~= previousDrop then
+            if drop and gunUtilityState.droppedGunNotify then
+                notify("Dropped Gun detected", 4)
+            end
+            previousDrop = drop
+        end
+        local hasGun = hasGunInInventory()
+        if hasGun and not previouslyHadGun and gunUtilityState.gunPickupNotify then
+            notify("Gun picked up", 3)
+        end
+        previouslyHadGun = hasGun
+        task.wait(.25)
+    end
+end)
 
 local function setAutoGG(enabled)
     autoGGState.enabled = enabled == true
@@ -2159,6 +2319,21 @@ serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
 local autoGGSection = tab:AddSection("WORLD \u{2022} AUTO GG", "Automatically picks up the dropped Gun")
 autoGGSection:AddToggle("Enable Auto GG", setAutoGG)
 autoGGSection:AddLabel("Picks up GunDrop while you do not have a Gun.")
+
+local gunUtilities = tab:AddSection("WORLD \u{2022} GUN UTILITIES", "Manual pickup, aura, notifications and bind button")
+gunUtilities:AddButton("Grab Gun", requestGrabGun)
+gunUtilities:AddToggle("Gun Aura", setGunAura)
+gunUtilities:AddSlider("Gun Aura Range", 5, 250, gunUtilityState.auraRange, function(value)
+    gunUtilityState.auraRange = tonumber(value) or gunUtilityState.auraRange
+end)
+gunUtilities:AddToggle("Auto Notify Dropped Gun", function(enabled)
+    gunUtilityState.droppedGunNotify = enabled == true
+end)
+gunUtilities:AddToggle("Gun Pickup Notify", function(enabled)
+    gunUtilityState.gunPickupNotify = enabled == true
+end)
+gunUtilities:AddToggle("Enable Grab Gun Bind Button", setGrabGunBindButton)
+gunUtilities:AddLabel("Drag the Grab Gun button; its position is saved automatically.")
 
 do
     local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
