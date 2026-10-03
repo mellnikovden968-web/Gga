@@ -2091,6 +2091,52 @@ presetNames = function()
     return names
 end
 
+local autoGGState = { enabled = false, token = 0 }
+
+local function hasGunInInventory()
+    return playerHasTool(LocalPlayer, "Gun") ~= nil
+end
+
+local function getDroppedGunPart()
+    local drop = Workspace:FindFirstChild("GunDrop", true)
+    if not drop then return nil end
+    if drop:IsA("BasePart") then return drop end
+    return drop:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function grabDroppedGun()
+    if hasGunInInventory() then return true end
+    local root = localRoot()
+    local drop = getDroppedGunPart()
+    if not root or not drop then return false end
+    if type(firetouchinterest) ~= "function" then
+        notify("Auto GG: firetouchinterest is unavailable", 3)
+        return false
+    end
+    local ok = pcall(function()
+        firetouchinterest(root, drop, 0)
+        firetouchinterest(root, drop, 1)
+    end)
+    if not ok then return false end
+    task.wait(0.5)
+    return hasGunInInventory()
+end
+
+local function setAutoGG(enabled)
+    autoGGState.enabled = enabled == true
+    autoGGState.token += 1
+    local token = autoGGState.token
+    if not autoGGState.enabled then return end
+    task.spawn(function()
+        while running and autoGGState.enabled and autoGGState.token == token do
+            if LocalPlayer.Character and not hasGunInInventory() and getDroppedGunPart() then
+                grabDroppedGun()
+            end
+            task.wait(0.5)
+        end
+    end)
+end
+
 local tab = host.CreateTab()
 
 local selfMods = tab:AddSection("MAIN \u{2022} SELF MODS", "Universal player controls")
@@ -2107,6 +2153,10 @@ serverMods:AddToggle("Auto Notify Roles", function(v) autoNotifyRoles = v; if no
 serverMods:AddButton("Show Murderer Chance", showMurdererChance)
 serverMods:AddButton("Refresh Roles", refreshTarget)
 serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
+
+local autoGGSection = tab:AddSection("WORLD \u{2022} AUTO GG", "Automatically picks up the dropped Gun")
+autoGGSection:AddToggle("Enable Auto GG", setAutoGG)
+autoGGSection:AddLabel("Picks up GunDrop while you do not have a Gun.")
 
 do
     local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
