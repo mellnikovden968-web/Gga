@@ -2536,6 +2536,95 @@ do
         if universalState.invisibleBindEnabled then createInvisibleBindButton() else removeInvisibleBindButton() end
     end
 
+
+
+    -- Adapted AntiFling core from the supplied FlingGui: other characters' collision parts are locally disabled while active.
+    universalState.antiFling = false
+    universalState.antiFlingTracked = {}
+    universalState.antiFlingPartSignals = {}
+    universalState.antiFlingNextPart = nil
+
+    local function antiFlingClearPart(part)
+        local signal = universalState.antiFlingPartSignals[part]
+        if signal then pcall(function() signal:Disconnect() end) end
+        universalState.antiFlingPartSignals[part] = nil
+        universalState.antiFlingTracked[part] = nil
+    end
+
+    local function antiFlingTrackPart(part)
+        if not (part and part:IsA("BasePart")) or universalState.antiFlingTracked[part] ~= nil then return end
+        universalState.antiFlingTracked[part] = part.CanCollide
+        universalState.antiFlingPartSignals[part] = part:GetPropertyChangedSignal("CanCollide"):Connect(function()
+            if universalState.antiFling and part.Parent and part.CanCollide then part.CanCollide = false end
+        end)
+        if universalState.antiFling and part.CanCollide then part.CanCollide = false end
+    end
+
+    local function antiFlingSeedCharacter(character)
+        if not character then return end
+        for _, instance in ipairs(character:GetDescendants()) do
+            if instance:IsA("BasePart") then antiFlingTrackPart(instance) end
+        end
+        character.DescendantAdded:Connect(function(instance)
+            if instance:IsA("BasePart") then antiFlingTrackPart(instance) end
+        end)
+        character.DescendantRemoving:Connect(function(instance)
+            if instance:IsA("BasePart") then antiFlingClearPart(instance) end
+        end)
+    end
+
+    local function antiFlingHookPlayer(player)
+        if player == LocalPlayer then return end
+        if player.Character then antiFlingSeedCharacter(player.Character) end
+        player.CharacterAdded:Connect(antiFlingSeedCharacter)
+        player.CharacterRemoving:Connect(function(character)
+            for _, instance in ipairs(character:GetDescendants()) do antiFlingClearPart(instance) end
+        end)
+    end
+
+    local function setAntiFling(enabled)
+        universalState.antiFling = enabled == true
+        if universalState.antiFling then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then antiFlingSeedCharacter(player.Character) end
+            end
+            for part in pairs(universalState.antiFlingTracked) do
+                if part and part.Parent and part.CanCollide then part.CanCollide = false end
+            end
+        else
+            -- Restore the CanCollide values that were present before AntiFling was enabled.
+            for part, originalCanCollide in pairs(universalState.antiFlingTracked) do
+                if part and part.Parent then pcall(function() part.CanCollide = originalCanCollide end) end
+            end
+        end
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do antiFlingHookPlayer(player) end
+    Players.PlayerAdded:Connect(antiFlingHookPlayer)
+    Players.PlayerRemoving:Connect(function(player)
+        if player.Character then
+            for _, instance in ipairs(player.Character:GetDescendants()) do antiFlingClearPart(instance) end
+        end
+    end)
+    local antiFlingStep = RunService.PreSimulation or RunService.Stepped
+    antiFlingStep:Connect(function()
+        if not universalState.antiFling then return end
+        local quota, cursor = 256, universalState.antiFlingNextPart
+        if cursor and universalState.antiFlingTracked[cursor] == nil then cursor = nil end
+        while quota > 0 do
+            cursor = next(universalState.antiFlingTracked, cursor)
+            if not cursor then universalState.antiFlingNextPart = nil; break end
+            if cursor.Parent then
+                if cursor.CanCollide then cursor.CanCollide = false end
+                universalState.antiFlingNextPart = cursor
+            else
+                antiFlingClearPart(cursor)
+                universalState.antiFlingNextPart = nil
+            end
+            quota = quota - 1
+        end
+    end)
+
     UIS.JumpRequest:Connect(function()
         if not universalState.infiniteJump then return end
         local humanoid = localHumanoid()
@@ -2549,6 +2638,7 @@ do
 
     local universalMods = tab:AddSection("MAIN \u{2022} UNIVERSAL", "Movement and survival utilities")
     universalMods:AddToggle("Infinite Jump", function(enabled) universalState.infiniteJump = enabled == true end)
+    universalMods:AddToggle("AntiFling", setAntiFling)
 
     local invisibleMods = tab:AddSection("MAIN \u{2022} INVISIBLE", "Desync invisibility and floating bind button")
     invisibleMods:AddToggle("Invisible", setInvisible)
