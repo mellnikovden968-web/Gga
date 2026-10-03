@@ -1677,7 +1677,7 @@ function fireGunAt(player)
         local gun = character:FindFirstChild("Gun")
         if not gun and backpack then
             gun = backpack:FindFirstChild("Gun")
-            if gun then humanoid:EquipTool(gun); autoEquipped = true; task.wait(0.12) end
+            if gun then humanoid:EquipTool(gun); autoEquipped = true; task.wait(0.10) end
         end
         if not gun or not gun:IsA("Tool") then
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
@@ -1694,9 +1694,9 @@ function fireGunAt(player)
         buttonShotActive = true
         buttonShotTarget = player
         success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
-        task.wait(0.16)
+        task.wait(0.10)
         if autoEquipped and humanoid.Parent then
-            task.wait(0.08)
+            task.wait(0.05)
             humanoid:UnequipTools()
         end
     end)
@@ -6029,6 +6029,8 @@ local lastFlickTime = 0
 local isJumpKeyPressed = false
 local Camera = workspace.CurrentCamera
 local wallDetectionCooldown = 0
+local lastWallhopAt = 0
+local WALLHOP_COOLDOWN = 0.22
 
 local wallRaycastParams = RaycastParams.new()
 wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
@@ -6091,21 +6093,15 @@ local function getWallRaycastResult()
     end
     wallRaycastParams.FilterDescendantsInstances = blacklist
 
-    local closestHit, minDistance = nil, detectionDistance
-    local hrpCF = hrp.CFrame
-    for i = 0,7 do
-        local angle = math.rad(i*45)
-        local dir = (hrpCF * CFrame.Angles(0, angle, 0)).LookVector
-        local ray = workspace:Raycast(hrp.Position, dir * detectionDistance, wallRaycastParams)
-        if ray and ray.Instance and ray.Distance < minDistance then
-            local hitInstance = ray.Instance
-            if isWall(hitInstance) then
-                minDistance = ray.Distance
-                closestHit = ray
-            end
-        end
-    end
-    return closestHit
+    -- WallHop should use the wall the player is actually facing, not any wall in a 360 degree scan.
+    -- The old scan made a normal jump beside a wall behave like an infinite jump.
+    local facing = Camera and Camera.CFrame.LookVector or hrp.CFrame.LookVector
+    local flatFacing = Vector3.new(facing.X, 0, facing.Z)
+    if flatFacing.Magnitude < .05 then flatFacing = Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z) end
+    if flatFacing.Magnitude < .05 then return nil end
+    local ray = workspace:Raycast(hrp.Position, flatFacing.Unit * detectionDistance, wallRaycastParams)
+    if ray and ray.Instance and isWall(ray.Instance) then return ray end
+    return nil
 end
 
 performVideoFlick = function()
@@ -6143,9 +6139,14 @@ performWallhop = function()
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not (humanoid and rootPart and humanoid:GetState() ~= Enum.HumanoidStateType.Dead) then return end
+    -- Do not reapply Jumping while airborne: that was the infinity-jump behavior.
+    if humanoid.FloorMaterial == Enum.Material.Air then return end
+    local now = os.clock()
+    if now - lastWallhopAt < WALLHOP_COOLDOWN then return end
 
     local wall = getWallRaycastResult()
     if not wall then return end
+    lastWallhopAt = now
 
     rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + wall.Normal)
     RunService.Heartbeat:Wait()
@@ -6236,6 +6237,7 @@ ODHX.Connect(LocalPlayer.CharacterAdded, function(character)
     lastHitInstance = nil
     currentHitInstance = nil
     isFlicking = false
+    lastWallhopAt = 0
 end)
 
 ODHX.Connect(UserInputService.WindowFocused, function()
