@@ -3434,7 +3434,12 @@ LocalPlayer.CharacterAppearanceLoaded:Connect(function(character)
 end)
 -- Games may refresh an avatar after it has spawned. Keep the two requested client cosmetics applied while enabled.
 if RunService then
-    RunService.RenderStepped:Connect(function()
+    -- Avatar refreshes only need to counter occasional game appearance writes; avoid doing mesh/head work every render frame.
+    local nextRefresh = 0
+    RunService.Heartbeat:Connect(function()
+        local now = os.clock()
+        if now < nextRefresh then return end
+        nextRefresh = now + .12
         local character = LocalPlayer.Character
         if state.korblox then applyKorbloxMesh(character) end
         if state.headless then applyHeadless(character) end
@@ -4339,11 +4344,11 @@ do
         UI.footer.Size = UDim2.new(1, -36, 0, 40)
         -- Use the full Noir tab width, matching the supplied menu's three-card gallery on wider screens.
         local available = math.max(1, size.X - 48)
-        -- Five compact cards across on mobile landscape, as requested.
-        local columns = 5
-        local padding = 10
-        local cellWidth = math.max(76, math.floor((available - padding * (columns - 1)) / columns))
-        local cellHeight = math.clamp(math.floor(cellWidth * 1.34), 128, 205)
+        -- Three spacious cards across: readable names, large thumbnails and comfortable touch targets.
+        local columns = 3
+        local padding = 12
+        local cellWidth = math.max(150, math.floor((available - padding * (columns - 1)) / columns))
+        local cellHeight = math.clamp(math.floor(cellWidth * .96), 190, 255)
         UI.grid.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
         UI.grid.FillDirectionMaxCells = columns
         local rows = math.ceil(#UI.cards / columns)
@@ -4385,22 +4390,28 @@ do
     runtime.UpdateCardStatus = UpdateStatus
     local function BuildCard(item, order)
         local card = Make("Frame", { Name = "Emote_" .. IdText(item.id), LayoutOrder = order, BackgroundColor3 = C.card, BorderSizePixel = 0, ClipsDescendants = true }, UI.cardsScroll)
+        local cardConnections = {}
+        local function CardConnect(signal, callback)
+            local connection = signal:Connect(callback)
+            cardConnections[#cardConnections + 1] = connection
+            return connection
+        end
         Round(card, 14)
         local outline = Stroke(card, C.border, .62, 1)
         local title = Text(card, item.name, 15, UDim2.fromOffset(12, 10), UDim2.new(1, -70, 0, 36))
         title.TextWrapped = true; title.TextTruncate = Enum.TextTruncate.AtEnd; title.Font = Enum.Font.GothamMedium; title.TextYAlignment = Enum.TextYAlignment.Top
         local star = Button(card, "☆", UDim2.new(1, -50, 0, 8), UDim2.fromOffset(38, 36))
         star.BackgroundTransparency = 1; star.TextSize = 27
-        local image = Make("ImageButton", { BackgroundTransparency = 1, AutoButtonColor = false, AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5, 0, .56, 0), Size = UDim2.fromOffset(96,96), Image = "rbxthumb://type=Asset&id=" .. IdText(item.id) .. "&w=420&h=420", ScaleType = Enum.ScaleType.Fit }, card)
-        local pin = Button(card, "○", UDim2.new(1, -56, .48, 0), UDim2.fromOffset(44,44))
-        pin.BackgroundTransparency = 1; pin.TextSize = 29
-        local play = Button(card, "▶", UDim2.new(1, -58, 1, -58), UDim2.fromOffset(46,46)); play.TextSize = 19
-        local record = { item = item, stroke = outline, star = star, pin = pin, play = play }
+        local image = Make("ImageButton", { BackgroundTransparency = 1, AutoButtonColor = false, AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5, 0, .55, 0), Size = UDim2.fromOffset(108,108), Image = "rbxthumb://type=Asset&id=" .. IdText(item.id) .. "&w=420&h=420", ScaleType = Enum.ScaleType.Fit }, card)
+        local pin = Button(card, "○", UDim2.new(1, -60, .48, 0), UDim2.fromOffset(46,46))
+        pin.BackgroundTransparency = 1; pin.TextSize = 30
+        local play = Button(card, "▶", UDim2.new(1, -62, 1, -62), UDim2.fromOffset(50,50)); play.TextSize = 20
+        local record = { frame = card, connections = cardConnections, item = item, stroke = outline, star = star, pin = pin, play = play }
         UI.cards[#UI.cards + 1] = record
-        Connect(image.Activated, function() SetSelected(item) end)
-        Connect(star.Activated, function() ToggleFavorite(item) end)
-        Connect(pin.Activated, function() ToggleQuick(item) end)
-        Connect(play.Activated, function()
+        CardConnect(image.Activated, function() SetSelected(item) end)
+        CardConnect(star.Activated, function() ToggleFavorite(item) end)
+        CardConnect(pin.Activated, function() ToggleQuick(item) end)
+        CardConnect(play.Activated, function()
             local playing = runtime.track and runtime.playing and runtime.playing.id == item.id
             SetSelected(item)
             if playing then StopCurrent("Stopped") else Play(item, false) end
@@ -4409,14 +4420,14 @@ do
     end
     local function RenderCards()
         if not UI.root then return end
+        -- Do not create thumbnail cards while this page is hidden. The visible-page handler performs one render on open.
+        if not container.Visible then UI.needsRender = true; return end
         for _, record in ipairs(UI.cards) do
+            for _, connection in ipairs(record.connections or {}) do pcall(function() connection:Disconnect() end) end
             if record.frame then record.frame:Destroy() end
         end
-        -- Frame references are retained only by UI.cards, so use child cleanup and rebuild the compact page.
-        for _, child in ipairs(UI.cardsScroll:GetChildren()) do
-            if child:IsA("Frame") and string.sub(child.Name, 1, 6) == "Emote_" then child:Destroy() end
-        end
         UI.cards = {}
+        UI.needsRender = false
         local first = (runtime.page - 1) * PAGE_SIZE + 1
         local last = math.min(runtime.page * PAGE_SIZE, #runtime.filtered)
         for index = first, last do BuildCard(runtime.filtered[index], index - first + 1) end
@@ -4505,7 +4516,6 @@ do
             if container.Visible then task.delay(.05, function() if runtime.alive and UI.root then Layout(); RenderCards() end end) end
         end)
         Layout(); RenderCards(); RefreshQuickButtons()
-        task.delay(.15, function() if runtime.alive and UI.root then Layout(); RenderCards() end end)
     end
     function runtime.OpenBrowser()
         if not runtime.alive then return end
