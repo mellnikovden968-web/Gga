@@ -2351,7 +2351,8 @@ local __noirVisualContext = {
     tab = tab, players = Players, workspace = Workspace, runService = RunService,
     localPlayer = LocalPlayer, getPlayers = getPlayers, roleCache = roleCache,
     getMurderer = function() return murderer end, getSheriff = function() return sheriff end,
-    getHero = function() return hero end, isRunning = function() return running end,
+    getHero = function() return hero end, getRoundState = function() return roundState end,
+    isRunning = function() return running end,
 }
 getgenv().__NoirV4VisualContext = __noirVisualContext
 local __noirVisualSource = [==[
@@ -2389,10 +2390,38 @@ local function color(role)
     if role == "dead" then return Color3.fromRGB(150,150,158) end
     return Color3.fromRGB(86,230,145)
 end
+local function isInactive(player, character, cached)
+    if cached == "dead" then return true end
+    local round = V.getRoundState and V.getRoundState() or "waiting"
+    -- Map voting/lobby must not be rendered as a living innocent player.
+    if round == "waiting" then return true end
+    local teamName = player.Team and string.lower(tostring(player.Team.Name)) or ""
+    if string.find(teamName,"lobby",1,true) or string.find(teamName,"spectat",1,true)
+        or string.find(teamName,"waiting",1,true) or string.find(teamName,"observer",1,true) then return true end
+    for _, container in ipairs({player, character}) do
+        if container then
+            for key, value in pairs(container:GetAttributes()) do
+                local name = string.lower(tostring(key))
+                if (string.find(name,"inround",1,true) or string.find(name,"ingame",1,true)
+                    or string.find(name,"isplaying",1,true) or string.find(name,"alive",1,true)) and value == false then return true end
+                if string.find(name,"state",1,true) or string.find(name,"status",1,true) or string.find(name,"location",1,true) then
+                    local text = string.lower(tostring(value))
+                    if string.find(text,"lobby",1,true) or string.find(text,"spectat",1,true)
+                        or string.find(text,"dead",1,true) or string.find(text,"waiting",1,true) then return true end
+                end
+            end
+            for _, name in ipairs({"InLobby","Spectating","Dead","IsDead"}) do
+                local flag = container:FindFirstChild(name)
+                if flag and flag:IsA("BoolValue") and flag.Value then return true end
+            end
+        end
+    end
+    return false
+end
 local function roleOf(player, character)
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    if humanoid and humanoid.Health <= 0 then return "dead" end
     local cached = V.roleCache and V.roleCache[player.UserId]
+    if not humanoid or humanoid.Health <= 0 or isInactive(player, character, cached) then return "dead" end
     if player == V.getMurderer() or cached == "murderer" then return "murderer" end
     if player == V.getSheriff() or cached == "sheriff" then return "sheriff" end
     if player == V.getHero() or cached == "hero" then return "hero" end
@@ -2653,7 +2682,14 @@ do
         config.knifeEnabled=v==true
         if config.knifeEnabled then installHook() end
     end)
-    combatKnife:AddSlider("Knife Radius", 5, 40, config.knifeRadius, function(v) config.knifeRadius = tonumber(v) or config.knifeRadius end)
+    -- Preserve the previous Knife Radius value when upgrading the control name.
+    local oldKnifeAuraKey = "KNIFE SILENT AIM::Knife Radius"
+    local newKnifeAuraKey = "KNIFE SILENT AIM::Knife Throw Aura"
+    if NoirPersistence.data.sliders[newKnifeAuraKey] == nil and NoirPersistence.data.sliders[oldKnifeAuraKey] ~= nil then
+        NoirPersistence.data.sliders[newKnifeAuraKey] = NoirPersistence.data.sliders[oldKnifeAuraKey]
+        NoirPersistence.Save()
+    end
+    combatKnife:AddSlider("Knife Throw Aura", 1, 40, config.knifeRadius, function(v) config.knifeRadius = tonumber(v) or config.knifeRadius end)
     combatKnife:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck=v==true end)
     combatKnife:AddToggle("Prioritize Sheriff", function(v)
         config.knifePrioritizeSheriff=v==true
