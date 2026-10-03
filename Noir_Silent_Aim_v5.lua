@@ -2344,350 +2344,266 @@ local function setAutoGG(enabled)
     end)
 end
 
--- Keep all Visuals locals in their own scope. This avoids exceeding Luau's 200-local register limit on mobile executors.
 local tab = host.CreateTab()
-do
-local visualState = {
-    version = 0,
-    features = {
-        cham = { everyone = false, murderer = false, sheriff = false, hero = false, dead = false },
-        esp = { everyone = false, murderer = false, sheriff = false, hero = false, dead = false },
-        outline = { everyone = false, murderer = false, sheriff = false, hero = false, dead = false },
-        highlight = { everyone = false, murderer = false, sheriff = false, hero = false, dead = false },
-        tracer = { everyone = false, murderer = false, sheriff = false, hero = false, dead = false },
-        box = { everyone = false, murderer = false, sheriff = false, hero = false, dead = false },
-        avatar = { everyone = false, murderer = false, sheriff = false, hero = false, dead = false },
-        fire = { everyone = false, murderer = false, sheriff = false, hero = false, dead = false },
-    },
-    objects = { gun = false, knife = false },
+
+-- Visuals are compiled in a separate deferred chunk.  The primary UI stays identical to the last verified mobile-safe build.
+local __noirVisualContext = {
+    tab = tab, players = Players, workspace = Workspace, runService = RunService,
+    localPlayer = LocalPlayer, getPlayers = getPlayers, roleCache = roleCache,
+    getMurderer = function() return murderer end, getSheriff = function() return sheriff end,
+    getHero = function() return hero end, isRunning = function() return running end,
 }
+getgenv().__NoirV4VisualContext = __noirVisualContext
+local __noirVisualSource = [==[
+-- Visuals run as a deferred satellite chunk so the main Noir loader remains within mobile executor limits.
+local V = getgenv().__NoirV4VisualContext
+if type(V) ~= "table" or not V.tab then return end
 
-local visualRegistry = {}
-local objectVisualRegistry = {}
--- Drawing is executor-provided, so do not access it while Noir is starting.
-local visualDrawing = nil
-local VISUAL_PREFIX = "NoirV4Visual_"
-local visualRuntimeError = nil
+local state = {
+    revision = 0,
+    feature = {
+        cham = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        esp = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        outline = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        highlight = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        tracer = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        box = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        avatar = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        fire = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+    },
+    object = {gun=false,knife=false},
+}
+local entries, objectEntries = {}, {}
+local drawingState = nil
+local prefix = "NoirSatelliteVisual_"
 
-local function visualSetupGuard(scope, callback)
+local function safe(label, callback)
     local ok, err = pcall(callback)
-    if not ok then warn("[Noir Visuals setup] " .. tostring(scope) .. ": " .. tostring(err)) end
-    return ok, err
-end
-
-local function visualGuard(scope, callback)
-    local ok, err = xpcall(callback, function(message) return tostring(message) end)
-    if not ok and visualRuntimeError ~= tostring(err) then
-        visualRuntimeError = tostring(err)
-        warn("[Noir Visuals] " .. tostring(scope) .. ": " .. visualRuntimeError)
-        notify("Visuals error: " .. tostring(scope), 4)
-    end
+    if not ok then warn("[Noir Visuals] " .. tostring(label) .. ": " .. tostring(err)) end
     return ok
 end
-
-local function visualRoleColor(role)
-    if role == "murderer" then return Color3.fromRGB(255, 72, 82) end
-    if role == "sheriff" then return Color3.fromRGB(72, 158, 255) end
-    if role == "hero" then return Color3.fromRGB(255, 206, 72) end
-    if role == "dead" then return Color3.fromRGB(150, 150, 158) end
-    return Color3.fromRGB(86, 230, 145)
+local function color(role)
+    if role == "murderer" then return Color3.fromRGB(255,72,82) end
+    if role == "sheriff" then return Color3.fromRGB(72,158,255) end
+    if role == "hero" then return Color3.fromRGB(255,206,72) end
+    if role == "dead" then return Color3.fromRGB(150,150,158) end
+    return Color3.fromRGB(86,230,145)
 end
-
-local function getVisualRole(player, character)
+local function roleOf(player, character)
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
     if humanoid and humanoid.Health <= 0 then return "dead" end
-    if player == murderer or roleCache[player.UserId] == "murderer" then return "murderer" end
-    if player == sheriff or roleCache[player.UserId] == "sheriff" then return "sheriff" end
-    if player == hero or roleCache[player.UserId] == "hero" then return "hero" end
+    local cached = V.roleCache and V.roleCache[player.UserId]
+    if player == V.getMurderer() or cached == "murderer" then return "murderer" end
+    if player == V.getSheriff() or cached == "sheriff" then return "sheriff" end
+    if player == V.getHero() or cached == "hero" then return "hero" end
     return "innocent"
 end
-
-local function visualFeatureWanted(feature, role)
-    local filters = visualState.features[feature]
-    return filters and (filters.everyone or filters[role]) or false
+local function wanted(kind, role)
+    local f = state.feature[kind]
+    return f and (f.everyone or f[role]) or false
 end
-
-local function visualAnyPlayerFeatureEnabled()
-    for _, filters in pairs(visualState.features) do
-        for _, enabled in pairs(filters) do
-            if enabled then return true end
-        end
+local function anyPlayerVisual()
+    for _, filters in pairs(state.feature) do
+        for _, enabled in pairs(filters) do if enabled then return true end end
     end
     return false
 end
-
-local function destroyVisualEntry(player)
-    local entry = visualRegistry[player]
-    if not entry then return end
-    if entry.tracer then pcall(function() entry.tracer:Remove() end) end
-    for _, item in ipairs(entry.instances) do
-        pcall(function() item:Destroy() end)
-    end
-    visualRegistry[player] = nil
+local function clearPlayer(player)
+    local e = entries[player]
+    if not e then return end
+    if e.line then pcall(function() e.line:Remove() end) end
+    for _, item in ipairs(e.items) do pcall(function() item:Destroy() end) end
+    entries[player] = nil
 end
-
-local function makeVisualHighlight(character, name, color, fillTransparency, outlineTransparency, entry)
-    local highlight = Instance.new("Highlight")
-    highlight.Name = VISUAL_PREFIX .. name
-    highlight.Adornee = character
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillColor = color
-    highlight.OutlineColor = color
-    highlight.FillTransparency = fillTransparency
-    highlight.OutlineTransparency = outlineTransparency
-    highlight.Parent = character
-    entry.instances[#entry.instances + 1] = highlight
+local function highlight(character, suffix, tint, fill, outline, e)
+    local h = Instance.new("Highlight")
+    h.Name = prefix .. suffix
+    h.Adornee = character
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.FillColor, h.OutlineColor = tint, tint
+    h.FillTransparency, h.OutlineTransparency = fill, outline
+    h.Parent = character
+    table.insert(e.items, h)
 end
-
-local function makeVisualBillboard(root, name, size, offset, entry)
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = VISUAL_PREFIX .. name
-    billboard.Adornee = root
-    billboard.AlwaysOnTop = true
-    billboard.LightInfluence = 0
-    billboard.Size = size
-    billboard.StudsOffset = offset
-    billboard.Parent = root
-    entry.instances[#entry.instances + 1] = billboard
-    return billboard
+local function billboard(root, suffix, size, offset, e)
+    local b = Instance.new("BillboardGui")
+    b.Name = prefix .. suffix
+    b.Adornee = root
+    b.AlwaysOnTop = true
+    b.Size = size
+    b.StudsOffset = offset
+    b.Parent = root
+    table.insert(e.items, b)
+    return b
 end
-
-local function applyVisualPlayer(player)
-    if player == LocalPlayer then return end
+local function apply(player)
+    if player == V.localPlayer then return end
     local character = player.Character
-    if not character then destroyVisualEntry(player); return end
+    if not character then clearPlayer(player); return end
     local root = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
-    local role = getVisualRole(player, character)
-    local signature = tostring(visualState.version) .. ":" .. role .. ":" .. tostring(root)
-    local current = visualRegistry[player]
-    if current and current.character == character and current.signature == signature then return end
-    destroyVisualEntry(player)
-    if not visualAnyPlayerFeatureEnabled() then return end
-
-    local color = visualRoleColor(role)
-    local entry = { character = character, signature = signature, color = color, instances = {}, tracer = nil }
-    visualRegistry[player] = entry
-
-    if visualFeatureWanted("cham", role) then
-        makeVisualHighlight(character, "Cham", color, .45, 1, entry)
-    end
-    if visualFeatureWanted("outline", role) then
-        makeVisualHighlight(character, "Outline", color, 1, 0, entry)
-    end
-    if visualFeatureWanted("highlight", role) then
-        makeVisualHighlight(character, "Highlight", color, .68, .05, entry)
-    end
-    if visualFeatureWanted("tracer", role) then
-        if visualDrawing == nil then
-            local ok, drawingApi = pcall(function() return Drawing end)
-            if ok and typeof(drawingApi) == "table" and type(drawingApi.new) == "function" then visualDrawing = drawingApi else visualDrawing = false end
+    local role = roleOf(player, character)
+    local sign = tostring(state.revision) .. ":" .. role .. ":" .. tostring(root)
+    local old = entries[player]
+    if old and old.character == character and old.sign == sign then return end
+    clearPlayer(player)
+    if not anyPlayerVisual() then return end
+    local tint = color(role)
+    local e = {character=character, sign=sign, tint=tint, items={}, line=nil}
+    entries[player] = e
+    if wanted("cham",role) then highlight(character,"Cham",tint,.45,1,e) end
+    if wanted("outline",role) then highlight(character,"Outline",tint,1,0,e) end
+    if wanted("highlight",role) then highlight(character,"Highlight",tint,.68,.05,e) end
+    if wanted("tracer",role) then
+        if drawingState == nil then
+            local ok, api = pcall(function() return Drawing end)
+            drawingState = ok and type(api) == "table" and type(api.new) == "function" and api or false
         end
-        if visualDrawing then
-            local line = visualDrawing.new("Line")
-            line.Thickness = 1.5
-            line.Transparency = 1
-            line.Color = color
-            line.Visible = false
-            entry.tracer = line
+        if drawingState then
+            local line = drawingState.new("Line")
+            line.Thickness, line.Transparency, line.Color, line.Visible = 1.5, 1, tint, false
+            e.line = line
         end
     end
-    if root and visualFeatureWanted("esp", role) then
-        local gui = makeVisualBillboard(root, "ESP", UDim2.fromOffset(150, 40), Vector3.new(0, 3.4, 0), entry)
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.fromScale(1, 1)
-        label.BackgroundTransparency = 1
-        label.Font = Enum.Font.GothamSemibold
-        label.TextSize = 14
-        label.TextColor3 = Color3.new(1, 1, 1)
-        label.TextStrokeTransparency = .35
-        label.Text = player.DisplayName .. "\n" .. string.upper(role)
-        label.Parent = gui
-        local roleStroke = Instance.new("UIStroke")
-        roleStroke.Color = color
-        roleStroke.Thickness = 1
-        roleStroke.Transparency = .18
-        roleStroke.Parent = label
+    if root and wanted("esp",role) then
+        local b = billboard(root,"ESP",UDim2.fromOffset(156,42),Vector3.new(0,3.4,0),e)
+        local l = Instance.new("TextLabel")
+        l.Size, l.BackgroundTransparency, l.Font, l.TextSize = UDim2.fromScale(1,1), 1, Enum.Font.GothamSemibold, 14
+        l.TextColor3, l.TextStrokeTransparency = Color3.new(1,1,1), .35
+        l.Text, l.Parent = player.DisplayName .. "\n" .. string.upper(role), b
     end
-    if root and visualFeatureWanted("box", role) then
-        local gui = makeVisualBillboard(root, "Box", UDim2.fromOffset(86, 122), Vector3.new(0, 1.8, 0), entry)
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.fromScale(1, 1)
-        frame.BackgroundTransparency = 1
-        frame.Parent = gui
-        local strokeBox = Instance.new("UIStroke")
-        strokeBox.Color = color
-        strokeBox.Thickness = 1.7
-        strokeBox.Parent = frame
-        local round = Instance.new("UICorner")
-        round.CornerRadius = UDim.new(0, 4)
-        round.Parent = frame
+    if root and wanted("box",role) then
+        local b = billboard(root,"Box",UDim2.fromOffset(86,122),Vector3.new(0,1.8,0),e)
+        local f = Instance.new("Frame")
+        f.Size, f.BackgroundTransparency, f.Parent = UDim2.fromScale(1,1), 1, b
+        local s = Instance.new("UIStroke")
+        s.Color, s.Thickness, s.Parent = tint, 1.7, f
     end
-    if root and visualFeatureWanted("avatar", role) then
-        local gui = makeVisualBillboard(root, "Avatar", UDim2.fromOffset(58, 58), Vector3.new(0, 4.8, 0), entry)
+    if root and wanted("avatar",role) then
+        local b = billboard(root,"Avatar",UDim2.fromOffset(58,58),Vector3.new(0,4.8,0),e)
         local image = Instance.new("ImageLabel")
-        image.Size = UDim2.fromScale(1, 1)
-        image.BackgroundColor3 = Color3.fromRGB(12, 14, 18)
-        image.BorderSizePixel = 0
-        image.Parent = gui
-        local avatarRound = Instance.new("UICorner")
-        avatarRound.CornerRadius = UDim.new(1, 0)
-        avatarRound.Parent = image
-        local avatarStroke = Instance.new("UIStroke")
-        avatarStroke.Color = color
-        avatarStroke.Thickness = 1.5
-        avatarStroke.Parent = image
+        image.Size, image.BackgroundColor3, image.BorderSizePixel, image.Parent = UDim2.fromScale(1,1), Color3.fromRGB(12,14,18), 0, b
+        local c = Instance.new("UICorner"); c.CornerRadius, c.Parent = UDim.new(1,0), image
+        local s = Instance.new("UIStroke"); s.Color, s.Thickness, s.Parent = tint, 1.5, image
         task.spawn(function()
-            local ok, content = pcall(function()
-                return Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
-            end)
-            if ok and image.Parent then image.Image = content end
+            local ok, asset = pcall(function() return V.players:GetUserThumbnailAsync(player.UserId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size150x150) end)
+            if ok and image.Parent then image.Image = asset end
         end)
     end
-    if root and visualFeatureWanted("fire", role) then
+    if root and wanted("fire",role) then
         local flame = Instance.new("Fire")
-        flame.Name = VISUAL_PREFIX .. "Fire"
-        flame.Color = color
-        flame.SecondaryColor = color:Lerp(Color3.new(1, 1, 1), .35)
-        flame.Size = 5
-        flame.Heat = 7
-        flame.Parent = root
-        entry.instances[#entry.instances + 1] = flame
+        flame.Name, flame.Color, flame.SecondaryColor, flame.Size, flame.Heat, flame.Parent = prefix.."Fire", tint, tint:Lerp(Color3.new(1,1,1),.35), 5, 7, root
+        table.insert(e.items, flame)
     end
 end
-
-local function refreshPlayerVisuals()
+local function refreshPlayers()
     local seen = {}
-    for _, player in ipairs(getPlayers()) do
-        if player ~= LocalPlayer then
-            seen[player] = true
-            applyVisualPlayer(player)
-        end
+    for _, player in ipairs(V.getPlayers()) do
+        if player ~= V.localPlayer then seen[player] = true; apply(player) end
     end
-    for player in pairs(visualRegistry) do
-        if not seen[player] then destroyVisualEntry(player) end
-    end
+    for player in pairs(entries) do if not seen[player] then clearPlayer(player) end end
 end
-
-local function visualObjectKind(instance)
+local function objectType(instance)
     if not instance:IsA("BasePart") then return nil end
-    if Players:GetPlayerFromCharacter(instance:FindFirstAncestorOfClass("Model")) then return nil end
+    local owner = instance:FindFirstAncestorOfClass("Model")
+    if owner and V.players:GetPlayerFromCharacter(owner) then return nil end
     local name = string.lower(instance.Name)
-    if name == "gundrop" or name == "droppedgun" or name == "gun_drop" then return "gun" end
-    if string.find(name, "throw", 1, true) and string.find(name, "knife", 1, true) then return "knife" end
-    if name == "throwingknife" or name == "knifeprojectile" then return "knife" end
-    return nil
+    if name == "gundrop" or name == "gun" or string.find(name,"droppedgun",1,true) or string.find(name,"gun_drop",1,true) then return "gun" end
+    if string.find(name,"throw",1,true) and string.find(name,"knife",1,true) then return "knife" end
 end
-
-local function destroyObjectVisual(instance)
-    local entry = objectVisualRegistry[instance]
-    if not entry then return end
-    for _, item in ipairs(entry) do pcall(function() item:Destroy() end) end
-    objectVisualRegistry[instance] = nil
+local function clearObject(instance)
+    local e = objectEntries[instance]
+    if e then for _, item in ipairs(e) do pcall(function() item:Destroy() end) end; objectEntries[instance] = nil end
 end
-
-local function refreshObjectVisuals()
-    if not visualState.objects.gun and not visualState.objects.knife then
-        for instance in pairs(objectVisualRegistry) do destroyObjectVisual(instance) end
+local function refreshObjects()
+    if not state.object.gun and not state.object.knife then
+        for instance in pairs(objectEntries) do clearObject(instance) end
         return
     end
     local seen = {}
-    for _, instance in ipairs(Workspace:GetDescendants()) do
-        local kind = visualObjectKind(instance)
-        if kind and visualState.objects[kind] then
+    for _, instance in ipairs(V.workspace:GetDescendants()) do
+        local kind = objectType(instance)
+        if kind and state.object[kind] then
             seen[instance] = true
-            if not objectVisualRegistry[instance] then
-                local color = kind == "gun" and Color3.fromRGB(72, 158, 255) or Color3.fromRGB(255, 126, 72)
-                local highlight = Instance.new("Highlight")
-                highlight.Name = VISUAL_PREFIX .. "Object"
-                highlight.Adornee = instance
-                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                highlight.FillColor = color
-                highlight.OutlineColor = color
-                highlight.FillTransparency = .7
-                highlight.OutlineTransparency = 0
-                highlight.Parent = instance
-                local gui = Instance.new("BillboardGui")
-                gui.Name = VISUAL_PREFIX .. "ObjectLabel"
-                gui.Adornee = instance
-                gui.AlwaysOnTop = true
-                gui.LightInfluence = 0
-                gui.Size = UDim2.fromOffset(132, 24)
-                gui.StudsOffset = Vector3.new(0, 1.5, 0)
-                gui.Parent = instance
-                local label = Instance.new("TextLabel")
-                label.Size = UDim2.fromScale(1, 1)
-                label.BackgroundTransparency = 1
-                label.Font = Enum.Font.GothamBold
-                label.TextSize = 12
-                label.TextColor3 = color
-                label.TextStrokeTransparency = .35
-                label.Text = kind == "gun" and "DROPPED GUN" or "THROWING KNIFE"
-                label.Parent = gui
-                objectVisualRegistry[instance] = { highlight, gui }
+            if not objectEntries[instance] then
+                local tint = kind == "gun" and Color3.fromRGB(72,158,255) or Color3.fromRGB(255,126,72)
+                local h = Instance.new("Highlight")
+                h.Name, h.Adornee, h.DepthMode = prefix.."Object", instance, Enum.HighlightDepthMode.AlwaysOnTop
+                h.FillColor, h.OutlineColor, h.FillTransparency, h.OutlineTransparency, h.Parent = tint,tint,.72,0,instance
+                local b = Instance.new("BillboardGui")
+                b.Name, b.Adornee, b.AlwaysOnTop, b.Size, b.StudsOffset, b.Parent = prefix.."ObjectLabel",instance,true,UDim2.fromOffset(132,24),Vector3.new(0,1.5,0),instance
+                local l = Instance.new("TextLabel")
+                l.Size,l.BackgroundTransparency,l.Font,l.TextSize,l.TextColor3,l.TextStrokeTransparency,l.Text,l.Parent = UDim2.fromScale(1,1),1,Enum.Font.GothamBold,12,tint,.35,(kind=="gun" and "DROPPED GUN" or "THROWING KNIFE"),b
+                objectEntries[instance] = {h,b}
             end
         end
     end
-    for instance in pairs(objectVisualRegistry) do
-        if not seen[instance] or not instance.Parent then destroyObjectVisual(instance) end
-    end
+    for instance in pairs(objectEntries) do if not seen[instance] or not instance.Parent then clearObject(instance) end end
 end
-
-local function setVisualFilter(feature, filter, enabled)
-    local value = enabled == true
-    visualState.features[feature][filter] = value
-    visualState.version += 1
-    if value then
-        task.spawn(function() pcall(refreshTarget) end)
-    end
-    if value or next(visualRegistry) then
-        visualGuard("player refresh", refreshPlayerVisuals)
-    end
+local function setFilter(kind, filter, enabled)
+    state.feature[kind][filter] = enabled == true
+    state.revision = state.revision + 1
+    safe("player refresh", refreshPlayers)
 end
-
-local function setObjectVisual(kind, enabled)
-    local value = enabled == true
-    visualState.objects[kind] = value
-    if value or next(objectVisualRegistry) then
-        visualGuard("object refresh", refreshObjectVisuals)
-    end
+local function setObject(kind, enabled)
+    state.object[kind] = enabled == true
+    safe("object refresh", refreshObjects)
 end
-
-visualSetupGuard("runtime connections", function()
-    RunService.RenderStepped:Connect(function()
-        if not next(visualRegistry) then return end
-        visualGuard("tracer render", function()
-            local camera = Workspace.CurrentCamera
-            if not camera then return end
-            local viewport = camera.ViewportSize
-            local origin = Vector2.new(viewport.X * .5, viewport.Y)
-            for _, entry in pairs(visualRegistry) do
-                local tracer = entry.tracer
-                if tracer then
-                    local root = entry.character and entry.character:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local point, visible = camera:WorldToViewportPoint(root.Position)
-                        tracer.From = origin
-                        tracer.To = Vector2.new(point.X, point.Y)
-                        tracer.Color = entry.color
-                        tracer.Visible = visible and point.Z > 0
-                    else
-                        tracer.Visible = false
-                    end
-                end
+V.runService.RenderStepped:Connect(function()
+    if not next(entries) then return end
+    safe("tracer", function()
+        local camera = V.workspace.CurrentCamera
+        if not camera then return end
+        local viewport, origin = camera.ViewportSize, nil
+        origin = Vector2.new(viewport.X*.5,viewport.Y)
+        for _, e in pairs(entries) do
+            if e.line then
+                local root = e.character and e.character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local point, visible = camera:WorldToViewportPoint(root.Position)
+                    e.line.From,e.line.To,e.line.Color,e.line.Visible = origin,Vector2.new(point.X,point.Y),e.tint,visible and point.Z>0
+                else e.line.Visible = false end
             end
-        end)
-    end)
-    task.spawn(function()
-        while running do
-            if visualAnyPlayerFeatureEnabled() or next(visualRegistry) then visualGuard("player refresh", refreshPlayerVisuals) end
-            if visualState.objects.gun or visualState.objects.knife or next(objectVisualRegistry) then visualGuard("object refresh", refreshObjectVisuals) end
-            task.wait(.35)
         end
-    end)
-    Players.PlayerRemoving:Connect(function(player)
-        visualGuard("player cleanup", function() destroyVisualEntry(player) end)
     end)
 end)
+V.players.PlayerRemoving:Connect(function(player) safe("cleanup",function() clearPlayer(player) end) end)
+task.spawn(function()
+    while V.isRunning() do
+        if anyPlayerVisual() or next(entries) then safe("player update",refreshPlayers) end
+        if state.object.gun or state.object.knife or next(objectEntries) then safe("object update",refreshObjects) end
+        task.wait(.35)
+    end
+end)
+
+local filters = {{"Everyone","everyone"},{"Murderer Only","murderer"},{"Sheriff Only","sheriff"},{"Hero Only","hero"},{"Dead Only","dead"}}
+for _, definition in ipairs({{"CHAM","cham"},{"ESP","esp"},{"OUTLINE","outline"},{"HIGHLIGHT","highlight"},{"TRACER","tracer"},{"ESP BOX","box"},{"ESP AVATAR","avatar"},{"ESP FIRE","fire"}}) do
+    local title, kind = definition[1], definition[2]
+    local section = V.tab:AddSection("VISUAL \u{2022} "..title,"BY PLAYER")
+    for _, f in ipairs(filters) do
+        local label, filter = f[1], f[2]
+        section:AddToggle(label,function(enabled) safe("toggle",function() setFilter(kind,filter,enabled) end) end)
+    end
+end
+local objects = V.tab:AddSection("VISUAL \u{2022} BY OBJECT","Object ESP")
+objects:AddToggle("Dropped Gun",function(enabled) safe("object toggle",function() setObject("gun",enabled) end) end)
+objects:AddToggle("Throwing Knives",function(enabled) safe("object toggle",function() setObject("knife",enabled) end) end)
+
+]==]
+task.defer(function()
+    local compiler = loadstring
+    if type(compiler) ~= "function" then
+        warn("[Noir Visuals] loadstring is unavailable; main Noir loaded without the optional Visuals module.")
+        return
+    end
+    local okCompile, module = pcall(compiler, __noirVisualSource)
+    if not okCompile or type(module) ~= "function" then
+        warn("[Noir Visuals] module compile failed: " .. tostring(module))
+        return
+    end
+    local okRun, err = xpcall(module, function(message) return tostring(message) end)
+    if not okRun then warn("[Noir Visuals] module startup failed: " .. tostring(err)) end
+end)
+
 
 local selfMods = tab:AddSection("MAIN \u{2022} SELF MODS", "Universal player controls")
 selfMods:AddToggle("Enable WalkSpeed", function(v) utility.walkEnabled = v; applyCharacterMods() end)
@@ -2724,33 +2640,6 @@ gunUtilities:AddSlider("Grab Gun Bind Button Size", 5, 25, gunUtilityState.bindB
     updateGrabGunBindButtonSize()
 end)
 gunUtilities:AddLabel("Round Grab Gun button: drag it to move; its size and position are saved.")
-
-local visualFilterOptions = {
-    { "Everyone", "everyone" },
-    { "Murderer Only", "murderer" },
-    { "Sheriff Only", "sheriff" },
-    { "Hero Only", "hero" },
-    { "Dead Only", "dead" },
-}
-visualSetupGuard("Visuals menu", function()
-    for _, visualDefinition in ipairs({
-        { "CHAM", "cham" }, { "ESP", "esp" }, { "OUTLINE", "outline" }, { "HIGHLIGHT", "highlight" },
-        { "TRACER", "tracer" }, { "ESP BOX", "box" }, { "ESP AVATAR", "avatar" }, { "ESP FIRE", "fire" },
-    }) do
-        local title, feature = visualDefinition[1], visualDefinition[2]
-        local section = tab:AddSection("VISUAL \u{2022} " .. title, "BY PLAYER")
-        for _, filterDefinition in ipairs(visualFilterOptions) do
-            local label, filter = filterDefinition[1], filterDefinition[2]
-            section:AddToggle(label, function(enabled)
-                visualGuard("toggle", function() setVisualFilter(feature, filter, enabled) end)
-            end)
-        end
-    end
-    local objectVisualSection = tab:AddSection("VISUAL \u{2022} BY OBJECT", "Object ESP")
-    objectVisualSection:AddToggle("Dropped Gun", function(enabled) visualGuard("object toggle", function() setObjectVisual("gun", enabled) end) end)
-    objectVisualSection:AddToggle("Throwing Knives", function(enabled) visualGuard("object toggle", function() setObjectVisual("knife", enabled) end) end)
-end)
-end
 
 do
     local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
