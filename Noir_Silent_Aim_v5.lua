@@ -2344,6 +2344,9 @@ local function setAutoGG(enabled)
     end)
 end
 
+-- Keep all Visuals locals in their own scope. This avoids exceeding Luau's 200-local register limit on mobile executors.
+local tab = host.CreateTab()
+do
 local visualState = {
     version = 0,
     features = {
@@ -2686,8 +2689,6 @@ visualSetupGuard("runtime connections", function()
     end)
 end)
 
-local tab = host.CreateTab()
-
 local selfMods = tab:AddSection("MAIN \u{2022} SELF MODS", "Universal player controls")
 selfMods:AddToggle("Enable WalkSpeed", function(v) utility.walkEnabled = v; applyCharacterMods() end)
 selfMods:AddSlider("WalkSpeed", 8, 100, 16, function(v) utility.walkSpeed = v; applyCharacterMods() end)
@@ -2749,6 +2750,7 @@ visualSetupGuard("Visuals menu", function()
     objectVisualSection:AddToggle("Dropped Gun", function(enabled) visualGuard("object toggle", function() setObjectVisual("gun", enabled) end) end)
     objectVisualSection:AddToggle("Throwing Knives", function(enabled) visualGuard("object toggle", function() setObjectVisual("knife", enabled) end) end)
 end)
+end
 
 do
     local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
