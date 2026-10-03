@@ -3030,7 +3030,7 @@ local function restoreFlyCharacter()
             local wasEnabled = state.flyStateEnabled[stateType.Name]
             if wasEnabled ~= nil then pcall(function() humanoid:SetStateEnabled(stateType, wasEnabled) end) end
         end
-        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics) end)
+        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
     end
     if state.flyAnimate and state.flyAnimate.Parent then state.flyAnimate.Disabled = state.flyAnimateDisabled end
     state.flyHumanoid, state.flyAnimate = nil, nil
@@ -3055,29 +3055,18 @@ local function startFly()
     local sourceTorso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"))
     if not (humanoid and root and (sourceTorso or root)) then return end
 
-    -- The source's R6/R15 setup, retained in Noir's existing Main toggle and round bind button.
+    -- Keep the source's BodyVelocity flight core, but leave Roblox's humanoid states and animation system intact.
+    -- Disabling them (and forcing a BodyGyro at the camera angle) is what caused the visible body rocking.
     state.flyHumanoid, state.flyAutoRotate, state.flyPlatformStand = humanoid, humanoid.AutoRotate, humanoid.PlatformStand
-    state.flyAnimate = character:FindFirstChild("Animate")
-    state.flyAnimateDisabled = state.flyAnimate and state.flyAnimate.Disabled or false
     humanoid.AutoRotate = false
-    humanoid.PlatformStand = true
-    for _, stateType in ipairs(FLY_STATES) do
-        local ok, wasEnabled = pcall(function() return humanoid:GetStateEnabled(stateType) end)
-        if ok then state.flyStateEnabled[stateType.Name] = wasEnabled end
-        pcall(function() humanoid:SetStateEnabled(stateType, false) end)
-    end
-    if state.flyAnimate then state.flyAnimate.Disabled = true end
 
-    local gyro = Instance.new("BodyGyro")
-    gyro.Name, gyro.P, gyro.D, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 5e4, 600, Vector3.new(4e5,4e5,4e5), root.CFrame
-    gyro.Parent = root
     local velocity = Instance.new("BodyVelocity")
-    velocity.Name, velocity.P, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", 5e4, Vector3.zero, Vector3.new(9e9,9e9,9e9)
+    velocity.Name, velocity.P, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", 15000, Vector3.zero, Vector3.new(9e9,9e9,9e9)
     velocity.Parent = root
-    state.flyVelocity, state.flyGyro = velocity, gyro
+    state.flyVelocity = velocity
 
     state.flyConnection = RunService.Heartbeat:Connect(function()
-        if not state.fly or not (character.Parent and humanoid.Parent and root.Parent and velocity.Parent and gyro.Parent) then return end
+        if not state.fly or not (character.Parent and humanoid.Parent and root.Parent and velocity.Parent) then return end
         local camera = Workspace.CurrentCamera
         if not camera then return end
         -- Mobile joystick flight: push forward/back while aiming the camera up or down to rise/descend.
@@ -3095,7 +3084,6 @@ local function startFly()
             if flightDirection.Magnitude > .001 then desiredVelocity = flightDirection.Unit * state.flySpeed end
         end
         velocity.Velocity = desiredVelocity
-        gyro.CFrame = CFrame.new(root.Position, root.Position + camera.CFrame.LookVector)
     end)
 end
 
