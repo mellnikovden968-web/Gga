@@ -2983,7 +2983,7 @@ local state = {
     fly = false, flyVelocity = nil, flyGyro = nil, flyConnection = nil,
     flyHumanoid = nil, flyAutoRotate = true, flyPlatformStand = false,
     flyStateEnabled = {}, flyAnimate = nil, flyAnimateDisabled = false,
-    flySpeed = 1,
+    flySpeed = 48,
 }
 -- Uses the supplied universal-fly method: PlatformStand plus BodyGyro/BodyVelocity
 -- on UpperTorso (R15) or Torso (R6), with Humanoid:TranslateBy movement.
@@ -3050,8 +3050,10 @@ local function startFly()
     local character = LocalPlayer.Character
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
     local root = character and character:FindFirstChild("HumanoidRootPart")
-    local torso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or root)
-    if not (humanoid and root and torso) then return end
+    -- The linked script handles R15 UpperTorso and R6 Torso.  HumanoidRootPart is used here
+    -- for the constraints because it prevents the torso/root physics fight that causes shaking.
+    local sourceTorso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"))
+    if not (humanoid and root and (sourceTorso or root)) then return end
 
     -- The source's R6/R15 setup, retained in Noir's existing Main toggle and round bind button.
     state.flyHumanoid, state.flyAutoRotate, state.flyPlatformStand = humanoid, humanoid.AutoRotate, humanoid.PlatformStand
@@ -3067,28 +3069,33 @@ local function startFly()
     if state.flyAnimate then state.flyAnimate.Disabled = true end
 
     local gyro = Instance.new("BodyGyro")
-    gyro.Name, gyro.P, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 9e4, Vector3.new(9e9, 9e9, 9e9), torso.CFrame
-    gyro.Parent = torso
+    gyro.Name, gyro.P, gyro.D, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 5e4, 600, Vector3.new(4e5,4e5,4e5), root.CFrame
+    gyro.Parent = root
     local velocity = Instance.new("BodyVelocity")
-    velocity.Name, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", Vector3.new(0, .1, 0), Vector3.new(9e9, 9e9, 9e9)
-    velocity.Parent = torso
+    velocity.Name, velocity.P, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", 5e4, Vector3.zero, Vector3.new(9e9,9e9,9e9)
+    velocity.Parent = root
     state.flyVelocity, state.flyGyro = velocity, gyro
 
     state.flyConnection = RunService.Heartbeat:Connect(function()
-        if not state.fly or not (character.Parent and humanoid.Parent and root.Parent and torso.Parent and velocity.Parent and gyro.Parent) then return end
+        if not state.fly or not (character.Parent and humanoid.Parent and root.Parent and velocity.Parent and gyro.Parent) then return end
         local camera = Workspace.CurrentCamera
         if not camera then return end
-        -- This is the source's tpwalking movement: follow Humanoid.MoveDirection each heartbeat.
-        local moveDirection = humanoid.MoveDirection
-        if moveDirection.Magnitude > 0 then pcall(function() character:TranslateBy(moveDirection * state.flySpeed) end) end
-        -- Space/Control provide the source GUI's Up/Down function while retaining Noir's compact controls.
-        if UIS:IsKeyDown(Enum.KeyCode.Space) or humanoid.Jump then
-            root.CFrame = root.CFrame * CFrame.new(0, state.flySpeed, 0)
-        elseif UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl) then
-            root.CFrame = root.CFrame * CFrame.new(0, -state.flySpeed, 0)
+        -- Mobile joystick flight: push forward/back while aiming the camera up or down to rise/descend.
+        -- MoveDirection supplies the joystick vector; projecting it on the camera's flat axes preserves its intent.
+        local input = humanoid.MoveDirection
+        local desiredVelocity = Vector3.zero
+        if input.Magnitude > .001 then
+            local look = camera.CFrame.LookVector
+            local right = camera.CFrame.RightVector
+            local flatLook = Vector3.new(look.X, 0, look.Z)
+            local flatRight = Vector3.new(right.X, 0, right.Z)
+            local forwardInput = flatLook.Magnitude > .001 and input:Dot(flatLook.Unit) or 0
+            local sideInput = flatRight.Magnitude > .001 and input:Dot(flatRight.Unit) or 0
+            local flightDirection = look * forwardInput + right * sideInput
+            if flightDirection.Magnitude > .001 then desiredVelocity = flightDirection.Unit * state.flySpeed end
         end
-        velocity.Velocity = Vector3.new(0, .1, 0)
-        gyro.CFrame = camera.CFrame
+        velocity.Velocity = desiredVelocity
+        gyro.CFrame = CFrame.new(root.Position, root.Position + camera.CFrame.LookVector)
     end)
 end
 
