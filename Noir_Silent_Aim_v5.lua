@@ -6030,7 +6030,7 @@ local isJumpKeyPressed = false
 local Camera = workspace.CurrentCamera
 local wallDetectionCooldown = 0
 local lastWallhopAt = 0
-local WALLHOP_COOLDOWN = 0.22
+local WALLHOP_COOLDOWN = 0.4
 
 local wallRaycastParams = RaycastParams.new()
 wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
@@ -6093,15 +6093,21 @@ local function getWallRaycastResult()
     end
     wallRaycastParams.FilterDescendantsInstances = blacklist
 
-    -- WallHop should use the wall the player is actually facing, not any wall in a 360 degree scan.
-    -- The old scan made a normal jump beside a wall behave like an infinite jump.
-    local facing = Camera and Camera.CFrame.LookVector or hrp.CFrame.LookVector
-    local flatFacing = Vector3.new(facing.X, 0, facing.Z)
-    if flatFacing.Magnitude < .05 then flatFacing = Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z) end
-    if flatFacing.Magnitude < .05 then return nil end
-    local ray = workspace:Raycast(hrp.Position, flatFacing.Unit * detectionDistance, wallRaycastParams)
-    if ray and ray.Instance and isWall(ray.Instance) then return ray end
-    return nil
+    local closestHit, minDistance = nil, detectionDistance
+    local hrpCF = hrp.CFrame
+    for i = 0,7 do
+        local angle = math.rad(i*45)
+        local dir = (hrpCF * CFrame.Angles(0, angle, 0)).LookVector
+        local ray = workspace:Raycast(hrp.Position, dir * detectionDistance, wallRaycastParams)
+        if ray and ray.Instance and ray.Distance < minDistance then
+            local hitInstance = ray.Instance
+            if isWall(hitInstance) then
+                minDistance = ray.Distance
+                closestHit = ray
+            end
+        end
+    end
+    return closestHit
 end
 
 performVideoFlick = function()
@@ -6139,8 +6145,6 @@ performWallhop = function()
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not (humanoid and rootPart and humanoid:GetState() ~= Enum.HumanoidStateType.Dead) then return end
-    -- Do not reapply Jumping while airborne: that was the infinity-jump behavior.
-    if humanoid.FloorMaterial == Enum.Material.Air then return end
     local now = os.clock()
     if now - lastWallhopAt < WALLHOP_COOLDOWN then return end
 
