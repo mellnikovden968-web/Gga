@@ -2262,11 +2262,11 @@ local function createGrabGunBindButton()
     textLabel.Position = UDim2.fromScale(.5, .5)
     textLabel.Size = UDim2.fromScale(.76, .76)
     textLabel.BackgroundTransparency = 1
-    textLabel.Text = "GRAB\nGUN"
+    textLabel.Text = "Grab Gun"
     textLabel.TextColor3 = Color3.fromRGB(245, 245, 248)
-    textLabel.TextSize = 14
+    textLabel.TextSize = 17
     textLabel.TextWrapped = true
-    textLabel.Font = Enum.Font.GothamBold
+    textLabel.Font = Enum.Font.Gotham
     textLabel.ZIndex = 6
     textLabel.Parent = button
 
@@ -2295,6 +2295,9 @@ local function createGrabGunBindButton()
     end)
     gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = button.Activated:Connect(function()
         if not moved then requestGrabGun() end
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = RunService.RenderStepped:Connect(function()
+        if outerGradient.Parent then outerGradient.Rotation = (outerGradient.Rotation + 1) % 360 end
     end)
     gunUtilityState.bindGui, gunUtilityState.bindButton = bindGui, button
     updateGrabGunBindButtonSize()
