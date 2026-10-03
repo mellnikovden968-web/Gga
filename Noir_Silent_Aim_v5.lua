@@ -2625,6 +2625,7 @@ do
         end
     end)
 
+
     UIS.JumpRequest:Connect(function()
         if not universalState.infiniteJump then return end
         local humanoid = localHumanoid()
@@ -2960,6 +2961,211 @@ task.defer(function()
     local okRun, err = xpcall(module, function(message) return tostring(message) end)
     if not okRun then warn("[Noir Visuals] module startup failed: " .. tostring(err)) end
 end)
+
+
+
+-- Noclip and Fly are compiled in an isolated deferred chunk so they do not exceed the primary mobile Luau local-register budget.
+getgenv().__NoirMovementContext = {
+    tab = tab, players = Players, uis = UIS, runService = RunService, workspace = Workspace,
+    localPlayer = LocalPlayer, persistence = NoirPersistence, guiParent = guiParent, coreGui = CoreGui,
+    isPrimaryPress = isPrimaryPress,
+}
+task.defer(function()
+    local __noirMovementSource = [==[
+-- Noclip and Fly run in an isolated module to avoid the mobile Luau register limit in the main loader.
+local M = getgenv().__NoirMovementContext
+if type(M) ~= "table" or not M.tab or not M.persistence then return end
+
+local Players, UIS, RunService, Workspace = M.players, M.uis, M.runService, M.workspace
+local LocalPlayer, Persistence = M.localPlayer, M.persistence
+local state = { noclip = false, noclipOriginals = {}, fly = false, flyVelocity = nil, flyGyro = nil, flyConnection = nil, flyHumanoid = nil, flyAutoRotate = true }
+local FLY_SPEED = 55
+
+local function applyNoclip()
+    if not state.noclip then return end
+    local character = LocalPlayer.Character
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if state.noclipOriginals[part] == nil then state.noclipOriginals[part] = part.CanCollide end
+            if part.CanCollide then part.CanCollide = false end
+        end
+    end
+end
+local function restoreNoclip()
+    for part, original in pairs(state.noclipOriginals) do
+        if part and part.Parent then pcall(function() part.CanCollide = original end) end
+    end
+    table.clear(state.noclipOriginals)
+end
+local function setNoclip(enabled)
+    state.noclip = enabled == true
+    if state.noclip then applyNoclip() else restoreNoclip() end
+end
+RunService.Stepped:Connect(function() if state.noclip then applyNoclip() end end)
+
+local function stopFly()
+    if state.flyConnection then state.flyConnection:Disconnect(); state.flyConnection = nil end
+    if state.flyVelocity then state.flyVelocity:Destroy(); state.flyVelocity = nil end
+    if state.flyGyro then state.flyGyro:Destroy(); state.flyGyro = nil end
+    if state.flyHumanoid and state.flyHumanoid.Parent then
+        state.flyHumanoid.AutoRotate = state.flyAutoRotate
+        state.flyHumanoid:ChangeState(Enum.HumanoidStateType.Running)
+    end
+    state.flyHumanoid = nil
+end
+local function startFly()
+    stopFly()
+    if not state.fly then return end
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not (humanoid and root) then return end
+    state.flyHumanoid, state.flyAutoRotate = humanoid, humanoid.AutoRotate
+    humanoid.AutoRotate = false
+    local velocity = Instance.new("BodyVelocity")
+    velocity.Name, velocity.MaxForce, velocity.P, velocity.Velocity = "NoirFlyVelocity", Vector3.new(1000000,1000000,1000000), 20000, Vector3.zero
+    velocity.Parent = root
+    local gyro = Instance.new("BodyGyro")
+    gyro.Name, gyro.MaxTorque, gyro.P, gyro.CFrame = "NoirFlyGyro", Vector3.new(1000000,1000000,1000000), 20000, root.CFrame
+    gyro.Parent = root
+    state.flyVelocity, state.flyGyro = velocity, gyro
+    state.flyConnection = RunService.RenderStepped:Connect(function()
+        if not state.fly or not (root.Parent and humanoid.Parent and velocity.Parent and gyro.Parent) then return end
+        local camera = Workspace.CurrentCamera
+        if not camera then return end
+        local vertical = 0
+        if UIS:IsKeyDown(Enum.KeyCode.Space) or humanoid.Jump then vertical += FLY_SPEED end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl) then vertical -= FLY_SPEED end
+        local move = humanoid.MoveDirection
+        velocity.Velocity = Vector3.new(move.X * FLY_SPEED, vertical, move.Z * FLY_SPEED)
+        gyro.CFrame = CFrame.new(root.Position, root.Position + camera.CFrame.LookVector)
+    end)
+end
+local function setFly(enabled)
+    state.fly = enabled == true
+    if state.fly then startFly() else stopFly() end
+end
+
+local binds = {
+    noclip = { text="Noclip", key="noclip_bind_v1", default=UDim2.new(.38,0,.88,0), size=.105, enabled=false, gui=nil, button=nil, connections={} },
+    fly = { text="Fly", key="fly_bind_v1", default=UDim2.new(.52,0,.88,0), size=.105, enabled=false, gui=nil, button=nil, connections={} },
+}
+local function disconnect(bind)
+    for _, connection in ipairs(bind.connections) do pcall(function() connection:Disconnect() end) end
+    table.clear(bind.connections)
+end
+local function updateSize(bind)
+    local camera = Workspace.CurrentCamera
+    if not (bind.button and camera) then return end
+    local screen = camera.ViewportSize
+    bind.button.Size = UDim2.new(bind.size * (screen.Y / math.max(screen.X,1)),0,bind.size,0)
+end
+local function updateText(bind, active)
+    local label = bind.button and bind.button:FindFirstChild("Text")
+    if label then label.Text = bind.text .. "\n" .. (active and "ON" or "OFF") end
+end
+local function removeBind(bind)
+    disconnect(bind)
+    if bind.gui then bind.gui:Destroy() end
+    bind.gui, bind.button = nil, nil
+    for _, parent in ipairs({M.guiParent, M.coreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
+        if typeof(parent) == "Instance" then
+            local old = parent:FindFirstChild("Noir" .. bind.text .. "BindButton")
+            if old then old:Destroy() end
+        end
+    end
+end
+local function createBind(bind, isActive, setActive)
+    if bind.button then return end
+    removeBind(bind)
+    local parent = M.guiParent
+    if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name, screenGui.ResetOnSpawn, screenGui.IgnoreGuiInset, screenGui.DisplayOrder = "Noir" .. bind.text .. "BindButton", false, true, 82
+    screenGui.Parent = parent
+    local button = Instance.new("ImageButton")
+    button.Name, button.AnchorPoint = bind.text, Vector2.new(.5,.5)
+    button.Position = Persistence.GetPosition(bind.key,bind.default)
+    button.BackgroundColor3, button.BackgroundTransparency, button.BorderSizePixel, button.Image, button.AutoButtonColor, button.ZIndex = Color3.fromRGB(8,8,10),.28,0,"",false,5
+    button.Parent = screenGui
+    local circle = Instance.new("UICorner"); circle.CornerRadius = UDim.new(1,0); circle.Parent = button
+    local aspect = Instance.new("UIAspectRatioConstraint"); aspect.AspectRatio = 1; aspect.Parent = button
+    local outer = Instance.new("UIStroke"); outer.Color,outer.Thickness,outer.ApplyStrokeMode,outer.Parent=Color3.fromRGB(255,255,255),2,Enum.ApplyStrokeMode.Border,button
+    local gradient = Instance.new("UIGradient")
+    gradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(35,35,40)),ColorSequenceKeypoint.new(.22,Color3.fromRGB(250,250,252)),ColorSequenceKeypoint.new(.48,Color3.fromRGB(70,70,78)),ColorSequenceKeypoint.new(.72,Color3.fromRGB(255,255,255)),ColorSequenceKeypoint.new(1,Color3.fromRGB(45,45,52))})
+    gradient.Parent=outer
+    local inner=Instance.new("UIStroke");inner.Color,inner.Transparency,inner.Thickness,inner.Parent=Color3.fromRGB(105,105,112),.5,1,button
+    local innerGradient=gradient:Clone();innerGradient.Rotation=180;innerGradient.Parent=inner
+    local label=Instance.new("TextLabel")
+    label.Name,label.AnchorPoint,label.Position,label.Size="Text",Vector2.new(.5,.5),UDim2.fromScale(.5,.5),UDim2.fromScale(.76,.76)
+    label.BackgroundTransparency,label.TextColor3,label.TextSize,label.TextWrapped,label.Font,label.ZIndex=1,Color3.fromRGB(245,245,248),14,true,Enum.Font.Gotham,6
+    label.Parent=button
+    local dragging,moved,dragStart,startPosition,dragInput=false,false,nil,nil,nil
+    bind.connections[#bind.connections+1]=button.InputBegan:Connect(function(input)
+        if not M.isPrimaryPress(input) then return end
+        dragging,moved,dragStart,startPosition=true,false,input.Position,button.Position
+    end)
+    bind.connections[#bind.connections+1]=button.InputChanged:Connect(function(input)
+        if input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch then dragInput=input end
+    end)
+    bind.connections[#bind.connections+1]=UIS.InputChanged:Connect(function(input)
+        if not dragging or input~=dragInput then return end
+        local delta=input.Position-dragStart
+        if delta.Magnitude>7 then moved=true end
+        button.Position=UDim2.new(startPosition.X.Scale,startPosition.X.Offset+delta.X,startPosition.Y.Scale,startPosition.Y.Offset+delta.Y)
+    end)
+    bind.connections[#bind.connections+1]=UIS.InputEnded:Connect(function(input)
+        if not dragging or not M.isPrimaryPress(input) then return end
+        dragging=false
+        Persistence.SetPosition(bind.key,button.Position)
+    end)
+    bind.connections[#bind.connections+1]=button.Activated:Connect(function() if not moved then setActive(not isActive()) end end)
+    bind.connections[#bind.connections+1]=RunService.RenderStepped:Connect(function() if gradient.Parent then gradient.Rotation=(gradient.Rotation+1)%360 end end)
+    bind.gui,bind.button=screenGui,button
+    updateSize(bind);updateText(bind,isActive())
+end
+local function setBind(bind, enabled, isActive, setActive)
+    bind.enabled=enabled==true
+    if bind.enabled then createBind(bind,isActive,setActive) else removeBind(bind) end
+end
+local function syncNoclipText() updateText(binds.noclip,state.noclip) end
+local function syncFlyText() updateText(binds.fly,state.fly) end
+
+local noclipSection=M.tab:AddSection("MAIN \u{2022} NOCLIP","Walk through local collision")
+noclipSection:AddToggle("Noclip",function(enabled) setNoclip(enabled);syncNoclipText() end)
+noclipSection:AddToggle("Enable Noclip Bind Button",function(enabled)
+    setBind(binds.noclip,enabled,function() return state.noclip end,function(active) setNoclip(active);syncNoclipText() end)
+end)
+noclipSection:AddSlider("Noclip Bind Button Size",5,25,binds.noclip.size*100,function(value) binds.noclip.size=(tonumber(value) or 10.5)/100;updateSize(binds.noclip) end)
+
+local flySection=M.tab:AddSection("MAIN \u{2022} FLY","Camera-guided movement")
+flySection:AddToggle("Fly",function(enabled) setFly(enabled);syncFlyText() end)
+flySection:AddToggle("Enable Fly Bind Button",function(enabled)
+    setBind(binds.fly,enabled,function() return state.fly end,function(active) setFly(active);syncFlyText() end)
+end)
+flySection:AddSlider("Fly Bind Button Size",5,25,binds.fly.size*100,function(value) binds.fly.size=(tonumber(value) or 10.5)/100;updateSize(binds.fly) end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    if state.noclip then table.clear(state.noclipOriginals);applyNoclip() end
+    if state.fly then startFly() end
+end)
+]==]
+    local compiler = loadstring
+    if type(compiler) ~= "function" then
+        warn("[Noir Movement] loadstring is unavailable; Noclip and Fly could not be started.")
+        return
+    end
+    local okCompile, module = pcall(compiler, __noirMovementSource)
+    if not okCompile or type(module) ~= "function" then
+        warn("[Noir Movement] module compile failed: " .. tostring(module))
+        return
+    end
+    local okRun, err = xpcall(module, function(message) return tostring(message) end)
+    if not okRun then warn("[Noir Movement] module startup failed: " .. tostring(err)) end
+end)
+
 
 
 local selfMods = tab:AddSection("MAIN \u{2022} SELF MODS", "Universal player controls")
