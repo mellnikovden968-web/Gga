@@ -225,7 +225,23 @@ do
             BackgroundTransparency = 1, Text = d[4], TextColor3 = C.dim, TextSize = 15, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
         local bar = New("Frame", { Parent = b, Position = UDim2.fromOffset(0, 12), Size = UDim2.fromOffset(3, 22), BackgroundColor3 = C.accent, BackgroundTransparency = 1 })
         corner(bar, 2)
-        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, label = lbl, bar = bar }
+        local glyphs = nil
+        if d[1] == "emotes" then
+            -- A clear person-shaped icon for Emotes instead of the Combat crossed-swords sprite.
+            ic.Visible = false
+            glyphs = {}
+            local function glyphPart(position, size, rounded)
+                local part = New("Frame", { Parent = b, Position = position, Size = size, BackgroundColor3 = C.dim, BorderSizePixel = 0 })
+                if rounded then corner(part, rounded) end
+                glyphs[#glyphs + 1] = part
+            end
+            glyphPart(UDim2.fromOffset(20, 8), UDim2.fromOffset(10, 10), 5)
+            glyphPart(UDim2.fromOffset(21, 18), UDim2.fromOffset(8, 10), 3)
+            glyphPart(UDim2.fromOffset(15, 20), UDim2.fromOffset(20, 4), 2)
+            glyphPart(UDim2.fromOffset(19, 27), UDim2.fromOffset(4, 8), 2)
+            glyphPart(UDim2.fromOffset(27, 27), UDim2.fromOffset(4, 8), 2)
+        end
+        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, label = lbl, bar = bar, glyphs = glyphs }
     end
 end
 local status = New("Frame", { Parent = sidebar, Position = UDim2.fromOffset(16, 596), Size = UDim2.fromOffset(208, 84), BackgroundColor3 = C.panel, BackgroundTransparency = .18 })
@@ -537,6 +553,9 @@ do
             local data = navIcons[name]
             if data then
                 TweenService:Create(data.icon, TweenInfo.new(.2), { ImageColor3 = active and C.accent or C.dim }):Play()
+                if data.glyphs then
+                    for _, glyph in ipairs(data.glyphs) do TweenService:Create(glyph, TweenInfo.new(.2), { BackgroundColor3 = active and C.accent or C.dim }):Play() end
+                end
                 TweenService:Create(data.label, TweenInfo.new(.2), { TextColor3 = active and C.text or C.dim }):Play()
                 TweenService:Create(data.bar, TweenInfo.new(.2), { BackgroundTransparency = active and 0 or 1 }):Play()
             end
@@ -555,7 +574,12 @@ function refreshCanvas()
         visualContent.CanvasSize = UDim2.fromOffset(0, math.max(visualCols[1].AbsoluteSize.Y, visualCols[2].AbsoluteSize.Y) + 165)
         mainContent.CanvasSize = UDim2.fromOffset(0, math.max(mainCols[1].AbsoluteSize.Y, mainCols[2].AbsoluteSize.Y) + 165)
         worldContent.CanvasSize = UDim2.fromOffset(0, math.max(worldCols[1].AbsoluteSize.Y, worldCols[2].AbsoluteSize.Y) + 130)
-        emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(emotesCols[1].AbsoluteSize.Y, emotesCols[2].AbsoluteSize.Y) + 165)
+        local embeddedEmotes = emotesContent:FindFirstChild("NoirEmbeddedEmotesCanvas")
+        if embeddedEmotes then
+            emotesContent.CanvasSize = UDim2.fromOffset(0, embeddedEmotes.Position.Y.Offset + embeddedEmotes.Size.Y.Offset + 16)
+        else
+            emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(emotesCols[1].AbsoluteSize.Y, emotesCols[2].AbsoluteSize.Y) + 165)
+        end
     end)
 end
 search:GetPropertyChangedSignal("Text"):Connect(function()
@@ -3438,15 +3462,9 @@ end)
 
 -- Full 7yd7 Emotes port, hosted in Noir's native Emotes page instead of as an external ODH plugin.
 getgenv().__NoirEmotesContext = {
-    CreateTab = function(_, _)
-        local base = host.CreateTab()
-        local proxy = {}
-        function proxy:AddSection(name, description)
-            name = tostring(name or "Emotes")
-            if string.sub(name, 1, 7) ~= "EMOTES " then name = "EMOTES \u{2022} " .. name end
-            return base:AddSection(name, description or "")
-        end
-        return proxy
+    container = emotesContent,
+    SetCanvasHeight = function(height)
+        emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(200, tonumber(height) or 656))
     end,
     Notify = function(textValue, duration) notify("Emotes: " .. tostring(textValue), duration or 3) end,
 }
@@ -3459,8 +3477,9 @@ task.defer(function()
 -- R15 only. Asset permissions and replication remain controlled by Roblox/the game.
 -- Integrated into Noir's native Emotes tab. The catalog source stays data-only; no remote Lua is executed.
 local shared=getgenv().__NoirEmotesContext
-if not shared or type(shared.CreateTab)~="function" then
-    warn("[Noir Emotes] Noir Emotes context unavailable.")
+local container=shared and shared.container
+if not shared or not (container and typeof(container)=="Instance") then
+    warn("[Noir Emotes] native Emotes tab container unavailable.")
     return
 end
 local KEY="Noir_7yd7_EmotesRuntime_v1"
@@ -4265,8 +4284,8 @@ do
     local function SetVisible(value)
         if not UI.root then return end
         UI.hidden=false
-        UI.screen.Enabled=true
-        UI.root.Visible=value;UI.launcher.Visible=not value
+        UI.root.Visible=value
+        if UI.launcher then UI.launcher.Visible=false end
         if not value and UI.setSettingsVisible then UI.setSettingsVisible(false) end
         RefreshQuickVisuals()
         if value and runtime.RenderCards then runtime.RenderCards() end
@@ -4485,19 +4504,12 @@ do
     end
     runtime.RenderCards=RenderCards
     local function Build()
-        local gui=Make("ScreenGui",{Name="ODH_Emotes_Cards",ResetOnSpawn=false,IgnoreGuiInset=false,
-            ZIndexBehavior=Enum.ZIndexBehavior.Sibling,DisplayOrder=70})
-        UI.screen=gui
-        local parent
-        if type(gethui)=="function" then
-            local ok,value=pcall(gethui);if ok and typeof(value)=="Instance" then parent=value end
-        end
-        parent=parent or Player:FindFirstChildOfClass("PlayerGui") or Player:WaitForChild("PlayerGui",5)
-        if not parent then error("PlayerGui unavailable") end
-        local parentOK=pcall(function() gui.Parent=parent end)
-        if not parentOK then gui.Parent=Player:WaitForChild("PlayerGui",5) end
-        UI.canvas=Make("Frame",{Name="Canvas",Size=UDim2.fromScale(1,1),BackgroundTransparency=1,
-            Active=false},gui)
+        local oldCanvas=container:FindFirstChild("NoirEmbeddedEmotesCanvas")
+        if oldCanvas then oldCanvas:Destroy() end
+        -- This is the browser from the supplied script, now drawn directly inside Noir's Emotes page.
+        UI.canvas=Make("Frame",{Name="NoirEmbeddedEmotesCanvas",Position=UDim2.fromOffset(8,8),Size=UDim2.new(1,-16,0,640),
+            BackgroundTransparency=1,Active=true},container)
+        if shared.SetCanvasHeight then shared.SetCanvasHeight(656) end
         UI.root=Make("Frame",{Name="CardBrowser",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),
             Size=UDim2.fromOffset(1000,600),BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=prefs.windowTransparency/100,BorderSizePixel=0,ClipsDescendants=true,Active=true},UI.canvas)
         Round(UI.root,18);Stroke(UI.root,C.muted,.4);Gradient(UI.root,C.navy,Color3.fromRGB(6,76,78),22)
@@ -4506,15 +4518,11 @@ do
         local drag=Make("TextButton",{Name="DragHeader",Position=UDim2.fromOffset(0,3),Size=UDim2.new(1,-188,0,46),
             BackgroundTransparency=1,Text="",AutoButtonColor=false,Active=true},UI.root)
         Text(drag,"Emotes",23,UDim2.fromOffset(18,3),UDim2.new(1,-22,0,26))
-        Text(drag,"R15 · Overdrive H · v7",10,UDim2.fromOffset(19,29),UDim2.new(1,-24,0,14)).TextColor3=C.muted
-        UI.settings=Button(UI.root,"Settings",UDim2.new(1,-184,0,10),UDim2.fromOffset(80,36));UI.settings.TextSize=13
-        local minimize=Button(UI.root,"—",UDim2.new(1,-96,0,10),UDim2.fromOffset(36,36))
-        local close=Button(UI.root,"×",UDim2.new(1,-52,0,10),UDim2.fromOffset(36,36));close.TextSize=24
-        UI.launcher=Button(UI.canvas,"Emotes  ▶",UDim2.new(0,16,.65,0),UDim2.fromOffset(112,42))
-        UI.launcher.BackgroundColor3=C.teal;Stroke(UI.launcher,C.accent,.2);UI.launcher.Visible=false
-        Connect(minimize.Activated,function() SetVisible(false) end)
-        Connect(close.Activated,function() runtime.CloseBrowser() end)
-        Connect(UI.launcher.Activated,function() SetVisible(true) end)
+        Text(drag,"R15 · Noir Hub · v7",10,UDim2.fromOffset(19,29),UDim2.new(1,-24,0,14)).TextColor3=C.muted
+        UI.settings=Button(UI.root,"Settings",UDim2.new(1,-96,0,10),UDim2.fromOffset(80,36));UI.settings.TextSize=13
+        -- The browser permanently lives in the native Emotes tab; no separate minimize/close overlay is created.
+        local minimize=Button(UI.root,"—",UDim2.new(1,-52,0,10),UDim2.fromOffset(36,36));minimize.Visible=false
+        local close=Button(UI.root,"×",UDim2.new(1,-52,0,10),UDim2.fromOffset(36,36));close.Visible=false
         UI.search=Box(UI.root,"Search name or ID...",UDim2.fromOffset(16,56),UDim2.new(1,-162,0,40))
         UI.search.Text=prefs.query
         UI.clearSearch=Button(UI.search,"×",UDim2.new(1,-36,0,0),UDim2.fromOffset(36,40))
@@ -4683,9 +4691,9 @@ do
         if not ok then
             for _,connection in ipairs(UI.connections) do connection:Disconnect() end
             UI.connections={}
-            if UI.screen then UI.screen:Destroy() end
-            UI.screen=nil;UI.root=nil;UI.cards={};UI.quickButtons={};UI.quickDrag=nil
-            WarnOnce("cards","Could not open the card browser: "..tostring(err)..". Native ODH controls remain available.")
+            if UI.canvas then UI.canvas:Destroy() end
+            UI.canvas=nil;UI.root=nil;UI.cards={};UI.quickButtons={};UI.quickDrag=nil
+            WarnOnce("cards","Could not open the embedded browser: "..tostring(err))
         end
     end
     function runtime.RestoreQuickButtons()
@@ -4695,170 +4703,20 @@ do
         if UI.root then SetVisible(false) end
     end
     function runtime.CloseBrowser()
-        -- Full hide is distinct from minimize. Disable the ScreenGui so no
-        -- launcher, shortcut or later status update can remain over the game.
-        UI.hidden=true
-        UI.searchToken=UI.searchToken+1
-        if UI.stopDragging then UI.stopDragging() end
+        -- Kept for compatibility with the source API. The browser is the Emotes tab itself, so it stays available.
         if UI.setSettingsVisible then UI.setSettingsVisible(false) end
-        if UI.root then UI.root.Visible=false end
-        if UI.launcher then UI.launcher.Visible=false end
-        if UI.screen then UI.screen.Enabled=false end
-        for _,box in ipairs({UI.search,UI.speed,UI.alpha,UI.thumb,UI.pageEntry}) do
-            pcall(function() box:ReleaseFocus() end)
-        end
-        RefreshQuickVisuals()
     end
     function runtime.DestroyBrowser()
         UI.searchToken=UI.searchToken+1
         for _,connection in ipairs(UI.connections) do connection:Disconnect() end
         UI.connections={}
-        if UI.screen then UI.screen:Destroy() end
-        UI.screen=nil;UI.root=nil;UI.cards={};UI.quickButtons={};UI.quickDrag=nil
+        if UI.canvas then UI.canvas:Destroy() end
+        UI.canvas=nil;UI.screen=nil;UI.root=nil;UI.cards={};UI.quickButtons={};UI.quickDrag=nil
     end
 end
 
-local nativeVisual={favoritesOnly=false,loop=false,walk=false,browserOnLoad=false}
-local tab=shared.CreateTab("Emotes","/mellnikovden968-web/CFG_PM2/refs/heads/main/icon")
-local browserSection=tab:AddSection("Card Browser","Pictures • favorites • play buttons • mobile layout")
-browserSection:AddButton("Open card browser",function() runtime.OpenBrowser() end)
-browserSection:AddButton("Hide card browser",function() runtime.CloseBrowser() end)
-local browserToggle=browserSection:AddToggle("Open browser on load",function(value)
-    nativeVisual.browserOnLoad=value==true
-    if runtime.initializing or not runtime.alive then return end
-    prefs.browserOnLoad=value==true;SaveSettings()
-end)
-browserSection:AddParagraph("Card browser","Separate window inspired by ODH's emote cards, not an injected native tab. Tap the circle to pin/unpin an on-screen emote button, ▶ to play, ■ to stop, ★ to favorite. Screen buttons appear immediately, even with the browser open; drag them to move. Search, scroll and switch pages; drag the header to move the window. Minus minimizes to an Emotes button. X / Hide hides the entire plugin overlay, including shortcuts; reopen with Open card browser. Native controls below remain available.")
-local alphaSlider=browserSection:AddSlider("Window transparency (%)",0,50,prefs.windowTransparency,function(value)
-    if runtime.initializing or not runtime.alive or type(value)~="number" or value~=value then return end
-    prefs.windowTransparency=math.clamp(value,0,50);SaveSettings();runtime.ApplyBrowserAppearance()
-end)
-local thumbSlider=browserSection:AddSlider("Thumbnail size (%)",50,100,prefs.thumbnailSize,function(value)
-    if runtime.initializing or not runtime.alive or type(value)~="number" or value~=value then return end
-    prefs.thumbnailSize=math.clamp(value,50,100);SaveSettings();runtime.ApplyBrowserAppearance()
-end)
-browserSection:AddButton("Center card browser",function() runtime.ResetBrowserPosition() end)
-browserSection:AddButton("Remove all screen buttons",function() runtime.ClearQuickButtons() end)
-local library=tab:AddSection("Emote Library","7yd7 catalog • native Overdrive H controls")
-catalogLabel=library:AddLabel("Preparing catalog...",true)
-pageLabel=library:AddLabel("Page 1",true)
-selectedLabel=library:AddLabel("Selected: none",true)
-searchLabel=library:AddLabel("Search: "..(prefs.query=="" and "(all)" or prefs.query),true)
-library:AddTextBox("Search name or ID",function(text)
-    if runtime.initializing or not runtime.alive or type(text)~="string" then return end
-    prefs.query=text:sub(1,200);SaveSettings();Filter(true)
-end)
-library:AddButton("Clear search",function()
-    if not runtime.alive then return end
-    prefs.query="";SaveSettings();Filter(true)
-end)
-local favoriteToggle=library:AddToggle("Favorites only",function(value)
-    nativeVisual.favoritesOnly=value==true
-    if runtime.initializing or not runtime.alive then return end
-    prefs.favoritesOnly=value==true;SaveSettings();Filter(true)
-end)
-dropdown=library:AddDropdown("Emote",{SENTINEL},function(text)
-    if runtime.initializing or syncing or not runtime.alive then return end
-    local item=displayed[text]
-    if not item then return end
-    prefs.selected={id=item.id,name=item.name};SaveSettings();SelectionLabel()
-end)
-library:AddButton("Previous page",function()
-    if runtime.alive then runtime.page=runtime.page-1;RenderPage() end
-end)
-library:AddButton("Next page",function()
-    if runtime.alive then runtime.page=runtime.page+1;RenderPage() end
-end)
-library:AddTextBox("Go to page",function(text)
-    if runtime.initializing or not runtime.alive then return end
-    local page=tonumber(text)
-    if page and page==page and page>0 and page<math.huge then runtime.page=math.floor(page);RenderPage() end
-end)
-library:AddButton("Add selected to favorites",function()
-    if not runtime.alive or not prefs.selected then return end
-    prefs.favorites[IdText(prefs.selected.id)]={id=prefs.selected.id,name=prefs.selected.name}
-    SaveSettings();Notify("Added to favorites: "..prefs.selected.name)
-    if prefs.favoritesOnly then Filter(true) end
-end)
-library:AddButton("Remove selected from favorites",function()
-    if not runtime.alive or not prefs.selected then return end
-    prefs.favorites[IdText(prefs.selected.id)]=nil;SaveSettings()
-    Notify("Removed from favorites: "..prefs.selected.name)
-    if prefs.favoritesOnly then Filter(true) end
-end)
-library:AddButton("Refresh catalog",RefreshCatalog)
-
-local playback=tab:AddSection("Emote Playback","R15 • controls only this plugin's emote track")
-statusLabel=playback:AddLabel("Ready — select an emote and press Play",true)
-playback:AddButton("Play selected",function() if runtime.alive then Play(prefs.selected,false) end end)
-playback:AddButton("Stop emote",function() if runtime.alive then StopCurrent("Stopped") end end)
-playback:AddButton("Random from results",function()
-    if not runtime.alive then return end
-    if runtime.filtering then Notify("Search is still updating; try again in a moment.");return end
-    if #runtime.filtered==0 then Notify("No matching emotes.");return end
-    local item=runtime.filtered[math.random(1,#runtime.filtered)]
-    prefs.selected={id=item.id,name=item.name};SaveSettings();RenderPage();Play(item,false)
-end)
-local loopToggle=playback:AddToggle("Loop emote",function(value)
-    nativeVisual.loop=value==true
-    if runtime.initializing or not runtime.alive then return end
-    prefs.loop=value==true;SaveSettings()
-    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
-    if runtime.track then pcall(function() runtime.track.Looped=prefs.loop end) end
-end)
-local walkToggle=playback:AddToggle("Keep playing while moving",function(value)
-    nativeVisual.walk=value==true
-    if runtime.initializing or not runtime.alive then return end
-    prefs.walk=value==true;SaveSettings()
-    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
-end)
-local speed=playback:AddSlider("Emote speed",0,3,prefs.speed,function(value)
-    if runtime.initializing or not runtime.alive or type(value)~="number" or value~=value then return end
-    prefs.speed=math.clamp(value,0,3);SaveSettings()
-    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
-    if runtime.track then pcall(function() runtime.track:AdjustSpeed(prefs.speed) end) end
-end)
-playback:AddParagraph("Playback behavior","Single playback is the default (Loop OFF). Old versions' Loop ON is reset once; you can enable looping manually. Speed 0 pauses the current track. With Keep playing while moving OFF, movement stops the emote. Play is manual: saved settings never start an emote automatically after joining or respawning.")
-
-local custom=tab:AddSection("Custom Emote","Catalog emote asset ID or raw animation ID")
-customLabel=custom:AddLabel("Saved ID: "..(prefs.customId=="" and "(empty)" or prefs.customId),true)
-custom:AddTextBox("Custom ID",function(text)
-    if runtime.initializing or not runtime.alive or type(text)~="string" then return end
-    prefs.customId=text:sub(1,200);SaveSettings()
-    Label(customLabel,"Saved ID: "..(prefs.customId=="" and "(empty)" or prefs.customId))
-end)
-local kind=custom:AddDropdown("ID type",{"Catalog emote ID","Animation ID"},function(value)
-    if runtime.initializing or not runtime.alive then return end
-    if value~="Catalog emote ID" and value~="Animation ID" then return end
-    prefs.customKind=value;SaveSettings()
-end)
-custom:AddButton("Play custom ID",function()
-    if not runtime.alive then return end
-    local id=ParseId(prefs.customId)
-    if not id then Notify("Enter a numeric ID, rbxassetid URL, or Roblox catalog URL.");return end
-    Play({id=id,name="Custom "..IdText(id)},prefs.customKind=="Animation ID")
-end)
-custom:AddParagraph("About this port","Source: 7yd7/Hub Emotes.lua. A separate card window and native ODH controls replace the original wheel, HUD editor and themes. Walk/run animation bundles are not modified. Some assets are restricted or unavailable; visibility to other players depends on the game. Use one emote player at a time. FE Animations full resets will stop a playing emote.")
-custom:AddParagraph("Saving","Settings, selected emote and favorites: "..FILE..". Catalog cache: "..CACHE..". readfile/writefile are required for cross-session saving. Saved textbox values are shown in the labels because ODH has no documented textbox setter.")
-function runtime.SyncNative()
-    local initializing=runtime.initializing
-    runtime.initializing=true
-    local flips={favoritesOnly=favoriteToggle,loop=loopToggle,walk=walkToggle,browserOnLoad=browserToggle}
-    for key,flip in pairs(flips) do
-        if nativeVisual[key]~=prefs[key] and type(flip)=="function" then pcall(flip) end
-    end
-    if speed then pcall(function() speed:SetValue(prefs.speed) end) end
-    if alphaSlider then pcall(function() alphaSlider:SetValue(prefs.windowTransparency) end) end
-    if thumbSlider then pcall(function() thumbSlider:SetValue(prefs.thumbnailSize) end) end
-    runtime.initializing=initializing
-    SelectionLabel()
-end
--- Initialize visual values without invoking actions or overwriting saved settings.
-if prefs.browserOnLoad and type(browserToggle)=="function" then pcall(browserToggle) end
-if prefs.favoritesOnly and type(favoriteToggle)=="function" then pcall(favoriteToggle) end
-if prefs.loop and type(loopToggle)=="function" then pcall(loopToggle) end
-if prefs.walk and type(walkToggle)=="function" then pcall(walkToggle) end
-if kind then pcall(function() kind:Select(prefs.customKind) end) end
+-- The supplied card browser is embedded directly in Noir's Emotes page; no duplicate native control sections.
+function runtime.SyncNative() end
 runtime.initializing=false
 _G[KEY]=runtime
 local cache=ReadJSON(CACHE)
@@ -4866,11 +4724,10 @@ local cachedItems=NormalizeCatalog(cache)
 AdoptCatalog(cachedItems or BUILTIN,cachedItems and "saved cache" or "built-in starter list")
 Status("Ready — select an emote and press Play")
 RefreshCatalog()
-
 task.defer(function()
-    if not runtime.alive or (runtime.browser and runtime.browser.hidden) then return end
-    if prefs.browserOnLoad then runtime.OpenBrowser() else runtime.RestoreQuickButtons() end
+    if runtime.alive then runtime.OpenBrowser() end
 end)
+
 ]==]
     local compiler = loadstring
     if type(compiler) ~= "function" then
