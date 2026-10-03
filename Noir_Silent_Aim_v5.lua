@@ -2660,6 +2660,8 @@ local __noirVisualContext = {
     localPlayer = LocalPlayer, getPlayers = getPlayers, roleCache = roleCache,
     getMurderer = function() return murderer end, getSheriff = function() return sheriff end,
     getHero = function() return hero end, getRoundState = function() return roundState end,
+    -- Visuals can request a role read immediately instead of waiting for their periodic update cycle.
+    refreshRoles = function() task.spawn(refreshTarget) end,
     isRoleRevealActive = function()
         if murderer or sheriff or hero then return true end
         for _, role in pairs(roleCache) do
@@ -2700,6 +2702,13 @@ local function safe(label, callback)
     if not ok then warn("[Noir Visuals] " .. tostring(label) .. ": " .. tostring(err)) end
     return ok
 end
+-- Refresh roles as soon as the Visuals satellite starts, then retry while MM2 finishes assigning roles.
+task.spawn(function()
+    for _, pause in ipairs({0, .25, .6, 1.2, 2}) do
+        if pause > 0 then task.wait(pause) end
+        if V.refreshRoles then safe("initial role refresh", V.refreshRoles) end
+    end
+end)
 local function color(role)
     if role == "murderer" then return Color3.fromRGB(255,72,82) end
     if role == "sheriff" then return Color3.fromRGB(72,158,255) end
@@ -3225,6 +3234,142 @@ end)
     end
     local okRun, err = xpcall(module, function(message) return tostring(message) end)
     if not okRun then warn("[Noir Movement] module startup failed: " .. tostring(err)) end
+end)
+
+
+
+
+-- Fun-client cosmetics run separately so the primary mobile-safe loader stays within Luau's register budget.
+getgenv().__NoirAvatarCosmeticsContext = { tab = tab, localPlayer = LocalPlayer }
+task.defer(function()
+    local __noirAvatarCosmeticsSource = [==[
+-- Persistent client-side avatar cosmetics for Noir's Main tab.
+local A = getgenv().__NoirAvatarCosmeticsContext
+if type(A) ~= "table" or not A.tab or not A.localPlayer then return end
+
+local LocalPlayer = A.localPlayer
+local KORBLOX_RIGHT_LEG = 139607718
+local state = {
+    korblox = false,
+    headless = false,
+    korbloxOriginals = setmetatable({}, {__mode = "k"}),
+    headOriginals = setmetatable({}, {__mode = "k"}),
+    applyingKorblox = setmetatable({}, {__mode = "k"}),
+}
+
+local function getHumanoid(character)
+    return character and character:FindFirstChildWhichIsA("Humanoid")
+end
+
+local function applyHeadless(character)
+    if not state.headless then return end
+    local head = character and character:FindFirstChild("Head")
+    if not (head and head:IsA("BasePart")) then return end
+    local original = state.headOriginals[head]
+    if not original then
+        original = { transparency = head.LocalTransparencyModifier, decals = {} }
+        state.headOriginals[head] = original
+        for _, descendant in ipairs(head:GetDescendants()) do
+            if descendant:IsA("Decal") or descendant:IsA("Texture") then original.decals[descendant] = descendant.Transparency end
+        end
+    end
+    head.LocalTransparencyModifier = 1
+    for decal in pairs(original.decals) do
+        if decal and decal.Parent then decal.Transparency = 1 end
+    end
+    local face = head:FindFirstChildWhichIsA("Decal")
+    if face and original.decals[face] == nil then
+        original.decals[face] = face.Transparency
+        face.Transparency = 1
+    end
+end
+
+local function restoreHeadless(character)
+    local head = character and character:FindFirstChild("Head")
+    local original = head and state.headOriginals[head]
+    if not original then return end
+    if head.Parent then head.LocalTransparencyModifier = original.transparency end
+    for decal, transparency in pairs(original.decals) do
+        if decal and decal.Parent then decal.Transparency = transparency end
+    end
+    state.headOriginals[head] = nil
+end
+
+local function applyKorblox(character)
+    if not state.korblox then return end
+    local humanoid = getHumanoid(character)
+    if not (humanoid and humanoid.RigType == Enum.HumanoidRigType.R15) or state.applyingKorblox[character] then return end
+    local ok, description = pcall(function() return humanoid:GetAppliedDescription() end)
+    if not ok or not description then return end
+    if state.korbloxOriginals[character] == nil then state.korbloxOriginals[character] = description.RightLeg end
+    if description.RightLeg ~= KORBLOX_RIGHT_LEG then
+        state.applyingKorblox[character] = true
+        description.RightLeg = KORBLOX_RIGHT_LEG
+        pcall(function() humanoid:ApplyDescription(description) end)
+        task.delay(.4, function()
+            state.applyingKorblox[character] = nil
+            if state.headless and character.Parent then applyHeadless(character) end
+        end)
+    else
+        applyHeadless(character)
+    end
+end
+
+local function restoreKorblox(character)
+    local originalRightLeg = character and state.korbloxOriginals[character]
+    local humanoid = getHumanoid(character)
+    if not (humanoid and originalRightLeg ~= nil) then return end
+    local ok, description = pcall(function() return humanoid:GetAppliedDescription() end)
+    if ok and description then
+        description.RightLeg = originalRightLeg
+        pcall(function() humanoid:ApplyDescription(description) end)
+    end
+    state.korbloxOriginals[character] = nil
+end
+
+local function applyCurrentCharacter()
+    local character = LocalPlayer.Character
+    if state.korblox then applyKorblox(character) end
+    if state.headless then applyHeadless(character) end
+end
+
+local section = A.tab:AddSection("MAIN \u{2022} FUN CLIENT", "Respawn-persistent local avatar cosmetics")
+section:AddToggle("Permanent Korblox (R15)", function(enabled)
+    state.korblox = enabled == true
+    local character = LocalPlayer.Character
+    if state.korblox then applyKorblox(character) else restoreKorblox(character) end
+end)
+section:AddToggle("Permanent Headless", function(enabled)
+    state.headless = enabled == true
+    local character = LocalPlayer.Character
+    if state.headless then applyHeadless(character) else restoreHeadless(character) end
+end)
+section:AddLabel("Both looks are reapplied after each respawn. Korblox requires an R15 character.")
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+    task.wait(.75)
+    applyKorblox(character)
+    applyHeadless(character)
+end)
+LocalPlayer.CharacterAppearanceLoaded:Connect(function(character)
+    task.wait(.2)
+    if state.korblox then applyKorblox(character) end
+    if state.headless then applyHeadless(character) end
+end)
+task.defer(applyCurrentCharacter)
+]==]
+    local compiler = loadstring
+    if type(compiler) ~= "function" then
+        warn("[Noir Avatar Cosmetics] loadstring is unavailable; cosmetic controls could not be started.")
+        return
+    end
+    local okCompile, moduleFn = pcall(compiler, __noirAvatarCosmeticsSource)
+    if not okCompile or type(moduleFn) ~= "function" then
+        warn("[Noir Avatar Cosmetics] module compile failed: " .. tostring(moduleFn))
+        return
+    end
+    local okRun, err = xpcall(moduleFn, function(message) return tostring(message) end)
+    if not okRun then warn("[Noir Avatar Cosmetics] module startup failed: " .. tostring(err)) end
 end)
 
 
