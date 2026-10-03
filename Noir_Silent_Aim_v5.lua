@@ -3030,7 +3030,14 @@ local function restoreFlyCharacter()
             local wasEnabled = state.flyStateEnabled[stateType.Name]
             if wasEnabled ~= nil then pcall(function() humanoid:SetStateEnabled(stateType, wasEnabled) end) end
         end
-        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
+        if not state.flyPlatformStand then
+            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+            task.delay(.08, function()
+                if humanoid.Parent and not state.fly then pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end) end
+            end)
+        else
+            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
+        end
     end
     if state.flyAnimate and state.flyAnimate.Parent then state.flyAnimate.Disabled = state.flyAnimateDisabled end
     state.flyHumanoid, state.flyAnimate = nil, nil
@@ -3059,14 +3066,17 @@ local function startFly()
     -- Disabling them (and forcing a BodyGyro at the camera angle) is what caused the visible body rocking.
     state.flyHumanoid, state.flyAutoRotate, state.flyPlatformStand = humanoid, humanoid.AutoRotate, humanoid.PlatformStand
     humanoid.AutoRotate = false
+    -- PlatformStand is needed for a Humanoid avatar to physically pitch with the camera.
+    humanoid.PlatformStand = true
+    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Physics) end)
 
-    -- Full 3D camera orientation: the avatar can pitch up/down as well as turn sideways while flying.
-    -- PlatformStand is not used, so this remains stable when the Fly toggle is turned off.
+    -- Full 3D camera orientation: the avatar pitches up/down and turns left/right as a single flight body.
+    -- Moderate P/D avoids the former rapid correction wobble.
     local gyro = Instance.new("BodyGyro")
-    gyro.Name, gyro.P, gyro.D, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 26000, 1100, Vector3.new(3e5,3e5,3e5), root.CFrame
+    gyro.Name, gyro.P, gyro.D, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 12000, 1600, Vector3.new(4e5,4e5,4e5), root.CFrame
     gyro.Parent = root
     local velocity = Instance.new("BodyVelocity")
-    velocity.Name, velocity.P, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", 15000, Vector3.zero, Vector3.new(9e9,9e9,9e9)
+    velocity.Name, velocity.P, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", 12000, Vector3.zero, Vector3.new(9e9,9e9,9e9)
     velocity.Parent = root
     state.flyVelocity, state.flyGyro = velocity, gyro
 
