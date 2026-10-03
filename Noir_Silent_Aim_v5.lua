@@ -3493,6 +3493,7 @@ local Player=Players.LocalPlayer
 if not Player then warn("[ODH Emotes] LocalPlayer unavailable.");return end
 local HttpService=game:GetService("HttpService")
 local RunService=game:GetService("RunService")
+local UIS=game:GetService("UserInputService")
 local runtime={version=7,alive=true,initializing=true,generation=0,filterGeneration=0,page=1,catalog={},filtered={},resolutions={},connections={}}
 local prefs={windowTransparency=22,thumbnailSize=68,thumbnailPresetVersion=2,playbackModeVersion=2,shortcuts={},browserOnLoad=false,loop=false,walk=false,speed=1,favoritesOnly=false,query="",customId="",customKind="Catalog emote ID",favorites={}}
 local FILE="ODH_Emotes_settings.json"
@@ -4200,6 +4201,101 @@ do
         if runtime.track then pcall(function() runtime.track:AdjustSpeed(prefs.speed) end) end
         if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
     end
+    -- Circular pin buttons create draggable on-screen photo shortcuts, matching the supplied card browser behavior.
+    local quickGui, quickRecords, quickConnections = nil, {}, {}
+    local function clearQuickConnections()
+        for _, connection in ipairs(quickConnections) do pcall(function() connection:Disconnect() end) end
+        table.clear(quickConnections)
+    end
+    local function destroyQuickGui()
+        clearQuickConnections()
+        if quickGui then quickGui:Destroy() end
+        quickGui, quickRecords = nil, {}
+    end
+    local function ensureQuickGui()
+        if quickGui and quickGui.Parent then return quickGui end
+        quickGui = Instance.new("ScreenGui")
+        quickGui.Name, quickGui.ResetOnSpawn, quickGui.IgnoreGuiInset, quickGui.DisplayOrder = "NoirEmoteQuickButtons", false, true, 90
+        local parent
+        if type(gethui) == "function" then
+            local ok, value = pcall(gethui)
+            if ok and typeof(value) == "Instance" then parent = value end
+        end
+        quickGui.Parent = parent or Player:WaitForChild("PlayerGui")
+        return quickGui
+    end
+    local function viewport()
+        return workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(900,600)
+    end
+    local function positionQuick(record)
+        local saved = prefs.shortcuts[record.key]
+        if not saved then return end
+        local screen = viewport()
+        record.button.Position = UDim2.fromOffset(math.clamp(saved.x * screen.X, 38, math.max(38, screen.X - 38)), math.clamp(saved.y * screen.Y, 38, math.max(38, screen.Y - 38)))
+    end
+    local function createQuick(key, saved)
+        local button = Instance.new("ImageButton")
+        button.Name, button.AnchorPoint, button.Size = "Emote_" .. key, Vector2.new(.5,.5), UDim2.fromOffset(64,64)
+        button.BackgroundColor3, button.BackgroundTransparency, button.BorderSizePixel = C.base, .12, 0
+        button.Image, button.ScaleType, button.AutoButtonColor, button.ZIndex = "rbxthumb://type=Asset&id=" .. key .. "&w=420&h=420", Enum.ScaleType.Fit, false, 91
+        button.Parent = ensureQuickGui()
+        local circle = Instance.new("UICorner"); circle.CornerRadius = UDim.new(1,0); circle.Parent = button
+        local outline = Instance.new("UIStroke"); outline.Color, outline.Thickness, outline.Transparency, outline.Parent = C.accent, 2, .08, button
+        local record = { key = key, item = { id = saved.id, name = saved.name }, button = button, dragging = false, moved = false }
+        quickRecords[key] = record
+        positionQuick(record)
+        local dragInput, start, startPosition
+        quickConnections[#quickConnections+1] = button.InputBegan:Connect(function(input)
+            if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+            record.dragging, record.moved, dragInput, start, startPosition = true, false, input, input.Position, button.Position
+        end)
+        quickConnections[#quickConnections+1] = UIS.InputChanged:Connect(function(input)
+            if not record.dragging then return end
+            if input ~= dragInput and not (dragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement) then return end
+            local delta = input.Position - start
+            if delta.Magnitude > 7 then record.moved = true end
+            button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end)
+        quickConnections[#quickConnections+1] = UIS.InputEnded:Connect(function(input)
+            if not record.dragging or input ~= dragInput then return end
+            record.dragging = false
+            if record.moved then
+                local screen = viewport()
+                prefs.shortcuts[key].x = math.clamp(button.Position.X.Offset / math.max(screen.X,1), 0, 1)
+                prefs.shortcuts[key].y = math.clamp(button.Position.Y.Offset / math.max(screen.Y,1), 0, 1)
+                record.blockUntil = os.clock() + .25
+                Save()
+            end
+        end)
+        quickConnections[#quickConnections+1] = button.Activated:Connect(function()
+            if record.moved or (record.blockUntil and os.clock() < record.blockUntil) then return end
+            SetSelected(record.item); Play(record.item, false)
+        end)
+    end
+    local function RefreshQuickButtons()
+        for key, record in pairs(quickRecords) do
+            if not prefs.shortcuts[key] then record.button:Destroy(); quickRecords[key] = nil end
+        end
+        for key, saved in pairs(prefs.shortcuts) do
+            if not quickRecords[key] then createQuick(key, saved) else positionQuick(quickRecords[key]) end
+        end
+        if not next(prefs.shortcuts) then destroyQuickGui() end
+    end
+    local function ToggleQuick(item)
+        local key = IdText(item.id)
+        if prefs.shortcuts[key] then
+            prefs.shortcuts[key] = nil
+        else
+            local count = 0
+            for _ in pairs(prefs.shortcuts) do count += 1 end
+            if count >= MAX_SHORTCUTS then Notify("Maximum " .. MAX_SHORTCUTS .. " on-screen emote buttons."); return end
+            local screen = viewport()
+            prefs.shortcuts[key] = { id = item.id, name = item.name, x = .86, y = math.clamp(.28 + count * .1, .18, .82) }
+        end
+        Save(); RefreshQuickButtons()
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+
     local function Layout()
         if not (UI.root and UI.cardsScroll) then return end
         local size = UI.root.AbsoluteSize
@@ -4226,11 +4322,12 @@ do
         UI.cardsScroll.Size = UDim2.new(1, -36, 1, -(top + footer + 10))
         UI.footer.Position = UDim2.new(0, 18, 1, -54)
         UI.footer.Size = UDim2.new(1, -36, 0, 40)
-        local available = math.max(1, UI.cardsScroll.AbsoluteSize.X - 12)
-        local columns = available >= 780 and 3 or (available >= 470 and 2 or 1)
+        -- Use the full Noir tab width, matching the supplied menu's three-card gallery on wider screens.
+        local available = math.max(1, size.X - 48)
+        local columns = size.X >= 600 and 3 or (size.X >= 400 and 2 or 1)
         local padding = 12
         local cellWidth = math.floor((available - padding * (columns - 1)) / columns)
-        local cellHeight = veryNarrow and 150 or math.clamp(math.floor(cellWidth * .72), 155, 230)
+        local cellHeight = veryNarrow and 155 or math.clamp(math.floor(cellWidth * .82), 180, 245)
         UI.grid.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
         UI.grid.FillDirectionMaxCells = columns
         local rows = math.ceil(#UI.cards / columns)
@@ -4262,7 +4359,9 @@ do
             card.stroke.Transparency = selected and .08 or .62
             card.star.Text = prefs.favorites[IdText(card.item.id)] and "★" or "☆"
             card.star.TextColor3 = prefs.favorites[IdText(card.item.id)] and C.accent or C.text
-            card.play.Text = playing and "■  Stop" or "▶  Play"
+            card.pin.Text = prefs.shortcuts[IdText(card.item.id)] and "●" or "○"
+            card.pin.TextColor3 = prefs.shortcuts[IdText(card.item.id)] and C.accent or C.dim
+            card.play.Text = playing and "■" or "▶"
             card.play.BackgroundColor3 = playing and Color3.fromRGB(71, 91, 78) or C.button
             card.play.TextColor3 = playing and C.accent or C.text
         end
@@ -4272,17 +4371,19 @@ do
         local card = Make("Frame", { Name = "Emote_" .. IdText(item.id), LayoutOrder = order, BackgroundColor3 = C.card, BorderSizePixel = 0, ClipsDescendants = true }, UI.cardsScroll)
         Round(card, 14)
         local outline = Stroke(card, C.border, .62, 1)
-        Make("Frame", { BackgroundColor3 = C.accent, BackgroundTransparency = .92, BorderSizePixel = 0, Size = UDim2.new(1,0,0,3) }, card)
-        local title = Text(card, item.name, 15, UDim2.fromOffset(12, 10), UDim2.new(1, -68, 0, 36))
+        local title = Text(card, item.name, 15, UDim2.fromOffset(12, 10), UDim2.new(1, -70, 0, 36))
         title.TextWrapped = true; title.TextTruncate = Enum.TextTruncate.AtEnd; title.Font = Enum.Font.GothamMedium; title.TextYAlignment = Enum.TextYAlignment.Top
         local star = Button(card, "☆", UDim2.new(1, -50, 0, 8), UDim2.fromOffset(38, 36))
         star.BackgroundTransparency = 1; star.TextSize = 27
-        local image = Make("ImageButton", { BackgroundTransparency = 1, AutoButtonColor = false, AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5, 0, .52, 0), Size = UDim2.fromOffset(74,74), Image = "rbxthumb://type=Asset&id=" .. IdText(item.id) .. "&w=420&h=420", ScaleType = Enum.ScaleType.Fit }, card)
-        local play = Button(card, "▶  Play", UDim2.new(0, 12, 1, -48), UDim2.new(1, -24, 0, 36))
-        local record = { item = item, stroke = outline, star = star, play = play }
+        local image = Make("ImageButton", { BackgroundTransparency = 1, AutoButtonColor = false, AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5, 0, .56, 0), Size = UDim2.fromOffset(96,96), Image = "rbxthumb://type=Asset&id=" .. IdText(item.id) .. "&w=420&h=420", ScaleType = Enum.ScaleType.Fit }, card)
+        local pin = Button(card, "○", UDim2.new(1, -56, .48, 0), UDim2.fromOffset(44,44))
+        pin.BackgroundTransparency = 1; pin.TextSize = 29
+        local play = Button(card, "▶", UDim2.new(1, -58, 1, -58), UDim2.fromOffset(46,46)); play.TextSize = 19
+        local record = { item = item, stroke = outline, star = star, pin = pin, play = play }
         UI.cards[#UI.cards + 1] = record
         Connect(image.Activated, function() SetSelected(item) end)
         Connect(star.Activated, function() ToggleFavorite(item) end)
+        Connect(pin.Activated, function() ToggleQuick(item) end)
         Connect(play.Activated, function()
             local playing = runtime.track and runtime.playing and runtime.playing.id == item.id
             SetSelected(item)
@@ -4316,7 +4417,6 @@ do
         if shared.SetCanvasHeight then shared.SetCanvasHeight(664) end
         Round(UI.root, 18); Stroke(UI.root, C.border, .35, 1.2)
         local gradient = Make("UIGradient", { Color = ColorSequence.new(C.base, Color3.fromRGB(7, 30, 31)), Rotation = 20 }, UI.root)
-        Make("Frame", { BackgroundColor3 = C.accent, BorderSizePixel = 0, Size = UDim2.new(1,0,0,3) }, UI.root)
         Text(UI.root, "EMOTES", 21, UDim2.fromOffset(18, 14), UDim2.new(1,-150,0,24)).Font = Enum.Font.GothamBold
         Text(UI.root, "R15 ANIMATION LIBRARY", 10, UDim2.fromOffset(19, 39), UDim2.new(1,-150,0,16), C.dim)
         UI.settingsButton = Button(UI.root, "Settings", UDim2.new(1,-116,0,18), UDim2.fromOffset(98,32))
@@ -4383,8 +4483,9 @@ do
             end)
         end)
         Connect(UI.search.FocusLost, function() prefs.query = UI.search.Text:sub(1,200); Save(); Filter(true) end)
-        Connect(UI.root:GetPropertyChangedSignal("AbsoluteSize"), Layout)
-        Layout(); RenderCards()
+        Connect(UI.root:GetPropertyChangedSignal("AbsoluteSize"), function() task.defer(Layout) end)
+        Connect(UI.cardsScroll:GetPropertyChangedSignal("AbsoluteSize"), function() task.defer(Layout) end)
+        Layout(); RenderCards(); RefreshQuickButtons()
     end
     function runtime.OpenBrowser()
         if not runtime.alive then return end
@@ -4399,6 +4500,7 @@ do
     function runtime.DestroyBrowser()
         for _, connection in ipairs(UI.connections) do pcall(function() connection:Disconnect() end) end
         UI.connections = {}
+        destroyQuickGui()
         if UI.root then UI.root:Destroy() end
         UI.root = nil; UI.cards = {}
     end
