@@ -3240,7 +3240,7 @@ end)
 
 
 -- Fun-client cosmetics run separately so the primary mobile-safe loader stays within Luau's register budget.
-getgenv().__NoirAvatarCosmeticsContext = { tab = tab, localPlayer = LocalPlayer }
+getgenv().__NoirAvatarCosmeticsContext = { tab = tab, localPlayer = LocalPlayer, runService = RunService }
 task.defer(function()
     local __noirAvatarCosmeticsSource = [==[
 -- Persistent client-side avatar cosmetics for Noir's Main tab.
@@ -3248,11 +3248,18 @@ local A = getgenv().__NoirAvatarCosmeticsContext
 if type(A) ~= "table" or not A.tab or not A.localPlayer then return end
 
 local LocalPlayer = A.localPlayer
+local RunService = A.runService
 local KORBLOX_RIGHT_LEG = 139607718
+local KORBLOX_PARTS = {
+    RightFoot = { mesh = "rbxassetid://902942089", transparency = 1 },
+    RightLowerLeg = { mesh = "rbxassetid://902942093", transparency = 1 },
+    RightUpperLeg = { mesh = "rbxassetid://902942096", texture = "rbxassetid://902843398", transparency = 0 },
+}
 local state = {
     korblox = false,
     headless = false,
     korbloxOriginals = setmetatable({}, {__mode = "k"}),
+    korbloxPartOriginals = setmetatable({}, {__mode = "k"}),
     headOriginals = setmetatable({}, {__mode = "k"}),
     applyingKorblox = setmetatable({}, {__mode = "k"}),
 }
@@ -3295,6 +3302,36 @@ local function restoreHeadless(character)
     state.headOriginals[head] = nil
 end
 
+local function applyKorbloxMesh(character)
+    if not state.korblox or not character then return end
+    for partName, appearance in pairs(KORBLOX_PARTS) do
+        local part = character:FindFirstChild(partName)
+        if part and part:IsA("MeshPart") then
+            local original = state.korbloxPartOriginals[part]
+            if not original then
+                original = { mesh = part.MeshId, texture = part.TextureID, transparency = part.Transparency }
+                state.korbloxPartOriginals[part] = original
+            end
+            pcall(function() part.MeshId = appearance.mesh end)
+            if appearance.texture then pcall(function() part.TextureID = appearance.texture end) end
+            pcall(function() part.Transparency = appearance.transparency end)
+        end
+    end
+end
+
+local function restoreKorbloxMesh(character)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        local original = state.korbloxPartOriginals[part]
+        if original and part:IsA("MeshPart") then
+            pcall(function()
+                part.MeshId, part.TextureID, part.Transparency = original.mesh, original.texture, original.transparency
+            end)
+            state.korbloxPartOriginals[part] = nil
+        end
+    end
+end
+
 local function applyKorblox(character)
     if not state.korblox then return end
     local humanoid = getHumanoid(character)
@@ -3308,11 +3345,13 @@ local function applyKorblox(character)
         pcall(function() humanoid:ApplyDescription(description) end)
         task.delay(.4, function()
             state.applyingKorblox[character] = nil
+            if character.Parent then applyKorbloxMesh(character) end
             if state.headless and character.Parent then applyHeadless(character) end
         end)
-    else
-        applyHeadless(character)
     end
+    -- HumanoidDescription can be rejected or overwritten in live games; direct R15 mesh fallback keeps the cosmetic visible.
+    applyKorbloxMesh(character)
+    applyHeadless(character)
 end
 
 local function restoreKorblox(character)
@@ -3324,6 +3363,7 @@ local function restoreKorblox(character)
         description.RightLeg = originalRightLeg
         pcall(function() humanoid:ApplyDescription(description) end)
     end
+    restoreKorbloxMesh(character)
     state.korbloxOriginals[character] = nil
 end
 
@@ -3356,7 +3396,16 @@ LocalPlayer.CharacterAppearanceLoaded:Connect(function(character)
     if state.korblox then applyKorblox(character) end
     if state.headless then applyHeadless(character) end
 end)
+-- Games may refresh an avatar after it has spawned. Keep the two requested client cosmetics applied while enabled.
+if RunService then
+    RunService.RenderStepped:Connect(function()
+        local character = LocalPlayer.Character
+        if state.korblox then applyKorbloxMesh(character) end
+        if state.headless then applyHeadless(character) end
+    end)
+end
 task.defer(applyCurrentCharacter)
+
 ]==]
     local compiler = loadstring
     if type(compiler) ~= "function" then
