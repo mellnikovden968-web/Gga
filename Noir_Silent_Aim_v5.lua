@@ -1702,7 +1702,7 @@ function autoTuneForPing()
     local now = os.clock()
     if now - lastAutoTune < 0.4 then return end
     lastAutoTune = now
-    local pingMs = math.clamp(math.floor(cachedPing * 1000 + 0.5), 5, 350)
+    local pingMs = math.clamp(math.floor(cachedPing * 1000 + 0.5), 5, 1000)
     syncAutoPing(config, "manualPingMs", pingMs)
     syncAutoPing(config.knifeAim, "knifeManualPingMs", pingMs)
 end
@@ -2908,7 +2908,7 @@ do
         addToggle("predictLag","Predict Lag")
         addSlider("maxSimulationMs","Prediction Max Simulation",20,300)
         addSlider("predictionIntervalMs","Prediction Interval",1,100)
-        addSlider("manualPingMs","Prediction Ping",10,350)
+        addSlider("manualPingMs","Prediction Ping",10,1000)
         addSlider("offsetX","X Position Offset",-100,100)
         addSlider("offsetY","Y Position Offset",-100,100)
         addSlider("offsetZ","Z Position Offset",-100,100)
