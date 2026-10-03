@@ -2091,6 +2091,8 @@ presetNames = function()
     return names
 end
 
+-- Auto GG must start disabled on every fresh script load, even if it was enabled in autosave previously.
+NoirPersistence.data.toggles["WORLD \u{2022} AUTO GG::Enable Auto GG"] = false
 local autoGGState = { enabled = false, token = 0 }
 
 local function hasGunInInventory()
@@ -3811,7 +3813,34 @@ local function DeleteBigButton(id)
     end
 end
 
-BindableButtons = {Buttons = {}, Maids = {}, Count = 0}
+local savedBindButtonPositions = ODHX.data.bindButtonPositions
+if type(savedBindButtonPositions) ~= "table" then
+    savedBindButtonPositions = {}
+    ODHX.data.bindButtonPositions = savedBindButtonPositions
+end
+
+BindableButtons = {Buttons = {}, Maids = {}, Count = 0, SavedPositions = savedBindButtonPositions}
+
+function BindableButtons.GetSavedPosition(id)
+    local value = BindableButtons.SavedPositions[id]
+    if type(value) ~= "table" then return nil end
+    local xScale, xOffset = tonumber(value.xScale), tonumber(value.xOffset)
+    local yScale, yOffset = tonumber(value.yScale), tonumber(value.yOffset)
+    if not xScale or not xOffset or not yScale or not yOffset then return nil end
+    return __UD2(xScale, xOffset, yScale, yOffset)
+end
+
+function BindableButtons.SavePosition(id, position)
+    if not id or typeof(position) ~= "UDim2" then return end
+    BindableButtons.SavedPositions[id] = {
+        xScale = position.X.Scale,
+        xOffset = position.X.Offset,
+        yScale = position.Y.Scale,
+        yOffset = position.Y.Offset
+    }
+    ODHX.data.bindButtonPositions = BindableButtons.SavedPositions
+    ODHX.Commit()
+end
 
 local __SHAPES = {
     [0] = "rbxassetid://86221076925479",
@@ -3875,7 +3904,7 @@ local function Bind_GetStorage()
     return sg
 end
 
-local function Bind_MakeDraggable(gui, maid, ripple, sound, clickFunc)
+local function Bind_MakeDraggable(gui, maid, ripple, sound, clickFunc, onPositionChanged)
     local dragging, dragInput, dragStart, startPos
     local hasMoved = false
 
@@ -3898,7 +3927,9 @@ local function Bind_MakeDraggable(gui, maid, ripple, sound, clickFunc)
             rel = ODHX.Connect(__UIS.InputEnded, function(endInput)
                 if endInput.UserInputType == input.UserInputType then
                     dragging = false
-                    if not hasMoved then
+                    if hasMoved then
+                        if onPositionChanged then pcall(onPositionChanged, gui.Position) end
+                    else
                         bind_safecallback(clickFunc)
                     end
                     rel:Disconnect()
@@ -3937,7 +3968,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     local ImageButton = Instance.new("ImageButton")
     ImageButton.Name = id
     ImageButton.Size = __UD2(widthScale, 0, buttonSizeY, 0)
-    ImageButton.Position = __UD2(xPos, 0, yPos, 0)
+    ImageButton.Position = BindableButtons.GetSavedPosition(id) or __UD2(xPos, 0, yPos, 0)
     ImageButton.AnchorPoint = __V2(0.5, 0.5)
     ImageButton.Image = ""
     ImageButton.BackgroundColor3 = __RGB(8, 8, 10)
@@ -4004,7 +4035,9 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     sound.Volume = muteButtonSounds and 0 or 0.5
     sound.Parent = ImageButton
 
-    Bind_MakeDraggable(ImageButton, buttonMaid, ripple, sound, clickFunc)
+    Bind_MakeDraggable(ImageButton, buttonMaid, ripple, sound, clickFunc, function(position)
+        BindableButtons.SavePosition(id, position)
+    end)
     buttonMaid:GiveTask(ODHX.Connect(__RS.RenderStepped, function()
         Stroke.Rotation = (Stroke.Rotation + 1) % 360
     end))
@@ -4016,12 +4049,27 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
 end
 
 function BindableButtons.DeleteBButton(id)
-    if BindableButtons.Maids[id] then
-        BindableButtons.Maids[id]:Destroy()
-        BindableButtons.Maids[id] = nil
-        BindableButtons.Buttons[id] = nil
+    -- Remove the managed button and any orphan left by a prior script execution.
+    local button = BindableButtons.Buttons[id]
+    local maid = BindableButtons.Maids[id]
+    if maid then
+        maid:Destroy()
+    elseif button and button.Parent then
+        button:Destroy()
+    end
+    BindableButtons.Maids[id] = nil
+    BindableButtons.Buttons[id] = nil
+
+    local ok, storage = pcall(Bind_GetStorage)
+    if ok and storage then
+        local orphan = storage:FindFirstChild(id)
+        if orphan then orphan:Destroy() end
     end
 end
+
+-- A stale visual button must not survive while its Bind Button toggle is off.
+BindableButtons.DeleteBButton("bombjump_bind")
+BindableButtons.DeleteBButton("goldbombjump_bind")
 
 function BindableButtons.UpdateBButtonText(id, text, isWaiting, isGold)
     local btn = BindableButtons.Buttons[id]
@@ -4382,20 +4430,21 @@ local function CreateBombJumpSystem(config)
     end)
 
     section:AddToggle("Enable " .. displayName .. " Bind Button", function(e)
-        state.bindBtnExists = e
-        if e then
-            local shortName = isGold and "GBJ" or "BJ"
-            BindableButtons.AddBButton(config.bindButtonId, shortName, FastBombJump, isGold, state.bindButtonSize)
-            state.bindButton = BindableButtons.Buttons[config.bindButtonId]
-            if state.bindButton then
-                local screen = Services.Workspace.CurrentCamera.ViewportSize
-                state.bindButton.Size = __UD2(state.bindButtonSize * (screen.Y / screen.X), 0, state.bindButtonSize, 0)
-                BindableButtons.UpdateBButtonText(config.bindButtonId,
-                    state.onCooldown and "Wait" or shortName, state.onCooldown, isGold)
-            end
-        else
-            BindableButtons.DeleteBButton(config.bindButtonId)
-            state.bindButton = nil
+        -- Only an explicit true from this toggle may create the floating Bind Button.
+        local wantsBindButton = e == true
+        state.bindBtnExists = wantsBindButton
+        BindableButtons.DeleteBButton(config.bindButtonId)
+        state.bindButton = nil
+        if not wantsBindButton then return end
+
+        local shortName = isGold and "GBJ" or "BJ"
+        BindableButtons.AddBButton(config.bindButtonId, shortName, FastBombJump, isGold, state.bindButtonSize)
+        state.bindButton = BindableButtons.Buttons[config.bindButtonId]
+        if state.bindButton then
+            local screen = Services.Workspace.CurrentCamera.ViewportSize
+            state.bindButton.Size = __UD2(state.bindButtonSize * (screen.Y / screen.X), 0, state.bindButtonSize, 0)
+            BindableButtons.UpdateBButtonText(config.bindButtonId,
+                state.onCooldown and "Wait" or shortName, state.onCooldown, isGold)
         end
     end)
 
@@ -4515,6 +4564,11 @@ if _game == "Murder Mystery Modded" then
         bindButtonId = "goldbombjump_bind"
     })
 end
+
+-- Bind buttons must never be recreated automatically from a prior BJP settings save.
+-- The user can still enable either button manually for the current session.
+ODHX.data.controls["Bomb Jump+ / Toggle / Enable Bomb Jump Bind Button"] = false
+ODHX.data.controls["Gold Bomb Jump+ / Toggle / Enable Gold Bomb Jump Bind Button"] = false
 
 ODHX.Bind("About", "Mute Button SFX", "Toggle", function() return muteButtonSounds end)
 
