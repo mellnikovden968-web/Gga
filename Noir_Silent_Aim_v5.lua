@@ -4460,7 +4460,11 @@ do
         UI.next = Button(UI.footer, "›", UDim2.new(1,-46,0,0), UDim2.fromOffset(46,38)); UI.next.TextSize = 28
         UI.page = Text(UI.footer, "Page 1 / 1", 12, UDim2.fromOffset(54,0), UDim2.new(1,-108,0,38), C.dim); UI.page.TextXAlignment = Enum.TextXAlignment.Center
         UI.status = Text(UI.footer, "Ready", 11, UDim2.fromOffset(2,39), UDim2.new(1,-4,0,14), C.dim)
-        UI.settings = Make("Frame", { BackgroundColor3 = C.panel, BorderSizePixel = 0, Visible = false, ZIndex = 20, ClipsDescendants = true }, UI.root)
+        -- Settings content is taller than a phone-sized drawer, so make the drawer itself vertically scrollable.
+        UI.settings = Make("ScrollingFrame", { BackgroundColor3 = C.panel, BorderSizePixel = 0, Visible = false, ZIndex = 20,
+            ClipsDescendants = true, Active = true, ScrollBarThickness = 4, ScrollBarImageColor3 = C.accent,
+            ScrollingDirection = Enum.ScrollingDirection.Y, ElasticBehavior = Enum.ElasticBehavior.Never,
+            CanvasSize = UDim2.fromOffset(0, 388) }, UI.root)
         Round(UI.settings, 14); Stroke(UI.settings, C.border, .2, 1.2)
         Text(UI.settings, "EMOTE SETTINGS", 15, UDim2.fromOffset(16,14), UDim2.new(1,-32,0,24)).Font = Enum.Font.GothamBold
         local function SettingsButton(label, y)
@@ -4476,7 +4480,11 @@ do
         UI.playCustom = SettingsButton("Play custom animation", 232)
         UI.refresh = SettingsButton("Refresh catalog", 276)
         UI.closeSettings = SettingsButton("Close settings", 320)
-        Connect(UI.settingsButton.Activated, function() UI.settingsOpen = not UI.settingsOpen; UI.settings.Visible = UI.settingsOpen end)
+        Connect(UI.settingsButton.Activated, function()
+            UI.settingsOpen = not UI.settingsOpen
+            UI.settings.Visible = UI.settingsOpen
+            if UI.settingsOpen then UI.settings.CanvasPosition = Vector2.zero end
+        end)
         Connect(UI.closeSettings.Activated, function() UI.settingsOpen = false; UI.settings.Visible = false end)
         Connect(UI.loop.Activated, function() SetLoop(not prefs.loop) end)
         Connect(UI.move.Activated, function() SetMove(not prefs.walk) end)
