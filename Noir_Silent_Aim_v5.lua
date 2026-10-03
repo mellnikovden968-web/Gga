@@ -6163,7 +6163,26 @@ local ODHX = (function()
         end
         function section:AddButton(label,cb) return raw:AddButton(label,action(cb)) end
         function section:AddKeybind(label,default,cb) return raw:AddKeybind(label,default,action(cb)) end
-        function section:AddPlayerDropdown(label,cb) return raw:AddPlayerDropdown(label,action(cb)) end
+        function section:AddPlayerDropdown(label,cb)
+            -- Noir has no AddPlayerDropdown method; use its native dropdown with current player names.
+            local playerService = game:GetService("Players")
+            local names, lookup = { "None" }, {}
+            for _, player in ipairs(playerService:GetPlayers()) do
+                if player ~= playerService.LocalPlayer then
+                    names[#names + 1] = player.Name
+                    lookup[player.Name] = player
+                end
+            end
+            table.sort(names, function(a, b)
+                if a == "None" then return true end
+                if b == "None" then return false end
+                return a:lower() < b:lower()
+            end)
+            return raw:AddDropdown(label, names, function(name)
+                local player = lookup[name] or playerService:FindFirstChild(name)
+                if player then action(cb)(player) end
+            end)
+        end
         function section:AddTextBox(label,cb) return raw:AddTextBox(label,action(cb)) end
         function section:AddLabel(...) return raw:AddLabel(...) end
         function section:AddParagraph(...) return raw:AddParagraph(...) end
@@ -6953,25 +6972,27 @@ local __SHAPES = {
 local GLOW_IMG = "rbxassetid://131961136"
 
 local __NORMAL_COLOR = cs({
-    csk(0,   pclr(0.133333, 0.827451, 0.494118)),
-    csk(0.6, pclr(0.231373, 0.509804, 0.498039)),
-    csk(1,   pclr(0.501961, 0.501961, 0.501961)),
+    csk(0,    rgb(35, 35, 40)),
+    csk(0.22, rgb(250, 250, 252)),
+    csk(0.48, rgb(70, 70, 78)),
+    csk(0.72, rgb(255, 255, 255)),
+    csk(1,    rgb(45, 45, 52)),
 })
 local __WAIT_COLOR = cs({
-    csk(0,   pclr(0.827451, 0.133333, 0.133333)),
-    csk(0.6, pclr(0.509804, 0.231373, 0.231373)),
-    csk(1,   pclr(0.501961, 0.501961, 0.501961)),
+    csk(0,    rgb(95, 30, 35)),
+    csk(0.22, rgb(255, 110, 120)),
+    csk(0.48, rgb(100, 35, 42)),
+    csk(0.72, rgb(255, 150, 155)),
+    csk(1,    rgb(70, 25, 30)),
 })
 local __GOLD_NORMAL_COLOR = cs({
-    csk(0,   rgb(255, 215, 0)),
-    csk(0.6, rgb(218, 165, 32)),
-    csk(1,   rgb(128, 128, 128)),
+    csk(0,    rgb(75, 60, 25)),
+    csk(0.22, rgb(255, 225, 120)),
+    csk(0.48, rgb(110, 85, 30)),
+    csk(0.72, rgb(255, 240, 175)),
+    csk(1,    rgb(70, 55, 25)),
 })
-local __GOLD_WAIT_COLOR = cs({
-    csk(0,   rgb(255, 69, 0)),
-    csk(0.6, rgb(139, 0, 0)),
-    csk(1,   rgb(128, 128, 128)),
-})
+local __GOLD_WAIT_COLOR = __WAIT_COLOR
 
 local function bind_safecallback(callback)
     if not callback then return end
@@ -6986,8 +7007,8 @@ function BindableButtons.relayout()
         screen = FALLBACK_VIEWPORT
     end
     local h = BindableButtons.CurrentSize or 0.11
-    local w = h * (screen.Y / screen.X)
-    if w ~= w or w <= 0 or w > 1 then w = h * (FALLBACK_VIEWPORT.Y / FALLBACK_VIEWPORT.X) end
+    local w = h * (screen.Y / screen.X) * (194 / 66)
+    if w ~= w or w <= 0 or w > 1 then w = h * (FALLBACK_VIEWPORT.Y / FALLBACK_VIEWPORT.X) * (194 / 66) end
     local perRow = math.max(1, floor(0.84 / (w + 0.008)))
     for i = 1, #BindableButtons.order do
         local id = BindableButtons.order[i]
@@ -7067,7 +7088,7 @@ local function binderStep(dt)
     local cam = Workspace.CurrentCamera
     local scr = (cam and cam.ViewportSize) or FALLBACK_VIEWPORT
     local bh = BindableButtons.CurrentSize or 0.11
-    local bw = bh * (scr.Y / scr.X)
+    local bw = bh * (scr.Y / scr.X) * (194 / 66)
     local rotStep = BindableButtons.ResetActive and 3.5 or 1.1
     local kHover = clamp(dt * 12, 0, 1)
     local kPress = clamp(dt * 16, 0, 1)
@@ -7107,7 +7128,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
     local h0 = BindableButtons.CurrentSize or 0.11
     local w0 = h0 * (screen.Y / screen.X)
 
-    -- Noir-style floating button: dark circle, dual border, animated gradient.
+    -- Noir Shoot Murder-style floating bind: dark rounded rectangle with animated dual border.
     local ImageButton = new("ImageButton")
     ImageButton.Name = id
     ImageButton.Size = ud2(w0, 0, h0, 0)
@@ -7121,11 +7142,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
     ImageButton.ZIndex = 2
     ImageButton.Parent = storage
     buttonMaid:GiveTask(ImageButton)
-    new("UICorner", ImageButton).CornerRadius = ud(1, 0)
-
-    local Aspect = new("UIAspectRatioConstraint", ImageButton)
-    Aspect.AspectRatio = 1
-    pcall(function() Aspect.AspectType = Enum.AspectType.ScaleWithParentSize end)
+    new("UICorner", ImageButton).CornerRadius = ud(0, 16)
 
     local outerStroke = new("UIStroke", ImageButton)
     outerStroke.Color = rgb(255, 255, 255)
@@ -7146,14 +7163,14 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
 
     local TextLabel = new("TextLabel", ImageButton)
     TextLabel.Name = "@Text"
-    TextLabel.Size = ud2(0.76, 0, 0.76, 0)
+    TextLabel.Size = ud2(0.88, 0, 0.80, 0)
     TextLabel.Position = ud2(0.5, 0, 0.5, 0)
     TextLabel.AnchorPoint = v2(0.5, 0.5)
     TextLabel.BackgroundTransparency = 1
     TextLabel.Font = Enum.Font.Gotham
     TextLabel.Text = text
     TextLabel.TextColor3 = pclr(1, 1, 1)
-    TextLabel.TextSize = 13
+    TextLabel.TextSize = 17
     TextLabel.TextWrapped = true
     TextLabel.ZIndex = 3
 
@@ -7166,7 +7183,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
     ripple.Visible = false
     ripple.ZIndex = 2
     ripple.Parent = ImageButton
-    new("UICorner", ripple).CornerRadius = ud(1, 0)
+    new("UICorner", ripple).CornerRadius = ud(0, 16)
 
     local rec = {
         id = id, btn = ImageButton, stroke = Stroke, ripple = ripple,
@@ -7723,9 +7740,6 @@ RootMaid:GiveTask(UserInputService.InputBegan:Connect(function(input, processed)
 end))
 
 -- ====== МЕНЮ ======
-local mainSection = AddSection("💀 " .. BRAND)
-mainSection:AddLabel("Ultimate Fling • by " .. AUTHOR .. " • " .. VERSION)
-mainSection:AddParagraph("Info","Мульти-таргет флинг с сохранением позиции. Выбери цели в 📋 Lists, жми ▶ в ⚡ Fling или включи Loop/Aura в 🤖 Auto. FPDH и физика чистятся авто.")
 
 -- ⚡ Fling
 local actionSection = AddSection("⚡ Fling")
@@ -7886,7 +7900,7 @@ local function toggleBindButton(actionId)
     return function(enabled)
         local id="bind_"..actionId
         if enabled then
-            BindableButtons.AddBButton(id, ACTIONS[actionId].short, function() runAction(actionId) end, actionId=="selected")
+            BindableButtons.AddBButton(id, ACTIONS[actionId].name, function() runAction(actionId) end, actionId=="selected")
         else
             BindableButtons.DeleteBButton(id)
         end
@@ -7921,42 +7935,6 @@ for _,id in ipairs(ACTION_ORDER) do
     end)
 end
 keySection:AddButton("🧹 Clear keys", function() clearTable(config.keybinds); Keybinds.capture=nil; saveConfig(); Notify("Hotkey","All hotkeys cleared",3) end)
-
--- 💾 Config
-local configSection = AddSection("💾 Config")
-configSection:AddButton("💾 Save", function()
-    if saveConfig(true) then Notify("Config","Saved → "..CONFIG_PATH,3)
-    else Notify("Config","Filesystem unavailable",4) end
-end)
-configSection:AddButton("📂 Reload", function()
-    if loadConfig() then
-        ODHX.data.controls=config.pluginUI or {}
-        ODHX.Restore()
-        BindableButtons.setSize(config.bindButtonSize or 0.11)
-        hudApplyPosition()
-        Notify("Config","Reloaded",3)
-    else Notify("Config","Nothing to load",3) end
-end)
-configSection:AddButton("♻ Reset config", function()
-    for k,v in pairs(DEFAULTS) do
-        if type(v)=="table" then clearTable(config[k]); for k2,v2 in pairs(v) do config[k][k2]=v2 end
-        else config[k]=v end
-    end
-    clearTable(state.whitelist)
-    ODHX.ResetControls()
-    BindableButtons.setSize(config.bindButtonSize)
-    hudApplyPosition()
-    saveConfig(true)
-    Notify("Config","Defaults restored",3)
-end)
-
--- ℹ️
-local infoSection = AddSection("ℹ️")
-infoSection:AddButton("🧹 Clean duplicates", function()
-    local n=purgeForeign(true); markOwnCards(); Notify("Clean","Removed "..n.." duplicate section(s)",3)
-end)
-infoSection:AddLabel(PLUGIN_NAME.." • "..VERSION.." • by "..AUTHOR)
-infoSection:AddLabel("HUD drag • Binds drag • config saved → "..CONFIG_PATH)
 
 -- ====== Пометить свои карточки ======
 markOwnCards()
