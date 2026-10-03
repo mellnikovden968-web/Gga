@@ -5945,12 +5945,21 @@ end
 -- Embedded plugin: full user-supplied fling_мой.lua.txt, routed to the World page.
 do
     local __pluginOk, __pluginError = xpcall(function()
--- ODH 2026 adapter. Embedded in every plugin; no downloads/dependencies.
+-- Direct Noir integration: Fling uses Noir's own host and notification system.
+local noirHost = host
+assert(noirHost and type(noirHost.CreateTab) == "function", "Ultimate Fling: Noir host unavailable")
+-- Local Fling state adapter. It uses no external shared-host global.
 local ODHX = (function()
     local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=true }
     X.id, X.title, X.file = "FLING", "ULTIMATE FLING", "Noir Hub/configs/ODH_FLING_settings.json"
-    local host = odh_shared_plugins
-    assert(host and type(host.CreateTab)=="function", X.title .. ": load through the current Overdrive H plugin menu")
+    local host = {
+        CreateTab = function()
+            return noirHost.CreateTab()
+        end,
+        Notify = function(textValue, duration)
+            return notify(tostring(textValue), duration or 3)
+        end,
+    }
     local env = {}
     if type(getgenv)=="function" then local ok,g=pcall(getgenv); if ok and type(g)=="table" then env=g end end
     local rd = type(readfile)=="function" and readfile or env.readfile
@@ -6247,8 +6256,9 @@ local CLEAN_LEGACY_MENU = true
 local StarterGui = nil
 
 local function hostNotify(text, dur)
-    if odh_shared_plugins and type(odh_shared_plugins.Notify) == "function" then
-        if pcall(odh_shared_plugins.Notify, text, dur or 3) then return end
+    if type(notify) == "function" then
+        local ok = pcall(notify, tostring(text), dur or 3)
+        if ok then return end
     end
     pcall(function()
         local sg = StarterGui or game:GetService("StarterGui")
