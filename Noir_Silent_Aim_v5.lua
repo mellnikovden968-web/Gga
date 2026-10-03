@@ -6030,7 +6030,7 @@ local isJumpKeyPressed = false
 local Camera = workspace.CurrentCamera
 local wallDetectionCooldown = 0
 local lastWallhopAt = 0
-local WALLHOP_COOLDOWN = 0.4
+local WALLHOP_COOLDOWN = 0.55
 
 local wallRaycastParams = RaycastParams.new()
 wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
