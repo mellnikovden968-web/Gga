@@ -3070,10 +3070,9 @@ local function startFly()
     humanoid.PlatformStand = true
     pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Physics) end)
 
-    -- Full 3D camera orientation: the avatar pitches up/down and turns left/right as a single flight body.
-    -- Moderate P/D avoids the former rapid correction wobble.
+    -- Full 3D camera orientation: use the linked Fly's high-response gyro settings for quick camera following.
     local gyro = Instance.new("BodyGyro")
-    gyro.Name, gyro.P, gyro.D, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 12000, 1600, Vector3.new(4e5,4e5,4e5), root.CFrame
+    gyro.Name, gyro.P, gyro.D, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 9e4, 800, Vector3.new(9e9,9e9,9e9), root.CFrame
     gyro.Parent = root
     local velocity = Instance.new("BodyVelocity")
     velocity.Name, velocity.P, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", 12000, Vector3.zero, Vector3.new(9e9,9e9,9e9)
