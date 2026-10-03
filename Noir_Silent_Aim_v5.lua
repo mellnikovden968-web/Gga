@@ -4073,28 +4073,30 @@ local __SHAPES = {
 }
 
 local __NORMAL_COLOR = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   __PCLR(0.133333, 0.827451, 0.494118)),
-    ColorSequenceKeypoint.new(0.6, __PCLR(0.231373, 0.509804, 0.498039)),
-    ColorSequenceKeypoint.new(1,   __PCLR(0.501961, 0.501961, 0.501961))
+    ColorSequenceKeypoint.new(0,    __RGB(35, 35, 40)),
+    ColorSequenceKeypoint.new(0.22, __RGB(250, 250, 252)),
+    ColorSequenceKeypoint.new(0.48, __RGB(70, 70, 78)),
+    ColorSequenceKeypoint.new(0.72, __RGB(255, 255, 255)),
+    ColorSequenceKeypoint.new(1,    __RGB(45, 45, 52)),
 })
 
 local __WAIT_COLOR = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   __PCLR(0.827451, 0.133333, 0.133333)),
-    ColorSequenceKeypoint.new(0.6, __PCLR(0.509804, 0.231373, 0.231373)),
-    ColorSequenceKeypoint.new(1,   __PCLR(0.501961, 0.501961, 0.501961))
+    ColorSequenceKeypoint.new(0,    __RGB(95, 30, 35)),
+    ColorSequenceKeypoint.new(0.22, __RGB(255, 110, 120)),
+    ColorSequenceKeypoint.new(0.48, __RGB(100, 35, 42)),
+    ColorSequenceKeypoint.new(0.72, __RGB(255, 150, 155)),
+    ColorSequenceKeypoint.new(1,    __RGB(70, 25, 30)),
 })
 
 local __GOLD_NORMAL_COLOR = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   __RGB(255, 215, 0)),
-    ColorSequenceKeypoint.new(0.6, __RGB(255, 140, 0)),
-    ColorSequenceKeypoint.new(1,   __RGB(184, 134, 11))
+    ColorSequenceKeypoint.new(0,    __RGB(75, 60, 25)),
+    ColorSequenceKeypoint.new(0.22, __RGB(255, 225, 120)),
+    ColorSequenceKeypoint.new(0.48, __RGB(110, 85, 30)),
+    ColorSequenceKeypoint.new(0.72, __RGB(255, 240, 175)),
+    ColorSequenceKeypoint.new(1,    __RGB(70, 55, 25)),
 })
 
-local __GOLD_WAIT_COLOR = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   __RGB(255, 69, 0)),
-    ColorSequenceKeypoint.new(0.6, __RGB(139, 69, 19)),
-    ColorSequenceKeypoint.new(1,   __RGB(160, 82, 45))
-})
+local __GOLD_WAIT_COLOR = __WAIT_COLOR
 
 local function bind_safecallback(callback)
     if not callback then return end
@@ -4217,10 +4219,10 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     TextLabel.Position = __UD2(0.5, 0, 0.5, 0)
     TextLabel.AnchorPoint = __V2(0.5, 0.5)
     TextLabel.BackgroundTransparency = 1
-    TextLabel.Font = Enum.Font.GothamBold
+    TextLabel.Font = Enum.Font.Gotham
     TextLabel.Text = text
     TextLabel.TextColor3 = __PCLR(1, 1, 1)
-    TextLabel.TextSize = 14
+    TextLabel.TextSize = 17
     TextLabel.TextWrapped = true
     TextLabel.ZIndex = 3
 
@@ -7099,7 +7101,8 @@ local function binderStep(dt)
             rec.hover = rec.hover + (rec.targetHover - rec.hover) * kHover
             rec.press = rec.press + (rec.targetPress - rec.press) * kPress
             local scale = 1 + rec.hover * 0.12 - rec.press * 0.08
-            btn.Size = ud2(bw * scale, 0, bh * scale, 0)
+            local diameter = bh * scr.Y * scale
+            btn.Size = ud2(0, diameter, 0, diameter)
             rec.rot = (rec.rot + rotStep) % 360
             rec.stroke.Rotation = rec.rot
             rec.stroke.Color = BindableButtons.ResetActive and __WAIT_COLOR
@@ -7131,7 +7134,9 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
     -- Noir/Shoot Murder visual style, preserved in the original circular Fling bind shape.
     local ImageButton = new("ImageButton")
     ImageButton.Name = id
-    ImageButton.Size = ud2(w0, 0, h0, 0)
+    -- Pixel sizing guarantees a true circle on every screen ratio.
+    local diameter = h0 * screen.Y
+    ImageButton.Size = ud2(0, diameter, 0, diameter)
     ImageButton.AnchorPoint = v2(0.5, 0.5)
     ImageButton.Image = ""
     ImageButton.BackgroundColor3 = rgb(8, 8, 10)
