@@ -7007,8 +7007,8 @@ function BindableButtons.relayout()
         screen = FALLBACK_VIEWPORT
     end
     local h = BindableButtons.CurrentSize or 0.11
-    local w = h * (screen.Y / screen.X) * (194 / 66)
-    if w ~= w or w <= 0 or w > 1 then w = h * (FALLBACK_VIEWPORT.Y / FALLBACK_VIEWPORT.X) * (194 / 66) end
+    local w = h * (screen.Y / screen.X)
+    if w ~= w or w <= 0 or w > 1 then w = h * (FALLBACK_VIEWPORT.Y / FALLBACK_VIEWPORT.X) end
     local perRow = math.max(1, floor(0.84 / (w + 0.008)))
     for i = 1, #BindableButtons.order do
         local id = BindableButtons.order[i]
@@ -7088,7 +7088,7 @@ local function binderStep(dt)
     local cam = Workspace.CurrentCamera
     local scr = (cam and cam.ViewportSize) or FALLBACK_VIEWPORT
     local bh = BindableButtons.CurrentSize or 0.11
-    local bw = bh * (scr.Y / scr.X) * (194 / 66)
+    local bw = bh * (scr.Y / scr.X)
     local rotStep = BindableButtons.ResetActive and 3.5 or 1.1
     local kHover = clamp(dt * 12, 0, 1)
     local kPress = clamp(dt * 16, 0, 1)
@@ -7128,7 +7128,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
     local h0 = BindableButtons.CurrentSize or 0.11
     local w0 = h0 * (screen.Y / screen.X)
 
-    -- Noir Shoot Murder-style floating bind: dark rounded rectangle with animated dual border.
+    -- Noir/Shoot Murder visual style, preserved in the original circular Fling bind shape.
     local ImageButton = new("ImageButton")
     ImageButton.Name = id
     ImageButton.Size = ud2(w0, 0, h0, 0)
@@ -7142,7 +7142,10 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
     ImageButton.ZIndex = 2
     ImageButton.Parent = storage
     buttonMaid:GiveTask(ImageButton)
-    new("UICorner", ImageButton).CornerRadius = ud(0, 16)
+    new("UICorner", ImageButton).CornerRadius = ud(1, 0)
+    local Aspect = new("UIAspectRatioConstraint", ImageButton)
+    Aspect.AspectRatio = 1
+    pcall(function() Aspect.AspectType = Enum.AspectType.ScaleWithParentSize end)
 
     local outerStroke = new("UIStroke", ImageButton)
     outerStroke.Color = rgb(255, 255, 255)
@@ -7163,14 +7166,14 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
 
     local TextLabel = new("TextLabel", ImageButton)
     TextLabel.Name = "@Text"
-    TextLabel.Size = ud2(0.88, 0, 0.80, 0)
+    TextLabel.Size = ud2(0.76, 0, 0.76, 0)
     TextLabel.Position = ud2(0.5, 0, 0.5, 0)
     TextLabel.AnchorPoint = v2(0.5, 0.5)
     TextLabel.BackgroundTransparency = 1
     TextLabel.Font = Enum.Font.Gotham
     TextLabel.Text = text
     TextLabel.TextColor3 = pclr(1, 1, 1)
-    TextLabel.TextSize = 17
+    TextLabel.TextSize = 13
     TextLabel.TextWrapped = true
     TextLabel.ZIndex = 3
 
@@ -7183,7 +7186,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
     ripple.Visible = false
     ripple.ZIndex = 2
     ripple.Parent = ImageButton
-    new("UICorner", ripple).CornerRadius = ud(0, 16)
+    new("UICorner", ripple).CornerRadius = ud(1, 0)
 
     local rec = {
         id = id, btn = ImageButton, stroke = Stroke, ripple = ripple,
@@ -7900,7 +7903,7 @@ local function toggleBindButton(actionId)
     return function(enabled)
         local id="bind_"..actionId
         if enabled then
-            BindableButtons.AddBButton(id, ACTIONS[actionId].name, function() runAction(actionId) end, actionId=="selected")
+            BindableButtons.AddBButton(id, ACTIONS[actionId].short, function() runAction(actionId) end, actionId=="selected")
         else
             BindableButtons.DeleteBButton(id)
         end
