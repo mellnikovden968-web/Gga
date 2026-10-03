@@ -2978,8 +2978,25 @@ if type(M) ~= "table" or not M.tab or not M.persistence then return end
 
 local Players, UIS, RunService, Workspace = M.players, M.uis, M.runService, M.workspace
 local LocalPlayer, Persistence = M.localPlayer, M.persistence
-local state = { noclip = false, noclipOriginals = {}, fly = false, flyVelocity = nil, flyGyro = nil, flyConnection = nil, flyHumanoid = nil, flyAutoRotate = true }
-local FLY_SPEED = 55
+local state = {
+    noclip = false, noclipOriginals = {},
+    fly = false, flyVelocity = nil, flyGyro = nil, flyConnection = nil,
+    flyHumanoid = nil, flyAutoRotate = true, flyPlatformStand = false,
+    flyStateEnabled = {}, flyAnimate = nil, flyAnimateDisabled = false,
+    flySpeed = 1,
+}
+-- Uses the supplied universal-fly method: PlatformStand plus BodyGyro/BodyVelocity
+-- on UpperTorso (R15) or Torso (R6), with Humanoid:TranslateBy movement.
+local FLY_STATES = {
+    Enum.HumanoidStateType.Climbing, Enum.HumanoidStateType.FallingDown,
+    Enum.HumanoidStateType.Flying, Enum.HumanoidStateType.Freefall,
+    Enum.HumanoidStateType.GettingUp, Enum.HumanoidStateType.Jumping,
+    Enum.HumanoidStateType.Landed, Enum.HumanoidStateType.Physics,
+    Enum.HumanoidStateType.PlatformStanding, Enum.HumanoidStateType.Ragdoll,
+    Enum.HumanoidStateType.Running, Enum.HumanoidStateType.RunningNoPhysics,
+    Enum.HumanoidStateType.Seated, Enum.HumanoidStateType.StrafingNoPhysics,
+    Enum.HumanoidStateType.Swimming,
+}
 
 local function applyNoclip()
     if not state.noclip then return end
@@ -3004,44 +3021,77 @@ local function setNoclip(enabled)
 end
 RunService.Stepped:Connect(function() if state.noclip then applyNoclip() end end)
 
+local function restoreFlyCharacter()
+    local humanoid = state.flyHumanoid
+    if humanoid and humanoid.Parent then
+        humanoid.AutoRotate = state.flyAutoRotate
+        humanoid.PlatformStand = state.flyPlatformStand
+        for _, stateType in ipairs(FLY_STATES) do
+            local wasEnabled = state.flyStateEnabled[stateType.Name]
+            if wasEnabled ~= nil then pcall(function() humanoid:SetStateEnabled(stateType, wasEnabled) end) end
+        end
+        pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics) end)
+    end
+    if state.flyAnimate and state.flyAnimate.Parent then state.flyAnimate.Disabled = state.flyAnimateDisabled end
+    state.flyHumanoid, state.flyAnimate = nil, nil
+    table.clear(state.flyStateEnabled)
+end
+
 local function stopFly()
     if state.flyConnection then state.flyConnection:Disconnect(); state.flyConnection = nil end
     if state.flyVelocity then state.flyVelocity:Destroy(); state.flyVelocity = nil end
     if state.flyGyro then state.flyGyro:Destroy(); state.flyGyro = nil end
-    if state.flyHumanoid and state.flyHumanoid.Parent then
-        state.flyHumanoid.AutoRotate = state.flyAutoRotate
-        state.flyHumanoid:ChangeState(Enum.HumanoidStateType.Running)
-    end
-    state.flyHumanoid = nil
+    restoreFlyCharacter()
 end
+
 local function startFly()
     stopFly()
     if not state.fly then return end
     local character = LocalPlayer.Character
     local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
     local root = character and character:FindFirstChild("HumanoidRootPart")
-    if not (humanoid and root) then return end
-    state.flyHumanoid, state.flyAutoRotate = humanoid, humanoid.AutoRotate
+    local torso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or root)
+    if not (humanoid and root and torso) then return end
+
+    -- The source's R6/R15 setup, retained in Noir's existing Main toggle and round bind button.
+    state.flyHumanoid, state.flyAutoRotate, state.flyPlatformStand = humanoid, humanoid.AutoRotate, humanoid.PlatformStand
+    state.flyAnimate = character:FindFirstChild("Animate")
+    state.flyAnimateDisabled = state.flyAnimate and state.flyAnimate.Disabled or false
     humanoid.AutoRotate = false
-    local velocity = Instance.new("BodyVelocity")
-    velocity.Name, velocity.MaxForce, velocity.P, velocity.Velocity = "NoirFlyVelocity", Vector3.new(1000000,1000000,1000000), 20000, Vector3.zero
-    velocity.Parent = root
+    humanoid.PlatformStand = true
+    for _, stateType in ipairs(FLY_STATES) do
+        local ok, wasEnabled = pcall(function() return humanoid:GetStateEnabled(stateType) end)
+        if ok then state.flyStateEnabled[stateType.Name] = wasEnabled end
+        pcall(function() humanoid:SetStateEnabled(stateType, false) end)
+    end
+    if state.flyAnimate then state.flyAnimate.Disabled = true end
+
     local gyro = Instance.new("BodyGyro")
-    gyro.Name, gyro.MaxTorque, gyro.P, gyro.CFrame = "NoirFlyGyro", Vector3.new(1000000,1000000,1000000), 20000, root.CFrame
-    gyro.Parent = root
+    gyro.Name, gyro.P, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 9e4, Vector3.new(9e9, 9e9, 9e9), torso.CFrame
+    gyro.Parent = torso
+    local velocity = Instance.new("BodyVelocity")
+    velocity.Name, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", Vector3.new(0, .1, 0), Vector3.new(9e9, 9e9, 9e9)
+    velocity.Parent = torso
     state.flyVelocity, state.flyGyro = velocity, gyro
-    state.flyConnection = RunService.RenderStepped:Connect(function()
-        if not state.fly or not (root.Parent and humanoid.Parent and velocity.Parent and gyro.Parent) then return end
+
+    state.flyConnection = RunService.Heartbeat:Connect(function()
+        if not state.fly or not (character.Parent and humanoid.Parent and root.Parent and torso.Parent and velocity.Parent and gyro.Parent) then return end
         local camera = Workspace.CurrentCamera
         if not camera then return end
-        local vertical = 0
-        if UIS:IsKeyDown(Enum.KeyCode.Space) or humanoid.Jump then vertical += FLY_SPEED end
-        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl) then vertical -= FLY_SPEED end
-        local move = humanoid.MoveDirection
-        velocity.Velocity = Vector3.new(move.X * FLY_SPEED, vertical, move.Z * FLY_SPEED)
-        gyro.CFrame = CFrame.new(root.Position, root.Position + camera.CFrame.LookVector)
+        -- This is the source's tpwalking movement: follow Humanoid.MoveDirection each heartbeat.
+        local moveDirection = humanoid.MoveDirection
+        if moveDirection.Magnitude > 0 then pcall(function() character:TranslateBy(moveDirection * state.flySpeed) end) end
+        -- Space/Control provide the source GUI's Up/Down function while retaining Noir's compact controls.
+        if UIS:IsKeyDown(Enum.KeyCode.Space) or humanoid.Jump then
+            root.CFrame = root.CFrame * CFrame.new(0, state.flySpeed, 0)
+        elseif UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl) then
+            root.CFrame = root.CFrame * CFrame.new(0, -state.flySpeed, 0)
+        end
+        velocity.Velocity = Vector3.new(0, .1, 0)
+        gyro.CFrame = camera.CFrame
     end)
 end
+
 local function setFly(enabled)
     state.fly = enabled == true
     if state.fly then startFly() else stopFly() end
@@ -3151,6 +3201,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     if state.noclip then table.clear(state.noclipOriginals);applyNoclip() end
     if state.fly then startFly() end
 end)
+
 ]==]
     local compiler = loadstring
     if type(compiler) ~= "function" then
