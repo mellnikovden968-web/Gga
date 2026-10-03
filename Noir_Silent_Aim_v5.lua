@@ -93,12 +93,8 @@ local NoirPersistence = {
         ["Lock Shoot Murder Button"]=true, ["Knife Silent Aim"]=true, ["Knife Wall Check"]=true,
         ["Prioritize Sheriff"]=true, ["Enable WalkSpeed"]=true, ["Enable JumpPower"]=true,
         ["Show Round Timer"]=true, ["Instant Role Detection"]=true, ["Auto Notify Roles"]=true,
-        ["Auto Grab Gun"]=true, ["Auto Grab Gun Safety Check"]=true, ["Gun Aura"]=true,
-        ["Auto Notify on Dropped Gun"]=true, ["Gun Pickup Notify"]=true, ["Touch Fling"]=true,
-        ["Auto Fling Sheriff / Hero"]=true, ["Auto Fling Murderer"]=true, ["Fling All"]=true,
-        ["Anti Fling"]=true, ["Auto Fire"]=true, ["Show FOV"]=true, ["Ignore Dead"]=true,
-        ["Ignore Friends"]=true, ["ESP Name"]=true, ["ESP Distance"]=true, ["ESP Health"]=true,
-        ["ESP Role"]=true, ["ESP Tracer"]=true, ["ESP Skeleton"]=true, ["Anti AFK"]=true,
+        ["Auto Fire"]=true, ["Show FOV"]=true, ["Ignore Dead"]=true,
+        ["Ignore Friends"]=true, ["Anti AFK"]=true,
     },
 }
 do
@@ -882,13 +878,6 @@ local config = {
     knifePrioritizeSheriff = false,
     knifeAutoThrow = false,
     knifeRadius = 15,
-    espOutline = false, espOutlineMurderer = false, espOutlineSheriff = false,
-    espChams = false, espChamsMurderer = false, espChamsSheriff = false,
-    espBox = false, espBoxMurderer = false, espBoxSheriff = false,
-    espName = false, espDistance = false, espHealth = false, espRole = false,
-    espTracer = false, espSkeleton = false,
-    outlineDroppedGun = false, outlineTraps = false, outlineThrowingKnives = false, outlineCoins = false,
-    boxDroppedGun = false, boxTraps = false, boxThrowingKnives = false, boxCoins = false,
     showShootButton = false,
     lockShootButton = false,
     selectedPlayer = nil,
@@ -981,13 +970,6 @@ function distanceTo(player)
     return math.huge
 end
 
-local ESP_INACTIVE_COLOR = Color3.fromRGB(150, 154, 162)
-function roleColor(role)
-    if role == "murderer" then return Color3.fromRGB(255, 55, 65) end
-    if role == "sheriff" then return Color3.fromRGB(55, 145, 255) end
-    if role == "hero" then return Color3.fromRGB(255, 220, 45) end
-    return Color3.fromRGB(65, 235, 105)
-end
 local function playerIsInLobby(player)
     if not player then return true end
     local teamName = player.Team and string.lower(tostring(player.Team.Name)) or ""
@@ -1031,23 +1013,6 @@ local function playerIsInLobby(player)
     end
     return false
 end
-function playerESPInactive(player)
-    local character = player and player.Character
-    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then return true end
-    if roundState == "starting" then return false end
-    return roundState ~= "playing" or playerIsInLobby(player)
-end
-function playerESPColor(player, role)
-    return playerESPInactive(player) and ESP_INACTIVE_COLOR or roleColor(role)
-end
-function espPlayerRole(player)
-    local cached = player and roleCache[player.UserId]
-    if cached == "murderer" or cached == "sheriff" or cached == "hero" or cached == "innocent" then return cached end
-    if playerHasTool(player, "Knife") then return "murderer" end
-    if playerHasTool(player, "Gun") then return "sheriff" end
-    return "innocent"
-end
 function setTarget(player)
     if not validTarget(player) then player = nil end
     if murderer ~= player then
@@ -1068,7 +1033,6 @@ end
 function consumeData(data)
     if typeof(data) ~= "table" then return false end
     local foundMurderer, foundSheriff, foundHero
-    local rolesChanged = false
     for _, player in ipairs(getPlayers()) do
         local info = data[player.Name] or data[tostring(player.UserId)]
         if typeof(info) == "table" then
@@ -1081,7 +1045,6 @@ function consumeData(data)
             elseif normalized == "hero" then resolved = "hero"; foundHero = player
             else resolved = "innocent" end
             if roleCache[player.UserId] ~= resolved then
-                rolesChanged = true
                 roleCache[player.UserId] = resolved
                 if autoNotifyRoles and resolved ~= "innocent" and announcedRoles[player.UserId] ~= resolved then
                     announcedRoles[player.UserId] = resolved
@@ -1094,16 +1057,13 @@ function consumeData(data)
             if normalized == "murderer" then foundMurderer = player
             elseif normalized == "sheriff" then foundSheriff = player
             elseif normalized == "hero" then foundHero = player end
-            if roleCache[player.UserId] ~= resolved then roleCache[player.UserId] = resolved; rolesChanged = true end
+            if roleCache[player.UserId] ~= resolved then roleCache[player.UserId] = resolved end
         end
     end
     sheriff = foundSheriff or sheriff
     hero = foundHero or hero
     if foundMurderer then
         setTarget(foundMurderer)
-    end
-    if rolesChanged then
-        if type(refreshESP) == "function" then refreshESP() end
     end
     return foundMurderer ~= nil
 end
@@ -1137,466 +1097,6 @@ function updatePing()
             if measured > 0 and measured < 2 then cachedPing = cachedPing * 0.7 + measured * 0.3 end
         end
     end)
-end
-
-local ESP_OUTLINE_NAME = "NoirESPOutline"
-local ESP_BOX_NAME = "NoirESPBox"
-local espTracers = {}
-local espRefs = {}
-local Drawing = (typeof(Drawing) == "table") and Drawing or nil
-
-function clearESPCharacter(character)
-    if not character then return end
-    local outline = character:FindFirstChild(ESP_OUTLINE_NAME)
-    if outline then outline:Destroy() end
-    for _, item in ipairs(character:GetDescendants()) do
-        if item.Name == ESP_BOX_NAME or item.Name == "NoirESPRole" or item.Name == "NoirESPBar" then item:Destroy() end
-    end
-end
-function makeBillboard(root, role)
-    local box = Instance.new("BillboardGui")
-    box.Name = ESP_BOX_NAME
-    box.Adornee = root
-    box.AlwaysOnTop = true
-    box.LightInfluence = 0
-    box.Size = UDim2.fromOffset(96, 132)
-    box.StudsOffset = Vector3.new(0, 2.4, 0)
-    box.Parent = root
-    local frame = Instance.new("Frame")
-    frame.BackgroundTransparency = 1
-    frame.Size = UDim2.fromScale(1, 1)
-    frame.Parent = box
-    local line = Instance.new("UIStroke")
-    line.Color = roleColor(role)
-    line.Thickness = 1.6
-    line.Transparency = 0
-    line.Parent = frame
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
-    local barBg = Instance.new("Frame")
-    barBg.Name = "NoirESPBar"
-    barBg.AnchorPoint = Vector2.new(0, 1)
-    barBg.Position = UDim2.new(0, -6, 1, 0)
-    barBg.Size = UDim2.new(0, 4, 1, 0)
-    barBg.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    barBg.BorderSizePixel = 0
-    barBg.Parent = frame
-    local bar = Instance.new("Frame")
-    bar.AnchorPoint = Vector2.new(0, 1)
-    bar.Position = UDim2.new(0, 0, 1, 0)
-    bar.Size = UDim2.fromScale(1, 1)
-    bar.BackgroundColor3 = Color3.fromRGB(65, 235, 105)
-    bar.BorderSizePixel = 0
-    bar.Parent = barBg
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "NoirESPName"
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.AnchorPoint = Vector2.new(.5, 1)
-    nameLabel.Position = UDim2.new(.5, 0, 0, -2)
-    nameLabel.Size = UDim2.new(1, 120, 0, 16)
-    nameLabel.Font = Enum.Font.GothamSemibold
-    nameLabel.TextSize = 13
-    nameLabel.TextColor3 = Color3.new(1, 1, 1)
-    nameLabel.TextStrokeTransparency = .3
-    nameLabel.Text = ""
-    nameLabel.Parent = frame
-    local infoLabel = Instance.new("TextLabel")
-    infoLabel.Name = "NoirESPRole"
-    infoLabel.BackgroundTransparency = 1
-    infoLabel.AnchorPoint = Vector2.new(.5, 0)
-    infoLabel.Position = UDim2.new(.5, 0, 1, 2)
-    infoLabel.Size = UDim2.new(1, 120, 0, 15)
-    infoLabel.Font = Enum.Font.Gotham
-    infoLabel.TextSize = 12
-    infoLabel.TextColor3 = roleColor(role)
-    infoLabel.TextStrokeTransparency = .3
-    infoLabel.Text = ""
-    infoLabel.Parent = frame
-    return box, nameLabel, infoLabel, bar, line
-end
-function applyESPPlayer(player)
-    if player == LocalPlayer then return end
-    local character = player.Character
-    if not character then espRefs[player] = nil return end
-    clearESPCharacter(character)
-    espRefs[player] = nil
-    local role = espPlayerRole(player)
-    local displayColor = playerESPColor(player, role)
-    local outlineWanted = config.espOutline or (config.espOutlineMurderer and role == "murderer") or (config.espOutlineSheriff and role == "sheriff")
-    local chamsWanted = config.espChams or (config.espChamsMurderer and role == "murderer") or (config.espChamsSheriff and role == "sheriff")
-    local boxWanted = config.espBox or (config.espBoxMurderer and role == "murderer") or (config.espBoxSheriff and role == "sheriff")
-    local textWanted = config.espName or config.espDistance or config.espHealth or config.espRole
-    local highlight
-    local boxStroke
-    if outlineWanted or chamsWanted then
-        highlight = Instance.new("Highlight")
-        highlight.Name = ESP_OUTLINE_NAME
-        highlight.Adornee = character
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.FillTransparency = chamsWanted and .45 or 1
-        highlight.FillColor = displayColor
-        highlight.OutlineTransparency = outlineWanted and 0 or 1
-        highlight.OutlineColor = displayColor
-        highlight.Parent = character
-    end
-    if boxWanted or textWanted then
-        local root = character:FindFirstChild("HumanoidRootPart")
-        if root then
-            local box, nameLabel, infoLabel, bar, line = makeBillboard(root, role)
-            boxStroke = line
-            if not boxWanted then
-                local frame = box:FindFirstChildOfClass("Frame")
-                if frame then local s = frame:FindFirstChildOfClass("UIStroke"); if s then s.Transparency = 1 end end
-            end
-            if not config.espHealth and bar then bar.Parent.Visible = false end
-            nameLabel.Visible = config.espName
-            nameLabel.Text = player.Name
-            infoLabel.Visible = config.espDistance or config.espRole
-            infoLabel.TextColor3 = displayColor
-            espRefs[player] = { char = character, info = infoLabel, bar = bar, humanoid = character:FindFirstChildWhichIsA("Humanoid"), highlight = highlight, boxStroke = boxStroke }
-        end
-    end
-    if not espRefs[player] then
-        espRefs[player] = { char = character, info = nil, bar = nil, humanoid = character:FindFirstChildWhichIsA("Humanoid"), highlight = highlight, boxStroke = boxStroke }
-    end
-end
-function refreshESP()
-    for _, player in ipairs(getPlayers()) do applyESPPlayer(player) end
-end
-function bindESPPlayer(player)
-    if player == LocalPlayer then return end
-    player.CharacterAdded:Connect(function() task.wait(0.4); applyESPPlayer(player) end)
-    if player.Character then applyESPPlayer(player) end
-end
-for _, player in ipairs(getPlayers()) do bindESPPlayer(player) end
-Players.PlayerAdded:Connect(bindESPPlayer)
-
-task.spawn(function()
-    while running do
-        for _, player in ipairs(getPlayers()) do
-            if player ~= LocalPlayer then
-                local character = player.Character
-                local refs = espRefs[player]
-                if character and (not refs or refs.char ~= character) then
-                    applyESPPlayer(player)
-                    refs = espRefs[player]
-                end
-                if character and refs and refs.char == character then
-                    local role = espPlayerRole(player)
-                    local color = playerESPColor(player, role)
-                    if refs.highlight then
-                        refs.highlight.FillColor = color
-                        refs.highlight.OutlineColor = color
-                    end
-                    if refs.boxStroke then refs.boxStroke.Color = color end
-                    if refs.info then refs.info.TextColor3 = color end
-                end
-            end
-        end
-        task.wait(.15)
-    end
-end)
-
-local R15_BONES = {
-    {"Head","UpperTorso"}, {"UpperTorso","LowerTorso"},
-    {"UpperTorso","LeftUpperArm"}, {"LeftUpperArm","LeftLowerArm"}, {"LeftLowerArm","LeftHand"},
-    {"UpperTorso","RightUpperArm"}, {"RightUpperArm","RightLowerArm"}, {"RightLowerArm","RightHand"},
-    {"LowerTorso","LeftUpperLeg"}, {"LeftUpperLeg","LeftLowerLeg"}, {"LeftLowerLeg","LeftFoot"},
-    {"LowerTorso","RightUpperLeg"}, {"RightUpperLeg","RightLowerLeg"}, {"RightLowerLeg","RightFoot"},
-}
-local R6_BONES = {
-    {"Head","Torso"}, {"Torso","Left Arm"}, {"Torso","Right Arm"}, {"Torso","Left Leg"}, {"Torso","Right Leg"},
-}
-local skeletonCache = {}
-
-local roleFallbackCache = {}
-local function espRoleFast(player)
-    local cached = roleCache[player.UserId]
-    if cached then return cached end
-    local now = os.clock()
-    local entry = roleFallbackCache[player.UserId]
-    if entry and now - entry.t < 0.5 then return entry.role end
-    local role = espPlayerRole(player)
-    roleFallbackCache[player.UserId] = { role = role, t = now }
-    return role
-end
-
-local function newLine()
-    if not Drawing then return nil end
-    local line = Drawing.new("Line")
-    line.Thickness = 1.4
-    line.Transparency = 1
-    line.Visible = false
-    return line
-end
-
-local function hideAllESP()
-    for _, line in pairs(espTracers) do line.Visible = false end
-    for _, set in pairs(skeletonCache) do
-        local lines = set.lines
-        for i = 1, #lines do lines[i].Visible = false end
-    end
-end
-
-RunService.RenderStepped:Connect(function(dt)
-    local wantTracer = config.espTracer
-    local wantSkeleton = config.espSkeleton and Drawing
-    if not wantTracer and not wantSkeleton then hideAllESP() return end
-    local cam = Workspace.CurrentCamera
-    if not cam then return end
-    local players = getPlayers()
-    local viewport = cam.ViewportSize
-    local bottom = Vector2.new(viewport.X / 2, viewport.Y)
-    for i = 1, #players do
-        local player = players[i]
-        if player ~= LocalPlayer then
-            local character = player.Character
-            local role = character and espRoleFast(player) or "innocent"
-            local displayColor = playerESPColor(player, role)
-            if wantTracer then
-                local tracer = espTracers[player]
-                if not tracer then tracer = newLine(); espTracers[player] = tracer end
-                if tracer then
-                    local root = character and character:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local pos = cam:WorldToViewportPoint(root.Position)
-                        tracer.From = bottom
-                        tracer.To = Vector2.new(pos.X, pos.Y)
-                        tracer.Color = displayColor
-                        tracer.Visible = pos.Z > 0
-                    else
-                        tracer.Visible = false
-                    end
-                end
-            else
-                local tracer = espTracers[player]
-                if tracer then tracer.Visible = false end
-            end
-            if wantSkeleton and character then
-                local set = skeletonCache[player]
-                if not set or set.char ~= character then
-                    if set and set.lines then
-                        for b = 1, #set.lines do if set.lines[b] then set.lines[b]:Remove() end end
-                    end
-                    local bones = character:FindFirstChild("UpperTorso") and R15_BONES or R6_BONES
-                    set = { char = character, bones = bones, parts = {}, lines = {} }
-                    for b = 1, #bones do
-                        set.parts[b] = { character:FindFirstChild(bones[b][1]), character:FindFirstChild(bones[b][2]) }
-                        set.lines[b] = newLine()
-                    end
-                    skeletonCache[player] = set
-                end
-                local parts, lines = set.parts, set.lines
-                for b = 1, #lines do
-                    local line = lines[b]
-                    if line then
-                        local pair = parts[b]
-                        local a, b2 = pair[1], pair[2]
-                        if a and b2 then
-                            local pa = cam:WorldToViewportPoint(a.Position)
-                            local pb = cam:WorldToViewportPoint(b2.Position)
-                            line.From = Vector2.new(pa.X, pa.Y)
-                            line.To = Vector2.new(pb.X, pb.Y)
-                            line.Color = displayColor
-                            line.Visible = pa.Z > 0 and pb.Z > 0
-                        else
-                            line.Visible = false
-                        end
-                    end
-                end
-            elseif skeletonCache[player] then
-                local lines = skeletonCache[player].lines
-                for b = 1, #lines do if lines[b] then lines[b].Visible = false end end
-            end
-        end
-    end
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    local set = skeletonCache[player]
-    if set then
-        for b = 1, #set.lines do if set.lines[b] then set.lines[b]:Remove() end end
-        skeletonCache[player] = nil
-    end
-    local tracer = espTracers[player]
-    if tracer then tracer:Remove(); espTracers[player] = nil end
-    espRefs[player] = nil
-    roleFallbackCache[player.UserId] = nil
-end)
-
-local espTextAccum = 0
-RunService.RenderStepped:Connect(function(dt)
-    if not (config.espDistance or config.espRole or config.espHealth) then return end
-    espTextAccum += dt
-    if espTextAccum < 0.08 then return end
-    espTextAccum = 0
-    local players = getPlayers()
-    local showRole, showDist, showHealth = config.espRole, config.espDistance, config.espHealth
-    for i = 1, #players do
-        local player = players[i]
-        if player ~= LocalPlayer then
-            local refs = espRefs[player]
-            if refs and refs.char == player.Character then
-                if refs.info and (showRole or showDist) then
-                    local roleText = showRole and string.upper(espRoleFast(player)) or nil
-                    local distText = showDist and (tostring(math.floor(distanceTo(player))) .. "m") or nil
-                    if roleText and distText then refs.info.Text = roleText .. " | " .. distText
-                    elseif roleText then refs.info.Text = roleText
-                    else refs.info.Text = distText or "" end
-                end
-                if showHealth and refs.bar then
-                    local hum = refs.humanoid
-                    if not hum or hum.Parent ~= refs.char then hum = refs.char:FindFirstChildWhichIsA("Humanoid"); refs.humanoid = hum end
-                    if hum then
-                        local ratio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
-                        refs.bar.Size = UDim2.fromScale(1, ratio)
-                        refs.bar.BackgroundColor3 = playerESPInactive(player)
-                            and ESP_INACTIVE_COLOR
-                            or Color3.fromRGB(255 * (1 - ratio), 235 * ratio, 60)
-                    end
-                end
-            end
-        end
-    end
-end)
-
-function objectKind(instance)
-    local name = string.lower(instance.Name)
-    if string.find(name, "coin", 1, true) then return "coin" end
-    if string.find(name, "trap", 1, true) then return "trap" end
-    if name == "gundrop" or name == "gun" or string.find(name, "droppedgun", 1, true) or string.find(name, "gun_drop", 1, true) then return "gun" end
-    if string.find(name, "knife", 1, true) and (string.find(name, "throw", 1, true) or not instance:FindFirstAncestorOfClass("Tool")) then return "knife" end
-end
-function objectPart(instance)
-    if instance:IsA("BasePart") then return instance end
-    if instance:IsA("Model") then return instance.PrimaryPart or instance:FindFirstChildWhichIsA("BasePart", true) end
-    if instance:IsA("Tool") then return instance:FindFirstChildWhichIsA("BasePart", true) end
-end
-function objectEnabled(kind, box)
-    if box then
-        return kind == "coin" and config.boxCoins or kind == "trap" and config.boxTraps or kind == "gun" and config.boxDroppedGun or kind == "knife" and config.boxThrowingKnives
-    end
-    return kind == "coin" and config.outlineCoins or kind == "trap" and config.outlineTraps or kind == "gun" and config.outlineDroppedGun or kind == "knife" and config.outlineThrowingKnives
-end
-function objectColor(kind)
-    if kind == "gun" then return Color3.fromRGB(70, 170, 255) end
-    if kind == "coin" then return Color3.fromRGB(255, 220, 50) end
-    return Color3.fromRGB(100, 255, 150)
-end
-
-local objectESPRegistry = {}
-function objectESPAnyEnabled()
-    return config.outlineDroppedGun or config.outlineTraps or config.outlineThrowingKnives or config.outlineCoins
-        or config.boxDroppedGun or config.boxTraps or config.boxThrowingKnives or config.boxCoins
-end
-function objectESPClearAll()
-    for inst, entry in pairs(objectESPRegistry) do
-        if entry.outline then entry.outline:Destroy() end
-        if entry.box then entry.box:Destroy() end
-    end
-    table.clear(objectESPRegistry)
-end
-function addObjectESP(instance)
-    local kind = objectKind(instance)
-    if not kind then return end
-    local part = objectPart(instance)
-    if not part then return end
-    if Players:GetPlayerFromCharacter(instance:FindFirstAncestorOfClass("Model")) then return end
-    local entry = objectESPRegistry[instance]
-    if not entry then entry = {}; objectESPRegistry[instance] = entry end
-    if objectEnabled(kind, false) then
-        if not entry.outline then
-            local h = Instance.new("Highlight")
-            h.Name = "NoirObjectOutline"; h.Adornee = instance; h.FillTransparency = 1
-            h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; h.Parent = instance
-            entry.outline = h
-        end
-        entry.outline.OutlineColor = objectColor(kind)
-        entry.outline.OutlineTransparency = 0
-    elseif entry.outline then
-        entry.outline:Destroy(); entry.outline = nil
-    end
-    if objectEnabled(kind, true) then
-        if not entry.box then
-            local box = Instance.new("SelectionBox")
-            box.Name = "NoirObjectBox"; box.Adornee = part; box.SurfaceTransparency = 1
-            box.LineThickness = .04; box.Parent = part
-            entry.box = box
-        end
-        entry.box.Color3 = objectColor(kind)
-    elseif entry.box then
-        entry.box:Destroy(); entry.box = nil
-    end
-end
-function removeObjectESP(instance)
-    local entry = objectESPRegistry[instance]
-    if entry then
-        if entry.outline then entry.outline:Destroy() end
-        if entry.box then entry.box:Destroy() end
-        objectESPRegistry[instance] = nil
-    end
-end
-function refreshObjectESP()
-    if not objectESPAnyEnabled() then objectESPClearAll() return end
-    local seen = {}
-    for _, instance in ipairs(Workspace:GetDescendants()) do
-        if objectKind(instance) then addObjectESP(instance); seen[instance] = true end
-    end
-    for inst in pairs(objectESPRegistry) do
-        if not seen[inst] then removeObjectESP(inst) end
-    end
-end
-
-local trackedGuns = {}
-function isGunName(name)
-    local n = string.lower(name)
-    return n == "gundrop" or n == "gun" or string.find(n, "droppedgun", 1, true) or string.find(n, "gun_drop", 1, true)
-end
-function trackGun(instance)
-    if instance:IsA("BasePart") or instance:IsA("Tool") or instance:IsA("Model") then trackedGuns[instance] = true end
-end
-local function gunPickupPart(container)
-    local fallback
-    local function inspect(part)
-        if not fallback then fallback = part end
-        if part:FindFirstChild("TouchInterest") or part:FindFirstChild("TouchTransmitter")
-            or part:FindFirstChildOfClass("TouchTransmitter") then
-            return part
-        end
-    end
-    if container:IsA("BasePart") then return inspect(container) or fallback end
-    for _, child in ipairs(container:GetDescendants()) do
-        if child:IsA("BasePart") then
-            local pickup = inspect(child)
-            if pickup then return pickup end
-        end
-    end
-    return fallback
-end
-function findTrackedGun()
-    for inst in pairs(trackedGuns) do
-        if inst.Parent then
-            local ownerModel = inst:FindFirstAncestorOfClass("Model")
-            if not Players:GetPlayerFromCharacter(ownerModel) then
-                local part = gunPickupPart(inst)
-                if part then return part end
-            end
-        else
-            trackedGuns[inst] = nil
-        end
-    end
-end
-
-Workspace.DescendantAdded:Connect(function(instance)
-    if isGunName(instance.Name) then trackGun(instance) end
-    if objectESPAnyEnabled() then addObjectESP(instance) end
-end)
-Workspace.DescendantRemoving:Connect(function(instance)
-    trackedGuns[instance] = nil
-    removeObjectESP(instance)
-end)
-
-for _, inst in ipairs(Workspace:GetDescendants()) do
-    if isGunName(inst.Name) then trackGun(inst) end
 end
 
 function getAimPart(player)
@@ -2402,14 +1902,7 @@ end
 
 local utility = {
     walkEnabled = false, walkSpeed = 16, jumpEnabled = false, jumpPower = 50,
-    autoGrab = false, grabSafety = true, gunAura = false, gunAuraRange = 10,
-    notifyDropped = false, notifyPickup = false,
-    touchFling = false, touchPower = 100,
-    antiFling = false, flingAll = false,
-    autoFlingSheriff = false, autoFlingMurderer = false,
-    flingDuration = 2, flingPower = 1,
-    antiAfk = false, selectedPlayer = nil, roundTimer = false,
-    chatSpam = false, chatMessage = "", chatDelay = 3,
+    antiAfk = false,
 }
 
 function applyCharacterMods()
@@ -2424,224 +1917,6 @@ applyCharacterMods()
 function findSheriff()
     if validTarget(sheriff) then return sheriff end
     return findByGun()
-end
-
-function playerNameList()
-    local list = { "None" }
-    for _, player in ipairs(getPlayers()) do
-        if player ~= LocalPlayer then list[#list + 1] = player.Name end
-    end
-    table.sort(list, function(a, b) return a == "None" or (b ~= "None" and string.lower(a) < string.lower(b)) end)
-    return list
-end
-
-local lastGunDeepScan = 0
-local pickupRemoteCache
-function findPickupRemote()
-    if pickupRemoteCache and pickupRemoteCache.Parent then return pickupRemoteCache end
-    pickupRemoteCache = nil
-    for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
-        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
-            local n = string.lower(remote.Name)
-            if (string.find(n, "gun", 1, true) and (string.find(n, "pickup", 1, true) or string.find(n, "grab", 1, true) or string.find(n, "get", 1, true))) or n == "pickupgun" then
-                pickupRemoteCache = remote
-                break
-            end
-        end
-    end
-    return pickupRemoteCache
-end
-function findDroppedGun()
-    local tracked = findTrackedGun()
-    if tracked then return tracked end
-    local now = os.clock()
-    if now - lastGunDeepScan < 1 then return nil end
-    lastGunDeepScan = now
-    local direct = Workspace:FindFirstChild("GunDrop", true)
-    if direct then
-        local part = gunPickupPart(direct)
-        if part then return part end
-    end
-end
-
-local function localHasGun()
-    return playerHasTool(LocalPlayer, "Gun") ~= nil
-end
-local function localIsMurderer()
-    return murderer == LocalPlayer
-        or roleCache[LocalPlayer.UserId] == "murderer"
-        or playerHasTool(LocalPlayer, "Knife") ~= nil
-end
-local function gunRoundActive()
-    local humanoid = localHumanoid()
-    if not humanoid or humanoid.Health <= 0 then return false end
-    if roundState ~= "starting" and roundState ~= "playing" then return false end
-    return true
-end
-
-function grabGun(silent)
-    if not gunRoundActive() then
-        if not silent then notify("Gun pickup is unavailable in the lobby", 2.5) end
-        return false
-    end
-    if localHasGun() then return true end
-    if utility.grabSafety and localIsMurderer() then
-        if not silent then notify("Pickup blocked by Safety Check", 2.5) end
-        return false
-    end
-    local gun = findDroppedGun()
-    if not gun then
-        if not silent then notify("Dropped gun not found", 2) end
-        return false
-    end
-    local root = localRoot()
-    if not root then return false end
-    local part = gun:IsA("BasePart") and gun or gun:FindFirstChildWhichIsA("BasePart", true)
-    if not part or not part.Parent then return false end
-
-    local attempted = false
-    if type(firetouchinterest) == "function" then
-        local ok = pcall(function()
-            firetouchinterest(root, part, 0)
-            task.wait(.05)
-            firetouchinterest(root, part, 1)
-        end)
-        attempted = ok or attempted
-    end
-    pcall(function() part.CFrame = root.CFrame end)
-
-    local pickupRemote = findPickupRemote()
-    if pickupRemote then
-        local ok = pcall(function()
-            if pickupRemote:IsA("RemoteFunction") then
-                pickupRemote:InvokeServer(part)
-            else
-                pickupRemote:FireServer(part)
-            end
-        end)
-        attempted = ok or attempted
-    end
-
-    local pickedUp = localHasGun()
-    if not pickedUp and not silent and not attempted then notify("Gun pickup failed", 3) end
-    return pickedUp or attempted
-end
-
-function nearestPlayer(maxDistance)
-    local root = localRoot(); if not root then return nil end
-    local best, bestDistance
-    for _, player in ipairs(getPlayers()) do
-        if player ~= LocalPlayer and validTarget(player) then
-            local targetRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-            if targetRoot then
-                local d = (targetRoot.Position - root.Position).Magnitude
-                if (not maxDistance or d <= maxDistance) and (not bestDistance or d < bestDistance) then best, bestDistance = player, d end
-            end
-        end
-    end
-    return best
-end
-
-local flingBusy = false
-local flingBodyVelocity, flingOldPosition
-local flingDestroyHeight = Workspace.FallenPartsDestroyHeight
-function cleanupFling(root, humanoid, character)
-    if flingBodyVelocity then pcall(function() flingBodyVelocity:Destroy() end); flingBodyVelocity = nil end
-    if root and root.Parent then
-        pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
-    end
-    if humanoid then
-        pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true) end)
-        pcall(function() Workspace.CurrentCamera.CameraSubject = humanoid end)
-    end
-    pcall(function() Workspace.FallenPartsDestroyHeight = flingDestroyHeight end)
-    if flingOldPosition and root and root.Parent then
-        for _ = 1, 12 do
-            pcall(function()
-                root.CFrame = flingOldPosition * CFrame.new(0, .5, 0)
-                if character.PrimaryPart then character:SetPrimaryPartCFrame(root.CFrame) end
-            end)
-            pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
-            if (root.Position - flingOldPosition.Position).Magnitude < 20 then break end
-            RunService.Heartbeat:Wait()
-        end
-    end
-    flingBusy = false
-end
-function flingPlayer(target)
-    if flingBusy or not target or target == LocalPlayer or not validTarget(target) then return false end
-    local character = LocalPlayer.Character
-    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    local root = humanoid and humanoid.RootPart or localRoot()
-    local targetCharacter = target.Character
-    local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildWhichIsA("Humanoid")
-    local targetRoot = targetHumanoid and targetHumanoid.RootPart or (targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart"))
-    local targetHead = targetCharacter and targetCharacter:FindFirstChild("Head")
-    local accessory = targetCharacter and targetCharacter:FindFirstChildOfClass("Accessory")
-    local handle = accessory and accessory:FindFirstChild("Handle")
-    local targetPart = targetRoot or targetHead or handle
-    if not character or not humanoid or not root or not targetPart then return false end
-    if targetHumanoid and targetHumanoid.Sit then notify(target.Name .. " is sitting", 2); return false end
-    flingBusy = true
-    flingOldPosition = root.CFrame
-    pcall(function() Workspace.CurrentCamera.CameraSubject = targetPart end)
-    pcall(function() Workspace.FallenPartsDestroyHeight = 0 / 0 end)
-    pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false) end)
-    flingBodyVelocity = Instance.new("BodyVelocity")
-    flingBodyVelocity.Velocity = Vector3.zero
-    flingBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    flingBodyVelocity.Parent = root
-    local power = math.clamp(utility.flingPower or 1, 1, 3)
-    local multiplier = power == 1 and 1 or power == 2 and 1.5 or 2
-    local started = os.clock()
-    local duration = math.clamp(utility.flingDuration or 2, 1, 5)
-    local angle = 0
-    while os.clock() - started < duration and targetPart.Parent and humanoid.Health > 0 do
-        angle += 100
-        local speed = targetPart.AssemblyLinearVelocity.Magnitude
-        local move = targetHumanoid and targetHumanoid.MoveDirection or Vector3.zero
-        local offset = move * (speed < 50 and speed / 1.25 or 1)
-        local y = ((math.floor((os.clock() - started) * 24) % 2) == 0) and 1.5 or -1.5
-        local z = speed >= 50 and (targetHumanoid and targetHumanoid.WalkSpeed or 16) or 0
-        local cf = CFrame.new(targetPart.Position) * CFrame.new(offset.X, y, offset.Z + z) * CFrame.Angles(math.rad(angle), 0, 0)
-        pcall(function()
-            root.CFrame = cf
-            if character.PrimaryPart then character:SetPrimaryPartCFrame(cf) end
-            root.AssemblyLinearVelocity = Vector3.new(9e7 * multiplier, 9e8 * multiplier, 9e7 * multiplier)
-            root.AssemblyAngularVelocity = Vector3.new(9e8 * multiplier, 9e8 * multiplier, 9e8 * multiplier)
-        end)
-        RunService.Heartbeat:Wait()
-    end
-    cleanupFling(root, humanoid, character)
-    return true
-end
-
-function applyAntiFling()
-    local root = localRoot()
-    if not root then return end
-    local speed = root.AssemblyLinearVelocity.Magnitude
-    if speed > 150 then
-        pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
-    end
-end
-
-function sendChat(message)
-    if type(message) ~= "string" or message == "" then return false end
-    local sent = false
-    local legacy = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-    if legacy then
-        local say = legacy:FindFirstChild("SayMessageRequest")
-        if say and say:IsA("RemoteEvent") then pcall(function() say:FireServer(message, "All") end); sent = true end
-    end
-    if not sent then
-        pcall(function()
-            local textChat = game:GetService("TextChatService")
-            local channels = textChat:FindFirstChild("TextChannels")
-            local general = channels and channels:FindFirstChild("RBXGeneral")
-            if general then general:SendAsync(message); sent = true end
-        end)
-    end
-    return sent
 end
 
 function showMurdererChance()
@@ -2666,72 +1941,9 @@ do
 end
 
 task.spawn(function()
-    local hadDrop = false
-    local lastGunScan = 0
     while running do
         if utility.walkEnabled or utility.jumpEnabled then applyCharacterMods() end
-        if utility.autoGrab or utility.gunAura or utility.notifyDropped or utility.notifyPickup then
-            local now = os.clock()
-            if now - lastGunScan >= 0.5 then
-                lastGunScan = now
-                local active = gunRoundActive()
-                if not active then
-                    hadDrop = false
-                else
-                    local gun = findDroppedGun()
-                    local root = localRoot()
-                    local closeEnough = gun and root and (root.Position - gun.Position).Magnitude <= (utility.gunAuraRange or 10)
-                    local shouldGrab = gun and not localHasGun() and (utility.autoGrab or (utility.gunAura and closeEnough))
-                    if shouldGrab then grabGun(true) end
-                    if utility.notifyDropped and gun and not hadDrop then notify("Dropped gun detected", 3) end
-                    if utility.notifyPickup and not gun and hadDrop then notify("Gun picked up", 3) end
-                    hadDrop = gun ~= nil
-                end
-            end
-        end
-        if utility.touchFling then
-            local root = localRoot()
-            if root then
-                local old = root.AssemblyLinearVelocity
-                pcall(function() root.AssemblyLinearVelocity = old * utility.touchPower + Vector3.new(0, utility.touchPower, 0) end)
-                RunService.RenderStepped:Wait()
-                if root.Parent then pcall(function() root.AssemblyLinearVelocity = old end) end
-            end
-        end
-        if utility.antiFling then
-            applyAntiFling()
-            for _, player in ipairs(getPlayers()) do
-                if player ~= LocalPlayer and player.Character then
-                    for _, part in ipairs(player.Character:GetChildren()) do
-                        if part:IsA("BasePart") then part.CanCollide = false end
-                    end
-                end
-            end
-        end
-        if utility.autoFlingSheriff and not flingBusy then
-            local p = findSheriff(); if p then flingPlayer(p) end
-        end
-        if utility.autoFlingMurderer and not flingBusy then
-            local p = validTarget(murderer) and murderer or findByKnife(); if p then flingPlayer(p) end
-        end
-        if utility.flingAll and not flingBusy then
-            for _, player in ipairs(getPlayers()) do
-                if not utility.flingAll then break end
-                if player ~= LocalPlayer then flingPlayer(player) end
-            end
-        end
         task.wait(.15)
-    end
-end)
-
-task.spawn(function()
-    while running do
-        if utility.chatSpam and utility.chatMessage ~= "" then
-            sendChat(utility.chatMessage)
-            task.wait(math.clamp(utility.chatDelay or 3, 1, 60))
-        else
-            task.wait(0.5)
-        end
     end
 end)
 
@@ -2896,38 +2108,6 @@ serverMods:AddButton("Show Murderer Chance", showMurdererChance)
 serverMods:AddButton("Refresh Roles", refreshTarget)
 serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
 
-local worldGun = tab:AddSection("WORLD \u{2022} GUN", "Gun pickup and dropped gun controls")
-worldGun:AddButton("Grab Gun", function() grabGun() end)
-worldGun:AddToggle("Auto Grab Gun", function(v) utility.autoGrab = v end)
-worldGun:AddToggle("Auto Grab Gun Safety Check", function(v) utility.grabSafety = v end)
-worldGun:AddToggle("Gun Aura", function(v) utility.gunAura = v end)
-worldGun:AddSlider("Gun Aura Range", 5, 40, 10, function(v) utility.gunAuraRange = v end)
-worldGun:AddToggle("Auto Notify on Dropped Gun", function(v) utility.notifyDropped = v end)
-worldGun:AddToggle("Gun Pickup Notify", function(v) utility.notifyPickup = v end)
-
-local worldFling = tab:AddSection("WORLD \u{2022} FLING", "Sheriff, Murderer and selected player")
-worldFling:AddButton("Fling Sheriff", function() local p = findSheriff(); if p then task.spawn(flingPlayer, p) else notify("Sheriff not found", 2) end end)
-worldFling:AddButton("Fling Murder", function() local p = validTarget(murderer) and murderer or findByKnife(); if p then task.spawn(flingPlayer, p) else notify("Murderer not found", 2) end end)
-local selectedPlayerControl = worldFling:AddDropdown("Select Player", playerNameList(), function(name)
-    utility.selectedPlayer = name ~= "None" and name or nil
-    config.selectedPlayer = utility.selectedPlayer
-end)
-worldFling:AddButton("Fling Selected", function() local p = utility.selectedPlayer and Players:FindFirstChild(utility.selectedPlayer); if p then task.spawn(flingPlayer, p) else notify("Select a player", 2) end end)
-worldFling:AddButton("Refresh Player List", function() if selectedPlayerControl and selectedPlayerControl.Refresh then selectedPlayerControl:Refresh(playerNameList(), utility.selectedPlayer or "None") end end)
-
-local touchFlingSection = tab:AddSection("WORLD \u{2022} TOUCH FLING", "Adapted from FlingGui")
-touchFlingSection:AddToggle("Touch Fling", function(v) utility.touchFling = v end)
-touchFlingSection:AddSlider("Touch Fling Power", 10, 50000, 100, function(v) utility.touchPower = v end)
-
-local flingSettings = tab:AddSection("WORLD \u{2022} FLING SETTINGS", "Automatic fling and power settings")
-flingSettings:AddButton("Fling Nearest", function() task.spawn(flingPlayer, nearestPlayer()) end)
-flingSettings:AddToggle("Auto Fling Sheriff / Hero", function(v) utility.autoFlingSheriff = v end)
-flingSettings:AddToggle("Auto Fling Murderer", function(v) utility.autoFlingMurderer = v end)
-flingSettings:AddToggle("Fling All", function(v) utility.flingAll = v end)
-flingSettings:AddToggle("Anti Fling", function(v) utility.antiFling = v end)
-flingSettings:AddSlider("Fling Duration", 1, 5, 2, function(v) utility.flingDuration = v end)
-flingSettings:AddSlider("Fling Power", 1, 3, 1, function(v) utility.flingPower = v end)
-
 do
     local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
     combatAim:AddToggle("Enabled", toggle)
@@ -3048,38 +2228,6 @@ do
     end
 end
 
-local playerOutline = tab:AddSection("VISUAL \u{2022} PLAYER OUTLINE", "Role-colored silhouettes")
-playerOutline:AddToggle("Everyone", function(v) config.espOutline = v; task.spawn(refreshTarget); refreshESP() end)
-playerOutline:AddToggle("Murderer Only", function(v) config.espOutlineMurderer = v; task.spawn(refreshTarget); refreshESP() end)
-playerOutline:AddToggle("Sheriff / Hero Only", function(v) config.espOutlineSheriff = v; task.spawn(refreshTarget); refreshESP() end)
-playerOutline:AddToggle("Chams Everyone", function(v) config.espChams = v; refreshESP() end)
-playerOutline:AddToggle("Chams Murderer", function(v) config.espChamsMurderer = v; refreshESP() end)
-playerOutline:AddToggle("Chams Sheriff / Hero", function(v) config.espChamsSheriff = v; refreshESP() end)
-
-local playerBox = tab:AddSection("VISUAL \u{2022} PLAYER BOX", "Clean role-colored boxes")
-playerBox:AddToggle("Everyone", function(v) config.espBox = v; task.spawn(refreshTarget); refreshESP() end)
-playerBox:AddToggle("Murderer Only", function(v) config.espBoxMurderer = v; task.spawn(refreshTarget); refreshESP() end)
-playerBox:AddToggle("Sheriff / Hero Only", function(v) config.espBoxSheriff = v; task.spawn(refreshTarget); refreshESP() end)
-playerBox:AddToggle("Show Name", function(v) config.espName = v; refreshESP() end)
-playerBox:AddToggle("Show Distance", function(v) config.espDistance = v; refreshESP() end)
-playerBox:AddToggle("Show Health", function(v) config.espHealth = v; refreshESP() end)
-playerBox:AddToggle("Show Role", function(v) config.espRole = v; refreshESP() end)
-playerBox:AddToggle("Show Tracer", function(v) config.espTracer = v end)
-playerBox:AddToggle("Show Skeleton", function(v) config.espSkeleton = v end)
-
-local objectOutline = tab:AddSection("VISUAL \u{2022} OBJECT OUTLINE", "Dropped items and map objects")
-objectOutline:AddToggle("Dropped Gun", function(v) config.outlineDroppedGun = v; refreshObjectESP() end)
-objectOutline:AddToggle("Traps", function(v) config.outlineTraps = v; refreshObjectESP() end)
-objectOutline:AddToggle("Throwing Knives", function(v) config.outlineThrowingKnives = v; refreshObjectESP() end)
-objectOutline:AddToggle("Coins", function(v) config.outlineCoins = v; refreshObjectESP() end)
-
-local objectBox = tab:AddSection("VISUAL \u{2022} OBJECT BOX", "Compact object boxes")
-objectBox:AddToggle("Dropped Gun", function(v) config.boxDroppedGun = v; refreshObjectESP() end)
-objectBox:AddToggle("Traps", function(v) config.boxTraps = v; refreshObjectESP() end)
-objectBox:AddToggle("Throwing Knives", function(v) config.boxThrowingKnives = v; refreshObjectESP() end)
-objectBox:AddToggle("Coins", function(v) config.boxCoins = v; refreshObjectESP() end)
-
-local remoteConnections = {}
 function connectRemote(name, handler)
     local wanted = string.lower(tostring(name))
     local first
@@ -3109,7 +2257,6 @@ local function finishRound()
     resetRoundTimer()
     murderer, sheriff, hero = nil, nil, nil
     table.clear(roleCache); table.clear(announcedRoles)
-    if type(refreshESP) == "function" then refreshESP() end
 end
 connectRemote("RoundEndFade", finishRound)
 connectRemote("RoundEnd", finishRound)
