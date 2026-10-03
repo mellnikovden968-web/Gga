@@ -2350,17 +2350,15 @@ local tab = host.CreateTab()
 do
     local universalState = {
         infiniteJump = false,
-        secondLife = false,
-        secondLifeConnections = {},
-        secondLifeHumanoid = nil,
-        secondLifeDeadState = true,
-        secondLifeBreakJoints = true,
         invisible = false,
         invisibleOriginals = {},
-        invisibleDescendantConnection = nil,
+        invisibleCharacter = nil,
+        invisibleHumanoid = nil,
+        invisibleRoot = nil,
         invisibleBindEnabled = false,
         invisibleBindGui = nil,
         invisibleBindButton = nil,
+        invisibleBindSize = .105,
         invisibleBindConnections = {},
     }
 
@@ -2369,92 +2367,67 @@ do
         table.clear(list)
     end
 
-    local function restoreSecondLife()
-        disconnectAll(universalState.secondLifeConnections)
-        local humanoid = universalState.secondLifeHumanoid
-        if humanoid and humanoid.Parent then
-            pcall(function() humanoid.BreakJointsOnDeath = universalState.secondLifeBreakJoints end)
-            pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, universalState.secondLifeDeadState) end)
-        end
-        universalState.secondLifeHumanoid = nil
-    end
-
-    local function armSecondLife(character)
-        restoreSecondLife()
-        if not universalState.secondLife then return end
-        local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-        if not humanoid then return end
-        universalState.secondLifeHumanoid = humanoid
-        universalState.secondLifeBreakJoints = humanoid.BreakJointsOnDeath
-        local ok, deadState = pcall(function() return humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) end)
-        universalState.secondLifeDeadState = ok and deadState or true
-        pcall(function()
-            humanoid.BreakJointsOnDeath = false
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-        end)
-        universalState.secondLifeConnections[#universalState.secondLifeConnections + 1] = humanoid.HealthChanged:Connect(function(health)
-            if not universalState.secondLife or not humanoid.Parent or health > 0 then return end
-            pcall(function()
-                humanoid.Health = math.max(humanoid.MaxHealth, 100)
-                humanoid:ChangeState(Enum.HumanoidStateType.Running)
-            end)
-        end)
-        task.spawn(function()
-            while universalState.secondLife and humanoid.Parent and LocalPlayer.Character == character do
-                if humanoid.Health <= 0 then
-                    pcall(function()
-                        humanoid.Health = math.max(humanoid.MaxHealth, 100)
-                        humanoid:ChangeState(Enum.HumanoidStateType.Running)
-                    end)
-                end
-                task.wait(.05)
-            end
-        end)
-    end
-
-    local function setSecondLife(enabled)
-        universalState.secondLife = enabled == true
-        if universalState.secondLife then armSecondLife(LocalPlayer.Character) else restoreSecondLife() end
-    end
-
+    -- Integrated from the supplied invisibility method: a short down-frame desync while the toggle is active.
     local function restoreInvisible()
-        if universalState.invisibleDescendantConnection then
-            universalState.invisibleDescendantConnection:Disconnect()
-            universalState.invisibleDescendantConnection = nil
-        end
-        for instance, saved in pairs(universalState.invisibleOriginals) do
-            if instance and instance.Parent then
-                pcall(function()
-                    instance.Transparency = saved.transparency
-                    if instance:IsA("BasePart") then instance.LocalTransparencyModifier = saved.localTransparency end
-                end)
-            end
+        for instance, transparency in pairs(universalState.invisibleOriginals) do
+            if instance and instance.Parent then pcall(function() instance.Transparency = transparency end) end
         end
         table.clear(universalState.invisibleOriginals)
     end
 
-    local function hideInvisibleInstance(instance)
-        if not (instance:IsA("BasePart") or instance:IsA("Decal") or instance:IsA("Texture")) then return end
-        if universalState.invisibleOriginals[instance] then return end
-        local saved = { transparency = instance.Transparency, localTransparency = 0 }
-        if instance:IsA("BasePart") then saved.localTransparency = instance.LocalTransparencyModifier end
-        universalState.invisibleOriginals[instance] = saved
-        pcall(function()
-            instance.Transparency = 1
-            if instance:IsA("BasePart") then instance.LocalTransparencyModifier = 1 end
-        end)
+    local function setupInvisibleCharacter(character)
+        universalState.invisibleCharacter = character or LocalPlayer.Character
+        local current = universalState.invisibleCharacter
+        universalState.invisibleHumanoid = current and current:FindFirstChildWhichIsA("Humanoid") or nil
+        universalState.invisibleRoot = current and current:FindFirstChild("HumanoidRootPart") or nil
+        table.clear(universalState.invisibleOriginals)
+        if not current then return end
+        for _, instance in ipairs(current:GetDescendants()) do
+            if instance:IsA("BasePart") then universalState.invisibleOriginals[instance] = instance.Transparency end
+        end
+    end
+
+    local function setInvisibleTransparency(value)
+        for instance in pairs(universalState.invisibleOriginals) do
+            if instance and instance.Parent then pcall(function() instance.Transparency = value end) end
+        end
     end
 
     local function applyInvisible()
         restoreInvisible()
         if not universalState.invisible then return end
-        local character = LocalPlayer.Character
-        if not character then return end
-        for _, instance in ipairs(character:GetDescendants()) do hideInvisibleInstance(instance) end
-        universalState.invisibleDescendantConnection = character.DescendantAdded:Connect(function(instance)
-            if universalState.invisible then hideInvisibleInstance(instance) end
-        end)
+        setupInvisibleCharacter(LocalPlayer.Character)
+        -- The supplied script uses half-transparency before the desync pass.
+        setInvisibleTransparency(.5)
     end
+
+    local function setInvisible(enabled)
+        universalState.invisible = enabled == true
+        applyInvisible()
+        updateInvisibleBindText()
+    end
+
+    RunService.Heartbeat:Connect(function()
+        if not universalState.invisible then return end
+        local root, humanoid = universalState.invisibleRoot, universalState.invisibleHumanoid
+        if not (root and root.Parent and humanoid and humanoid.Parent) then
+            setupInvisibleCharacter(LocalPlayer.Character)
+            root, humanoid = universalState.invisibleRoot, universalState.invisibleHumanoid
+        end
+        if not (root and humanoid) then return end
+        local originalCFrame, originalOffset = root.CFrame, humanoid.CameraOffset
+        local downCFrame = originalCFrame * CFrame.new(0, -200000, 0)
+        local ok = pcall(function()
+            root.CFrame = downCFrame
+            humanoid.CameraOffset = downCFrame:ToObjectSpace(CFrame.new(originalCFrame.Position)).Position
+        end)
+        if not ok then return end
+        RunService.RenderStepped:Wait()
+        pcall(function()
+            if root.Parent then root.CFrame = originalCFrame end
+            if humanoid.Parent then humanoid.CameraOffset = originalOffset end
+        end)
+    end)
 
     local function updateInvisibleBindText()
         local button = universalState.invisibleBindButton
@@ -2481,6 +2454,14 @@ do
         end
     end
 
+    local function updateInvisibleBindButtonSize()
+        local button, camera = universalState.invisibleBindButton, Workspace.CurrentCamera
+        if not button or not camera then return end
+        local screen = camera.ViewportSize
+        local heightScale = universalState.invisibleBindSize
+        button.Size = UDim2.new(heightScale * (screen.Y / math.max(screen.X, 1)), 0, heightScale, 0)
+    end
+
     local function createInvisibleBindButton()
         if universalState.invisibleBindButton then return end
         removeInvisibleBindButton()
@@ -2494,7 +2475,7 @@ do
         button.Name = "Invisible"
         button.AnchorPoint = Vector2.new(.5, .5)
         button.Position = NoirPersistence.GetPosition("invisible_bind_v1", UDim2.new(.24, 0, .88, 0))
-        button.Size = UDim2.new(.105, 0, .105, 0)
+        button.Size = UDim2.new(universalState.invisibleBindSize, 0, universalState.invisibleBindSize, 0)
         button.BackgroundColor3, button.BackgroundTransparency, button.BorderSizePixel = Color3.fromRGB(8, 8, 10), .28, 0
         button.Image, button.AutoButtonColor, button.ZIndex = "", false, 5
         button.Parent = bindGui
@@ -2543,6 +2524,7 @@ do
             if outerGradient.Parent then outerGradient.Rotation = (outerGradient.Rotation + 1) % 360 end
         end)
         universalState.invisibleBindGui, universalState.invisibleBindButton = bindGui, button
+        updateInvisibleBindButtonSize()
         updateInvisibleBindText()
     end
 
@@ -2557,19 +2539,22 @@ do
         if humanoid and humanoid.Health > 0 then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
     end)
     LocalPlayer.CharacterAdded:Connect(function(character)
-        task.wait(.2)
-        if universalState.secondLife then armSecondLife(character) end
-        if universalState.invisible then applyInvisible() end
+        task.wait(1)
+        setupInvisibleCharacter(character)
+        if universalState.invisible then setInvisibleTransparency(.5) end
     end)
 
     local universalMods = tab:AddSection("MAIN \u{2022} UNIVERSAL", "Movement and survival utilities")
     universalMods:AddToggle("Infinite Jump", function(enabled) universalState.infiniteJump = enabled == true end)
-    universalMods:AddToggle("Second Life", setSecondLife)
 
-    local invisibleMods = tab:AddSection("MAIN \u{2022} INVISIBLE", "Character visibility and floating bind button")
+    local invisibleMods = tab:AddSection("MAIN \u{2022} INVISIBLE", "Desync invisibility and floating bind button")
     invisibleMods:AddToggle("Invisible", setInvisible)
     invisibleMods:AddToggle("Enable Invisible Bind Button", setInvisibleBindButton)
-    invisibleMods:AddLabel("Round Invisible button: tap to toggle; drag it to move. Its position is saved.")
+    invisibleMods:AddSlider("Invisible Bind Button Size", 5, 25, universalState.invisibleBindSize * 100, function(value)
+        universalState.invisibleBindSize = (tonumber(value) or 10.5) / 100
+        updateInvisibleBindButtonSize()
+    end)
+    invisibleMods:AddLabel("Round Invisible button: tap to toggle; drag it to move. Its size and position are saved.")
     removeInvisibleBindButton()
 end
 
