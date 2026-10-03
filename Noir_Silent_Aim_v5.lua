@@ -4344,12 +4344,9 @@ do
         UI.footer.Size = UDim2.new(1, -36, 0, 40)
         -- Use the full Noir tab width, matching the supplied menu's three-card gallery on wider screens.
         local available = math.max(1, size.X - 48)
-        -- Three spacious cards across: readable names, large thumbnails and comfortable touch targets.
-        local columns = 3
-        local padding = 12
-        local cellWidth = math.max(150, math.floor((available - padding * (columns - 1)) / columns))
-        local cellHeight = math.clamp(math.floor(cellWidth * .96), 190, 255)
-        UI.grid.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
+        -- Scale-based cells fill the whole Noir page even when the mobile UI has a UIScale applied.
+        local columns, padding, cellHeight = 3, 12, 250
+        UI.grid.CellSize = UDim2.new(1 / columns, -10, 0, cellHeight)
         UI.grid.FillDirectionMaxCells = columns
         local rows = math.ceil(#UI.cards / columns)
         UI.cardsScroll.CanvasSize = UDim2.fromOffset(0, math.max(0, rows * (cellHeight + padding) - padding + 8))
@@ -4402,7 +4399,7 @@ do
         title.TextWrapped = true; title.TextTruncate = Enum.TextTruncate.AtEnd; title.Font = Enum.Font.GothamMedium; title.TextYAlignment = Enum.TextYAlignment.Top
         local star = Button(card, "☆", UDim2.new(1, -50, 0, 8), UDim2.fromOffset(38, 36))
         star.BackgroundTransparency = 1; star.TextSize = 27
-        local image = Make("ImageButton", { BackgroundTransparency = 1, AutoButtonColor = false, AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5, 0, .55, 0), Size = UDim2.fromOffset(108,108), Image = "rbxthumb://type=Asset&id=" .. IdText(item.id) .. "&w=420&h=420", ScaleType = Enum.ScaleType.Fit }, card)
+        local image = Make("ImageButton", { BackgroundTransparency = 1, AutoButtonColor = false, AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5, 0, .55, 0), Size = UDim2.fromOffset(130,130), Image = "rbxthumb://type=Asset&id=" .. IdText(item.id) .. "&w=420&h=420", ScaleType = Enum.ScaleType.Fit }, card)
         local pin = Button(card, "○", UDim2.new(1, -60, .48, 0), UDim2.fromOffset(46,46))
         pin.BackgroundTransparency = 1; pin.TextSize = 30
         local play = Button(card, "▶", UDim2.new(1, -62, 1, -62), UDim2.fromOffset(50,50)); play.TextSize = 20
