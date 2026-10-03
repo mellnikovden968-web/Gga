@@ -2361,9 +2361,16 @@ local visualState = {
 
 local visualRegistry = {}
 local objectVisualRegistry = {}
-local visualDrawing = (typeof(Drawing) == "table") and Drawing or nil
+-- Drawing is executor-provided, so do not access it while Noir is starting.
+local visualDrawing = nil
 local VISUAL_PREFIX = "NoirV4Visual_"
 local visualRuntimeError = nil
+
+local function visualSetupGuard(scope, callback)
+    local ok, err = pcall(callback)
+    if not ok then warn("[Noir Visuals setup] " .. tostring(scope) .. ": " .. tostring(err)) end
+    return ok, err
+end
 
 local function visualGuard(scope, callback)
     local ok, err = xpcall(callback, function(message) return tostring(message) end)
@@ -2467,13 +2474,19 @@ local function applyVisualPlayer(player)
     if visualFeatureWanted("highlight", role) then
         makeVisualHighlight(character, "Highlight", color, .68, .05, entry)
     end
-    if visualFeatureWanted("tracer", role) and visualDrawing then
-        local line = visualDrawing.new("Line")
-        line.Thickness = 1.5
-        line.Transparency = 1
-        line.Color = color
-        line.Visible = false
-        entry.tracer = line
+    if visualFeatureWanted("tracer", role) then
+        if visualDrawing == nil then
+            local ok, drawingApi = pcall(function() return Drawing end)
+            if ok and typeof(drawingApi) == "table" and type(drawingApi.new) == "function" then visualDrawing = drawingApi else visualDrawing = false end
+        end
+        if visualDrawing then
+            local line = visualDrawing.new("Line")
+            line.Thickness = 1.5
+            line.Transparency = 1
+            line.Color = color
+            line.Visible = false
+            entry.tracer = line
+        end
     end
     if root and visualFeatureWanted("esp", role) then
         local gui = makeVisualBillboard(root, "ESP", UDim2.fromOffset(150, 40), Vector3.new(0, 3.4, 0), entry)
@@ -2636,45 +2649,41 @@ local function setObjectVisual(kind, enabled)
     end
 end
 
-RunService.RenderStepped:Connect(function()
-    if not next(visualRegistry) then return end
-    visualGuard("tracer render", function()
-        local camera = Workspace.CurrentCamera
-        if not camera then return end
-        local viewport = camera.ViewportSize
-        local origin = Vector2.new(viewport.X * .5, viewport.Y)
-        for _, entry in pairs(visualRegistry) do
-            local tracer = entry.tracer
-            if tracer then
-                local root = entry.character and entry.character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    local point, visible = camera:WorldToViewportPoint(root.Position)
-                    tracer.From = origin
-                    tracer.To = Vector2.new(point.X, point.Y)
-                    tracer.Color = entry.color
-                    tracer.Visible = visible and point.Z > 0
-                else
-                    tracer.Visible = false
+visualSetupGuard("runtime connections", function()
+    RunService.RenderStepped:Connect(function()
+        if not next(visualRegistry) then return end
+        visualGuard("tracer render", function()
+            local camera = Workspace.CurrentCamera
+            if not camera then return end
+            local viewport = camera.ViewportSize
+            local origin = Vector2.new(viewport.X * .5, viewport.Y)
+            for _, entry in pairs(visualRegistry) do
+                local tracer = entry.tracer
+                if tracer then
+                    local root = entry.character and entry.character:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        local point, visible = camera:WorldToViewportPoint(root.Position)
+                        tracer.From = origin
+                        tracer.To = Vector2.new(point.X, point.Y)
+                        tracer.Color = entry.color
+                        tracer.Visible = visible and point.Z > 0
+                    else
+                        tracer.Visible = false
+                    end
                 end
             end
+        end)
+    end)
+    task.spawn(function()
+        while running do
+            if visualAnyPlayerFeatureEnabled() or next(visualRegistry) then visualGuard("player refresh", refreshPlayerVisuals) end
+            if visualState.objects.gun or visualState.objects.knife or next(objectVisualRegistry) then visualGuard("object refresh", refreshObjectVisuals) end
+            task.wait(.35)
         end
     end)
-end)
-
-task.spawn(function()
-    while running do
-        if visualAnyPlayerFeatureEnabled() or next(visualRegistry) then
-            visualGuard("player refresh", refreshPlayerVisuals)
-        end
-        if visualState.objects.gun or visualState.objects.knife or next(objectVisualRegistry) then
-            visualGuard("object refresh", refreshObjectVisuals)
-        end
-        task.wait(.35)
-    end
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    visualGuard("player cleanup", function() destroyVisualEntry(player) end)
+    Players.PlayerRemoving:Connect(function(player)
+        visualGuard("player cleanup", function() destroyVisualEntry(player) end)
+    end)
 end)
 
 local tab = host.CreateTab()
@@ -2722,26 +2731,24 @@ local visualFilterOptions = {
     { "Hero Only", "hero" },
     { "Dead Only", "dead" },
 }
-for _, visualDefinition in ipairs({
-    { "CHAM", "cham" },
-    { "ESP", "esp" },
-    { "OUTLINE", "outline" },
-    { "HIGHLIGHT", "highlight" },
-    { "TRACER", "tracer" },
-    { "ESP BOX", "box" },
-    { "ESP AVATAR", "avatar" },
-    { "ESP FIRE", "fire" },
-}) do
-    local section = tab:AddSection("VISUAL \u{2022} " .. visualDefinition[1], "BY PLAYER")
-    for _, filterDefinition in ipairs(visualFilterOptions) do
-        section:AddToggle(filterDefinition[1], function(enabled)
-            setVisualFilter(visualDefinition[2], filterDefinition[2], enabled)
-        end)
+visualSetupGuard("Visuals menu", function()
+    for _, visualDefinition in ipairs({
+        { "CHAM", "cham" }, { "ESP", "esp" }, { "OUTLINE", "outline" }, { "HIGHLIGHT", "highlight" },
+        { "TRACER", "tracer" }, { "ESP BOX", "box" }, { "ESP AVATAR", "avatar" }, { "ESP FIRE", "fire" },
+    }) do
+        local title, feature = visualDefinition[1], visualDefinition[2]
+        local section = tab:AddSection("VISUAL \u{2022} " .. title, "BY PLAYER")
+        for _, filterDefinition in ipairs(visualFilterOptions) do
+            local label, filter = filterDefinition[1], filterDefinition[2]
+            section:AddToggle(label, function(enabled)
+                visualGuard("toggle", function() setVisualFilter(feature, filter, enabled) end)
+            end)
+        end
     end
-end
-local objectVisualSection = tab:AddSection("VISUAL \u{2022} BY OBJECT", "Object ESP")
-objectVisualSection:AddToggle("Dropped Gun", function(enabled) setObjectVisual("gun", enabled) end)
-objectVisualSection:AddToggle("Throwing Knives", function(enabled) setObjectVisual("knife", enabled) end)
+    local objectVisualSection = tab:AddSection("VISUAL \u{2022} BY OBJECT", "Object ESP")
+    objectVisualSection:AddToggle("Dropped Gun", function(enabled) visualGuard("object toggle", function() setObjectVisual("gun", enabled) end) end)
+    objectVisualSection:AddToggle("Throwing Knives", function(enabled) visualGuard("object toggle", function() setObjectVisual("knife", enabled) end) end)
+end)
 
 do
     local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
