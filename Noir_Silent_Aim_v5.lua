@@ -2091,8 +2091,7 @@ presetNames = function()
     return names
 end
 
--- Auto GG must start disabled on every fresh script load, even if it was enabled in autosave previously.
-NoirPersistence.data.toggles["WORLD \u{2022} AUTO GG::Enable Auto GG"] = false
+-- Fresh installs use the false state below; explicit user choices are restored from autosave.
 local autoGGState = { enabled = false, token = 0 }
 local gunUtilityState = {
     auraEnabled = false,
@@ -2100,6 +2099,7 @@ local gunUtilityState = {
     droppedGunNotify = false,
     gunPickupNotify = false,
     bindEnabled = false,
+    bindButtonSize = 0.11,
     touchNoticeAt = 0,
     bindGui = nil,
     bindButton = nil,
@@ -2192,6 +2192,15 @@ local function removeGrabGunBindButton()
     end
 end
 
+local function updateGrabGunBindButtonSize()
+    local button = gunUtilityState.bindButton
+    local camera = Workspace.CurrentCamera
+    if not button or not camera then return end
+    local screen = camera.ViewportSize
+    local heightScale = gunUtilityState.bindButtonSize
+    button.Size = UDim2.new(heightScale * (screen.Y / math.max(screen.X, 1)), 0, heightScale, 0)
+end
+
 local function createGrabGunBindButton()
     if gunUtilityState.bindButton then return end
     removeGrabGunBindButton()
@@ -2205,29 +2214,61 @@ local function createGrabGunBindButton()
     bindGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     bindGui.Parent = parent
 
-    local button = Instance.new("TextButton")
+    local button = Instance.new("ImageButton")
     button.Name = "GrabGun"
     button.AnchorPoint = Vector2.new(.5, .5)
-    button.Position = NoirPersistence.GetPosition("grab_gun_bind_v1", UDim2.new(0, 116, 1, -128))
-    button.Size = UDim2.fromOffset(122, 52)
-    button.BackgroundColor3 = Color3.fromRGB(12, 15, 20)
-    button.BackgroundTransparency = .16
+    button.Position = NoirPersistence.GetPosition("grab_gun_bind_v1", UDim2.new(.10, 0, .88, 0))
+    button.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+    button.BackgroundTransparency = .28
     button.BorderSizePixel = 0
-    button.Text = "GRAB GUN"
-    button.TextColor3 = Color3.fromRGB(245, 245, 248)
-    button.TextSize = 15
-    button.Font = Enum.Font.GothamBold
+    button.Image = ""
     button.AutoButtonColor = false
+    button.ClipsDescendants = false
     button.ZIndex = 5
     button.Parent = bindGui
     local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 15)
+    buttonCorner.CornerRadius = UDim.new(1, 0)
     buttonCorner.Parent = button
-    local buttonStroke = Instance.new("UIStroke")
-    buttonStroke.Color = Color3.fromRGB(99, 183, 255)
-    buttonStroke.Thickness = 1.5
-    buttonStroke.Transparency = .18
-    buttonStroke.Parent = button
+    local aspect = Instance.new("UIAspectRatioConstraint")
+    aspect.AspectRatio = 1
+    aspect.AspectType = Enum.AspectType.ScaleWithParentSize
+    aspect.Parent = button
+    local outerStroke = Instance.new("UIStroke")
+    outerStroke.Color = Color3.fromRGB(255, 255, 255)
+    outerStroke.Thickness = 2
+    outerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    outerStroke.Parent = button
+    local outerGradient = Instance.new("UIGradient")
+    outerGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)),
+        ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)),
+        ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)),
+        ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52))
+    })
+    outerGradient.Parent = outerStroke
+    local innerStroke = Instance.new("UIStroke")
+    innerStroke.Color = Color3.fromRGB(105, 105, 112)
+    innerStroke.Transparency = .5
+    innerStroke.Thickness = 1
+    innerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    innerStroke.Parent = button
+    local innerGradient = outerGradient:Clone()
+    innerGradient.Rotation = 180
+    innerGradient.Parent = innerStroke
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Name = "Text"
+    textLabel.AnchorPoint = Vector2.new(.5, .5)
+    textLabel.Position = UDim2.fromScale(.5, .5)
+    textLabel.Size = UDim2.fromScale(.76, .76)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = "GRAB\nGUN"
+    textLabel.TextColor3 = Color3.fromRGB(245, 245, 248)
+    textLabel.TextSize = 14
+    textLabel.TextWrapped = true
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.ZIndex = 6
+    textLabel.Parent = button
 
     local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
     gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = button.InputBegan:Connect(function(input)
@@ -2256,6 +2297,7 @@ local function createGrabGunBindButton()
         if not moved then requestGrabGun() end
     end)
     gunUtilityState.bindGui, gunUtilityState.bindButton = bindGui, button
+    updateGrabGunBindButtonSize()
 end
 
 local function setGrabGunBindButton(enabled)
@@ -2333,7 +2375,11 @@ gunUtilities:AddToggle("Gun Pickup Notify", function(enabled)
     gunUtilityState.gunPickupNotify = enabled == true
 end)
 gunUtilities:AddToggle("Enable Grab Gun Bind Button", setGrabGunBindButton)
-gunUtilities:AddLabel("Drag the Grab Gun button; its position is saved automatically.")
+gunUtilities:AddSlider("Grab Gun Bind Button Size", 5, 25, gunUtilityState.bindButtonSize * 100, function(value)
+    gunUtilityState.bindButtonSize = (tonumber(value) or 11) / 100
+    updateGrabGunBindButtonSize()
+end)
+gunUtilities:AddLabel("Round Grab Gun button: drag it to move; its size and position are saved.")
 
 do
     local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
@@ -4739,11 +4785,6 @@ if _game == "Murder Mystery Modded" then
         bindButtonId = "goldbombjump_bind"
     })
 end
-
--- Bind buttons must never be recreated automatically from a prior BJP settings save.
--- The user can still enable either button manually for the current session.
-ODHX.data.controls["Bomb Jump+ / Toggle / Enable Bomb Jump Bind Button"] = false
-ODHX.data.controls["Gold Bomb Jump+ / Toggle / Enable Gold Bomb Jump Bind Button"] = false
 
 ODHX.Bind("About", "Mute Button SFX", "Toggle", function() return muteButtonSounds end)
 
