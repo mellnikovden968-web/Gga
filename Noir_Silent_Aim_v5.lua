@@ -7063,7 +7063,6 @@ binderGlobalMaid:GiveTask(UserInputService.InputChanged:Connect(function(input)
     rec.x = clamp(dragState.startX + (delta.X / screen.X), 0.03, 0.97)
     rec.y = clamp(dragState.startY + (delta.Y / screen.Y), 0.05, 0.95)
     rec.btn.Position = ud2(rec.x, 0, rec.y, 0)
-    rec.glow.Position = ud2(rec.x, 0, rec.y, 0)
 end))
 
 binderGlobalMaid:GiveTask(UserInputService.InputEnded:Connect(function(input)
