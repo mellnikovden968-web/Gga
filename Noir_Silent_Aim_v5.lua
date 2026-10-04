@@ -3123,10 +3123,13 @@ task.defer(function()
     local function isDetachedCorpsePart(part)
         if not part:IsA("BasePart") or part.Anchored or not avatarPartNames[string.lower(part.Name or "")] then return false end
         local model = part:FindFirstAncestorOfClass("Model")
-        local owner = model and Players:GetPlayerFromCharacter(model)
-        local humanoid = model and model:FindFirstChildWhichIsA("Humanoid")
-        -- Never hide a living player character. Dead player limbs that MM2 has detached are still safely caught.
-        if owner and owner.Character == model and humanoid and humanoid.Health > 0 then return false end
+        if model then
+            local humanoid = model:FindFirstChildWhichIsA("Humanoid")
+            -- Lobby/display NPCs are living rigs too, even though they are not Players.
+            if humanoid and humanoid.Health > 0 then return false end
+            -- A normal rig without a Humanoid still keeps Motor6D joints; a real MM2 corpse has broken/detached joints.
+            if not humanoid and model:FindFirstChildWhichIsA("Motor6D", true) then return false end
+        end
         return true
     end
     local function isHumanoidlessRagdoll(model)
@@ -3134,7 +3137,8 @@ task.defer(function()
         local cached = state.ragdollModelCache[model]
         if cached ~= nil then return cached end
         local result = false
-        if not model:FindFirstChildWhichIsA("Humanoid") and model:FindFirstChild("HumanoidRootPart") then
+        -- Do not treat an intact Humanoid-less lobby/display rig as a corpse.
+        if not model:FindFirstChildWhichIsA("Humanoid") and not model:FindFirstChildWhichIsA("Motor6D", true) and model:FindFirstChild("HumanoidRootPart") then
             local limbs = 0
             for _, descendant in ipairs(model:GetDescendants()) do
                 if descendant:IsA("BasePart") and avatarPartNames[string.lower(descendant.Name or "")] then
@@ -3265,6 +3269,286 @@ task.defer(function()
         if state.removeCorpses then scanAutoVisuals() else restoreHidden(state.hiddenCorpses) end
     end)
     fpsSection:AddToggle("Enable Frame Enhancement", function(enabled) state.frameEnhancement = enabled == true; refreshPerformance() end)
+end)
+
+-- Self-contained mobile Aimlock adapted from the supplied MM2 Aimlock, using Noir's existing role cache and UI.
+task.defer(function()
+    local oldRuntime = getgenv().__NoirMiscAimlockRuntime
+    if type(oldRuntime) == "table" and type(oldRuntime.Stop) == "function" then pcall(oldRuntime.Stop) end
+
+    local aim = {
+        enabled = false, wallCheck = false, fovEnabled = false, fovRadius = 250,
+        smoothness = .25, smoothRate = 18, horizontalPrediction = false, prediction = .145,
+        targetPart = "Head", selectedPlayer = nil, targetPlayer = nil, lastSearch = 0, searchInterval = .10,
+        lastAimPos = nil, lastTarget = nil, cachedPlayer = nil, cachedCharacter = nil,
+        cachedRoot = nil, cachedHead = nil, key = "T", bindVisible = false, bindSize = .11,
+        overlay = nil, bindButton = nil, fovCircle = nil, connections = {}, stopped = false,
+    }
+    local function connect(signal, callback)
+        local connection = signal:Connect(callback)
+        aim.connections[#aim.connections + 1] = connection
+        return connection
+    end
+    local function validPlayer(player)
+        local character = player and player.Character
+        local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+        return player and player ~= LocalPlayer and character and humanoid and humanoid.Health > 0
+    end
+    local function clearCache()
+        aim.cachedPlayer, aim.cachedCharacter, aim.cachedRoot, aim.cachedHead = nil, nil, nil, nil
+        aim.lastAimPos, aim.lastTarget = nil, nil
+    end
+    local function findMurdererForAimlock()
+        -- The primary script already maintains these values from MM2 player data; tool scan is only a fallback.
+        if validPlayer(murderer) then return murderer end
+        for _, player in ipairs(getPlayers()) do
+            if validPlayer(player) and roleCache[player.UserId] == "murderer" then return player end
+        end
+        local closest, closestDistance, ownRoot = nil, math.huge, localRoot()
+        for _, player in ipairs(getPlayers()) do
+            if validPlayer(player) and playerHasTool(player, "Knife") then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                local distance = ownRoot and root and (root.Position - ownRoot.Position).Magnitude or 0
+                if distance < closestDistance then closest, closestDistance = player, distance end
+            end
+        end
+        return closest
+    end
+    local function getAimTarget()
+        if validPlayer(aim.selectedPlayer) then return aim.selectedPlayer end
+        aim.selectedPlayer = nil
+        return validPlayer(aim.targetPlayer) and aim.targetPlayer or nil
+    end
+    local function resolvePart(player)
+        local character = player and player.Character
+        if not character then return nil end
+        if aim.cachedPlayer ~= player or aim.cachedCharacter ~= character then
+            aim.cachedPlayer, aim.cachedCharacter = player, character
+            aim.cachedRoot = character:FindFirstChild("HumanoidRootPart")
+            aim.cachedHead = character:FindFirstChild("Head")
+            aim.lastAimPos, aim.lastTarget = nil, nil
+        end
+        return aim.targetPart == "HumanoidRootPart" and aim.cachedRoot or aim.cachedHead or aim.cachedRoot
+    end
+    local function hasLineOfSight(part, player)
+        if not aim.wallCheck then return true end
+        local camera, character = Workspace.CurrentCamera, player and player.Character
+        if not camera or not character then return false end
+        local ownCharacter = LocalPlayer.Character
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = ownCharacter and { ownCharacter, character } or { character }
+        params.IgnoreWater = true
+        local visible, checked = 0, 0
+        for _, name in ipairs({ "Head", "UpperTorso", "Torso", "HumanoidRootPart" }) do
+            local checkPart = character:FindFirstChild(name)
+            if checkPart then
+                checked += 1
+                if not Workspace:Raycast(camera.CFrame.Position, checkPart.Position - camera.CFrame.Position, params) then visible += 1 end
+            end
+        end
+        return checked == 0 or visible >= (checked >= 3 and 2 or 1)
+    end
+    local function inFov(worldPosition)
+        if not aim.fovEnabled then return true end
+        local camera = Workspace.CurrentCamera
+        if not camera then return false end
+        local point, onScreen = camera:WorldToViewportPoint(worldPosition)
+        if not onScreen then return false end
+        local size = camera.ViewportSize
+        return (Vector2.new(point.X, point.Y) - Vector2.new(size.X * .5, size.Y * .5)).Magnitude <= aim.fovRadius
+    end
+    local function ensureOverlay()
+        if aim.overlay and aim.overlay.Parent then return aim.overlay end
+        for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+            if parent then
+                local stale = parent:FindFirstChild("NoirAimlockOverlay")
+                if stale then stale:Destroy() end
+            end
+        end
+        local parent = guiParent
+        if typeof(parent) ~= "Instance" then parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") end
+        if typeof(parent) ~= "Instance" then return nil end
+        aim.overlay = New("ScreenGui", { Name = "NoirAimlockOverlay", Parent = parent, ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 84, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+        return aim.overlay
+    end
+    local function updateFovCircle()
+        if not aim.fovEnabled then
+            if aim.fovCircle then aim.fovCircle.Visible = false end
+            return
+        end
+        local overlay = ensureOverlay()
+        if not overlay then return end
+        if not aim.fovCircle or not aim.fovCircle.Parent then
+            local circle = New("Frame", { Name = "FOV", Parent = overlay, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 1 })
+            local rounded = New("UICorner", { Parent = circle, CornerRadius = UDim.new(1, 0) })
+            local outline = New("UIStroke", { Parent = circle, Color = C.accent, Thickness = 1.4, Transparency = .18 })
+            aim.fovCircle = circle
+        end
+        aim.fovCircle.Visible = true
+        aim.fovCircle.Size = UDim2.fromOffset(aim.fovRadius * 2, aim.fovRadius * 2)
+    end
+    local function updateBindSize()
+        local button, camera = aim.bindButton, Workspace.CurrentCamera
+        if not button or not camera then return end
+        local viewport = camera.ViewportSize
+        button.Size = UDim2.new(aim.bindSize * (viewport.Y / math.max(viewport.X, 1)), 0, aim.bindSize, 0)
+    end
+    local function updateBindVisual()
+        local button = aim.bindButton
+        if not button then return end
+        button.Text = aim.enabled and "AIM\nON" or "AIM"
+        button.BackgroundColor3 = aim.enabled and C.accent or Color3.fromRGB(14, 16, 20)
+    end
+    local function setAimlock(enabled)
+        aim.enabled = enabled == true
+        if aim.enabled then
+            aim.targetPlayer = findMurdererForAimlock()
+        else
+            aim.targetPlayer = nil
+            clearCache()
+        end
+        updateBindVisual()
+    end
+    local function disconnectBindButton()
+        for _, connection in ipairs(aim.bindConnections or {}) do pcall(function() connection:Disconnect() end) end
+        aim.bindConnections = {}
+    end
+    local function removeBindButton()
+        disconnectBindButton()
+        if aim.bindButton and aim.bindButton.Parent then aim.bindButton:Destroy() end
+        aim.bindButton = nil
+        if aim.overlay then
+            local stale = aim.overlay:FindFirstChild("AimlockButton")
+            if stale then stale:Destroy() end
+        end
+    end
+    local function createBindButton()
+        if aim.bindButton then return end
+        local overlay = ensureOverlay()
+        if not overlay then return end
+        local button = New("TextButton", { Name = "AimlockButton", Parent = overlay, AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("aimlock_bind_v1", UDim2.new(.83, 0, .70, 0)),
+            BackgroundColor3 = Color3.fromRGB(14, 16, 20), BackgroundTransparency = .12, BorderSizePixel = 0, AutoButtonColor = false,
+            Text = "AIM", TextColor3 = Color3.new(1, 1, 1), TextSize = 13, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 8 })
+        corner(button, 999); stroke(button, C.border, .18)
+        local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
+        local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
+        aim.bindConnections[#aim.bindConnections + 1] = button.InputBegan:Connect(function(input)
+            if not isPrimaryPress(input) then return end
+            dragging, moved, dragStart, startPosition = true, false, input.Position, button.Position
+        end)
+        aim.bindConnections[#aim.bindConnections + 1] = button.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+        end)
+        aim.bindConnections[#aim.bindConnections + 1] = UIS.InputChanged:Connect(function(input)
+            if not dragging or input ~= dragInput then return end
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 7 then moved = true end
+            button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end)
+        aim.bindConnections[#aim.bindConnections + 1] = UIS.InputEnded:Connect(function(input)
+            if not dragging or not isPrimaryPress(input) then return end
+            dragging = false
+            NoirPersistence.SetPosition("aimlock_bind_v1", button.Position)
+        end)
+        aim.bindConnections[#aim.bindConnections + 1] = button.Activated:Connect(function()
+            if not moved then setAimlock(not aim.enabled) end
+        end)
+        aim.bindButton = button
+        updateBindSize(); updateBindVisual()
+    end
+    local function setBindVisible(enabled)
+        aim.bindVisible = enabled == true
+        if aim.bindVisible then createBindButton() else removeBindButton() end
+    end
+    local function aimStep(dt)
+        if aim.stopped or not aim.enabled then return end
+        local now = os.clock()
+        if now - aim.lastSearch >= aim.searchInterval then
+            aim.lastSearch = now
+            if not validPlayer(aim.selectedPlayer) then aim.selectedPlayer = nil end
+            if not aim.selectedPlayer then aim.targetPlayer = findMurdererForAimlock() end
+        end
+        local target = getAimTarget()
+        local part, camera = target and resolvePart(target), Workspace.CurrentCamera
+        if not part or not camera or not hasLineOfSight(part, target) then aim.lastAimPos = nil; return end
+        if aim.lastTarget ~= target then aim.lastAimPos, aim.lastTarget = nil, target end
+        local velocity = part.AssemblyLinearVelocity
+        local predicted = Vector3.new(aim.horizontalPrediction and velocity.X * aim.prediction or 0, velocity.Y * .3 * aim.prediction, aim.horizontalPrediction and velocity.Z * aim.prediction or 0)
+        local aimPosition = part.Position + predicted
+        if not inFov(aimPosition) then aim.lastAimPos = nil; return end
+        if aim.lastAimPos and aim.smoothness > 0 then
+            local alpha = math.clamp(1 - math.exp(-aim.smoothRate * dt), 0, 1)
+            aimPosition = aim.lastAimPos:Lerp(aimPosition, alpha)
+        end
+        aim.lastAimPos = aimPosition
+        pcall(function() camera.CFrame = CFrame.lookAt(camera.CFrame.Position, aimPosition, Vector3.new(0, 1, 0)) end)
+    end
+    local function playerChoices()
+        local names = { "Auto Murderer" }
+        for _, player in ipairs(getPlayers()) do if player ~= LocalPlayer then names[#names + 1] = player.Name end end
+        table.sort(names, function(a, b) if a == "Auto Murderer" then return true elseif b == "Auto Murderer" then return false end return string.lower(a) < string.lower(b) end)
+        return names
+    end
+    local aimSection = tab:AddSection("MISC \u{2022} AIMLOCK", "Camera lock for Murderer or a selected player • all controls are local")
+    aimSection:AddToggle("Enable Aimlock", setAimlock)
+    aimSection:AddToggle("Enable Aimlock Bind Button", setBindVisible)
+    aimSection:AddSlider("Aimlock Bind Button Size", 5, 25, 11, function(value) aim.bindSize = (tonumber(value) or 11) / 100; updateBindSize() end)
+    aimSection:AddToggle("Aimlock Wall Check", function(enabled) aim.wallCheck = enabled == true end)
+    aimSection:AddToggle("Aimlock FOV Check", function(enabled) aim.fovEnabled = enabled == true; updateFovCircle() end)
+    aimSection:AddSlider("Aimlock FOV Radius", 50, 800, 250, function(value) aim.fovRadius = tonumber(value) or 250; updateFovCircle() end)
+    aimSection:AddSlider("Aimlock Smoothness", 0, 95, 25, function(value)
+        local percent = math.clamp((tonumber(value) or 25) / 100, 0, .95)
+        aim.smoothness = percent
+        aim.smoothRate = percent <= .001 and 1000 or math.clamp(24 * (1 - percent) + 1, 1, 1000)
+    end)
+    aimSection:AddToggle("Aimlock Horizontal Prediction", function(enabled) aim.horizontalPrediction = enabled == true end)
+    local playerSelector = aimSection:AddDropdown("Aimlock Target Player", playerChoices(), function(name)
+        aim.selectedPlayer = name == "Auto Murderer" and nil or Players:FindFirstChild(name)
+        if not aim.selectedPlayer then aim.targetPlayer = findMurdererForAimlock() end
+        clearCache()
+    end)
+    aimSection:AddButton("Refresh Aimlock Player List", function()
+        local selected = aim.selectedPlayer and aim.selectedPlayer.Name or "Auto Murderer"
+        playerSelector:Refresh(playerChoices(), selected)
+    end)
+    aimSection:AddButton("Clear Aimlock Player Selection", function()
+        aim.selectedPlayer = nil; aim.targetPlayer = findMurdererForAimlock(); clearCache()
+        playerSelector:SetValue("Auto Murderer")
+    end)
+    aimSection:AddDropdown("Aimlock Target Body Part", { "Head", "HumanoidRootPart" }, function(value) aim.targetPart = value; clearCache() end)
+    aimSection:AddDropdown("Aimlock Prediction", { "Medium (0.145)", "Low (0.08)", "High (0.20)", "Disabled" }, function(value)
+        aim.prediction = string.find(value, "Low", 1, true) and .08 or string.find(value, "High", 1, true) and .20 or value == "Disabled" and 0 or .145
+    end)
+    aimSection:AddKeybind("Aimlock Quick Toggle", "T", function(value) aim.key = tostring(value or "T") end)
+    aimSection:AddLabel("Tip: select Auto Murderer for automatic role targeting. Drag the round AIM button to move it.")
+
+    connect(UIS.InputBegan, function(input, processed)
+        if processed or UIS:GetFocusedTextBox() then return end
+        if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == aim.key then setAimlock(not aim.enabled) end
+    end)
+    connect(Players.PlayerRemoving, function(player)
+        if aim.selectedPlayer == player then aim.selectedPlayer = nil end
+        if aim.targetPlayer == player then aim.targetPlayer = nil end
+        clearCache()
+    end)
+    connect(LocalPlayer.CharacterAdded, function()
+        aim.targetPlayer = nil; aim.selectedPlayer = nil; clearCache()
+        task.delay(1, function() if aim.enabled and not aim.stopped then aim.targetPlayer = findMurdererForAimlock() end end)
+    end)
+    connect(Workspace:GetPropertyChangedSignal("CurrentCamera"), function() updateBindSize(); updateFovCircle() end)
+    RunService:BindToRenderStep("NoirMiscAimlock", Enum.RenderPriority.Camera.Value + 1, aimStep)
+    getgenv().__NoirMiscAimlockRuntime = {
+        Stop = function()
+            if aim.stopped then return end
+            aim.stopped = true
+            pcall(function() RunService:UnbindFromRenderStep("NoirMiscAimlock") end)
+            for _, connection in ipairs(aim.connections) do pcall(function() connection:Disconnect() end) end
+            disconnectBindButton()
+            if aim.overlay then aim.overlay:Destroy() end
+            aim.overlay, aim.bindButton, aim.fovCircle = nil, nil, nil
+        end,
+    }
 end)
 
 -- Main universal utilities: all state stays in this scope while the connections retain only what they need.
@@ -9027,7 +9311,7 @@ local isJumpKeyPressed = false
 local Camera = workspace.CurrentCamera
 local wallDetectionCooldown = 0
 local lastWallhopAt = 0
-local WALLHOP_COOLDOWN = 2.5
+local WALLHOP_COOLDOWN = 0.15
 
 local wallRaycastParams = RaycastParams.new()
 wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
