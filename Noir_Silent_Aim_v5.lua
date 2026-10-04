@@ -1407,6 +1407,21 @@ function targetVisible(part, forceWallCheck)
     return result == nil or result.Instance:IsDescendantOf(part.Parent)
 end
 
+-- MM2 validates the actual ray sent by the Gun remote.  When a world part is between
+-- the muzzle and the selected player, Piercer Bullet moves only that outgoing ray origin
+-- to the target side of the obstruction; unobstructed shots retain the normal muzzle origin.
+local function piercerShotOrigin(origin, aim, part)
+    if not config.piercerBullet or not origin or not aim or not part then return origin end
+    local direction = aim - origin
+    if direction.Magnitude <= 0.01 then return origin end
+    local character = LocalPlayer.Character
+    wallCheckParams.FilterDescendantsInstances = character and { character } or {}
+    local result = Workspace:Raycast(origin, direction, wallCheckParams)
+    if not result or result.Instance:IsDescendantOf(part.Parent) then return origin end
+    local spacing = math.clamp(part.Size.Magnitude * 0.75, 2.5, 4.5)
+    return aim - direction.Unit * spacing
+end
+
 function knifeRemote(remote, args)
     if not config.knifeEnabled or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
@@ -1493,8 +1508,9 @@ function redirect(remote, args)
     local firstType, secondType = typeof(args[1]), typeof(args[2])
     if firstType == "CFrame" then
         local origin = args[1].Position
-        if config.alignDirection and (aim - origin).Magnitude > 0.01 then
-            args[1] = CFrame.lookAt(origin, aim)
+        local shotOrigin = piercerShotOrigin(origin, aim, part)
+        if (config.alignDirection or shotOrigin ~= origin) and (aim - shotOrigin).Magnitude > 0.01 then
+            args[1] = CFrame.lookAt(shotOrigin, aim)
         end
         if secondType == "CFrame" then
             args[2] = CFrame.new(aim)
@@ -1505,9 +1521,11 @@ function redirect(remote, args)
         end
     elseif firstType == "Vector3" then
         local origin = args[1]
+        local shotOrigin = piercerShotOrigin(origin, aim, part)
+        args[1] = shotOrigin
         if secondType == "Vector3" then
-            if args[2].Magnitude <= 1.5 and (aim - origin).Magnitude > 0.01 then
-                args[2] = (aim - origin).Unit
+            if args[2].Magnitude <= 1.5 and (aim - shotOrigin).Magnitude > 0.01 then
+                args[2] = (aim - shotOrigin).Unit
             else
                 args[2] = aim
             end
@@ -1737,9 +1755,10 @@ function fireGunAt(player)
         end
         local aim=calculateAim(part)
         local origin=handle.Position
+        local shotOrigin=piercerShotOrigin(origin,aim,part)
         buttonShotActive = true
         buttonShotTarget = player
-        success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
+        success=pcall(function() remote:FireServer(CFrame.lookAt(shotOrigin,aim),CFrame.new(aim)) end)
         task.wait(0.10)
         if autoEquipped and humanoid.Parent then
             task.wait(0.05)
@@ -4649,7 +4668,7 @@ do
 
     local combatSheriff=tab:AddSection("SHERIFF", "Gun bullet controls")
     combatSheriff:AddToggle("Piercer Bullet", setPiercerBullet)
-    combatSheriff:AddLabel("Redirects Gun shots through the local wall check to the selected target.")
+    combatSheriff:AddLabel("Sends a target-side Gun ray only when a wall blocks the selected target.")
 
     local combatKnife=tab:AddSection("KNIFE SILENT AIM", "Nearest player or Sheriff-only targeting")
     combatKnife:AddToggle("Knife Silent Aim", function(v)
