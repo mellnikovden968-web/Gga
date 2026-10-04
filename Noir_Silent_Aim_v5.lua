@@ -1146,7 +1146,18 @@ local function refreshPlayerCache() cachedPlayers = Players:GetPlayers() end
 refreshPlayerCache()
 local function getPlayers() return cachedPlayers end
 Players.PlayerAdded:Connect(refreshPlayerCache)
-Players.PlayerRemoving:Connect(refreshPlayerCache)
+Players.PlayerRemoving:Connect(function(player)
+    refreshPlayerCache()
+    playerData[player.UserId], roleCache[player.UserId], announcedRoles[player.UserId] = nil, nil, nil
+    local changed = murderer == player or sheriff == player or hero == player
+    if murderer == player then murderer = nil end
+    if sheriff == player then sheriff = nil end
+    if hero == player then hero = nil end
+    if changed then
+        local bus = getgenv().__NoirV4RoleBus
+        if bus and bus.Emit then bus:Emit() end
+    end
+end)
 
 function notify(msg, time)
     if type(host.Notify) == "function" then pcall(host.Notify, "MM2 Silent Aim: " .. tostring(msg), time or 3) end
@@ -1260,42 +1271,81 @@ function findByGun()
         if player ~= LocalPlayer and playerHasTool(player, "Gun") then return player end
     end
 end
-function consumeData(data)
+-- Role updates are emitted only after a real role change so Visuals can refresh instantly without polling every frame.
+do
+    local roleBus = { revision = 0, listeners = {} }
+    function roleBus:Subscribe(callback)
+        if type(callback) ~= "function" then return function() end end
+        self.listeners[#self.listeners + 1] = callback
+        local index = #self.listeners
+        return function() self.listeners[index] = false end
+    end
+    function roleBus:Emit()
+        self.revision += 1
+        for _, callback in ipairs(self.listeners) do if type(callback) == "function" then pcall(callback, self.revision) end end
+    end
+    getgenv().__NoirV4RoleBus = roleBus
+end
+
+function consumeData(data, fullSnapshot)
     if typeof(data) ~= "table" then return false end
-    local foundMurderer, foundSheriff, foundHero
-    for _, player in ipairs(getPlayers()) do
-        local info = data[player.Name] or data[tostring(player.UserId)]
+    local records = (typeof(data.Players) == "table" and data.Players) or (typeof(data.players) == "table" and data.players) or data
+    local lookup = {}
+    for key, info in pairs(records) do
+        local keyText = string.lower(tostring(key))
+        lookup[keyText] = info
         if typeof(info) == "table" then
+            for _, identity in ipairs({ info.Name, info.PlayerName, info.Username, info.UserId, info.UserID, info.Id, info.PlayerId }) do
+                if identity ~= nil then lookup[string.lower(tostring(identity))] = info end
+            end
+        end
+    end
+    local function normalizeRole(info)
+        if typeof(info) == "table" then
+            if info.Dead == true or info.Killed == true or info.IsDead == true or info.Alive == false then return "dead" end
+            info = info.Role or info.role or info.CurrentRole or info.currentRole or info.Team or info.team or info.Class
+        end
+        local value = string.lower(tostring(info or "innocent")):gsub("[%s_%-]", "")
+        if string.find(value, "murder", 1, true) or string.find(value, "killer", 1, true) then return "murderer" end
+        if string.find(value, "sheriff", 1, true) then return "sheriff" end
+        if string.find(value, "hero", 1, true) then return "hero" end
+        if string.find(value, "dead", 1, true) or string.find(value, "killed", 1, true) then return "dead" end
+        return "innocent"
+    end
+    local foundMurderer, foundSheriff, foundHero, received, changed = nil, nil, nil, false, false
+    for _, player in ipairs(getPlayers()) do
+        local info = lookup[string.lower(player.Name)] or lookup[tostring(player.UserId)] or lookup[string.lower(tostring(player.UserId))]
+        if info ~= nil then
+            received = true
             playerData[player.UserId] = info
-            local role = info.Role or info.role or info.CurrentRole
-            local normalized = string.lower(tostring(role or "innocent"))
-            local resolved
-            if normalized == "murderer" then resolved = "murderer"; foundMurderer = player
-            elseif normalized == "sheriff" then resolved = "sheriff"; foundSheriff = player
-            elseif normalized == "hero" then resolved = "hero"; foundHero = player
-            else resolved = "innocent" end
+            local resolved = normalizeRole(info)
             if roleCache[player.UserId] ~= resolved then
-                roleCache[player.UserId] = resolved
-                if autoNotifyRoles and resolved ~= "innocent" and announcedRoles[player.UserId] ~= resolved then
+                roleCache[player.UserId], changed = resolved, true
+                if autoNotifyRoles and (resolved == "murderer" or resolved == "sheriff" or resolved == "hero") and announcedRoles[player.UserId] ~= resolved then
                     announcedRoles[player.UserId] = resolved
                     notify(player.Name .. " is " .. string.upper(resolved), 5)
                 end
             end
-        elseif typeof(info) == "string" then
-            local normalized = string.lower(info)
-            local resolved = normalized == "murderer" and "murderer" or normalized == "sheriff" and "sheriff" or normalized == "hero" and "hero" or "innocent"
-            if normalized == "murderer" then foundMurderer = player
-            elseif normalized == "sheriff" then foundSheriff = player
-            elseif normalized == "hero" then foundHero = player end
-            if roleCache[player.UserId] ~= resolved then roleCache[player.UserId] = resolved end
+            if resolved == "murderer" then foundMurderer = player
+            elseif resolved == "sheriff" then foundSheriff = player
+            elseif resolved == "hero" then foundHero = player end
+        elseif fullSnapshot and roleCache[player.UserId] ~= "innocent" then
+            roleCache[player.UserId], changed = "innocent", true
         end
     end
-    sheriff = foundSheriff or sheriff
-    hero = foundHero or hero
-    if foundMurderer then
-        setTarget(foundMurderer)
+    local previousMurderer, previousSheriff, previousHero = murderer, sheriff, hero
+    if fullSnapshot then
+        murderer, sheriff, hero = foundMurderer, foundSheriff, foundHero
+    else
+        murderer, sheriff, hero = foundMurderer or murderer, foundSheriff or sheriff, foundHero or hero
     end
-    return foundMurderer ~= nil
+    if foundMurderer then setTarget(foundMurderer) end
+    if previousMurderer ~= murderer or previousSheriff ~= sheriff or previousHero ~= hero then changed = true end
+    if changed then
+        local bus = getgenv().__NoirV4RoleBus
+        if bus and bus.Emit then bus:Emit() end
+    end
+    return received
 end
 local playerDataRemote
 function getPlayerDataRemote()
@@ -1304,18 +1354,60 @@ function getPlayerDataRemote()
     playerDataRemote = (remote and remote:IsA("RemoteFunction")) and remote or nil
     return playerDataRemote
 end
-function refreshTarget()
-    local weaponTarget = findByKnife()
-    if weaponTarget then
-        setTarget(weaponTarget)
-        return
+-- One in-flight request prevents several remotes/events/Visuals retries from freezing the client together.
+do
+    local scanner = { busy = false, queued = false, delayed = false, force = false, last = -1e9 }
+    function scanner:Request(force)
+        self.force = self.force or force == true
+        if self.busy then self.queued = true; return end
+        local interval = instantRoleDetection and 0.35 or 1.35
+        local elapsed = os.clock() - self.last
+        if not self.force and elapsed < interval then
+            self.queued = true
+            if not self.delayed then
+                self.delayed = true
+                task.delay(interval - elapsed, function()
+                    scanner.delayed = false
+                    if scanner.queued then scanner.queued = false; scanner:Request(false) end
+                end)
+            end
+            return
+        end
+        self.busy, self.queued = true, false
+        self.force = false
+        task.spawn(function()
+            -- Tools give an immediate fallback for games/round moments where GetPlayerData has not populated yet.
+            local knifeOwner, gunOwner = findByKnife(), findByGun()
+            local fallbackChanged = false
+            if knifeOwner and roleCache[knifeOwner.UserId] ~= "murderer" then
+                for userId, role in pairs(roleCache) do if role == "murderer" then roleCache[userId] = "innocent" end end
+                roleCache[knifeOwner.UserId], fallbackChanged = "murderer", true
+                setTarget(knifeOwner)
+            end
+            if gunOwner and gunOwner ~= knifeOwner and roleCache[gunOwner.UserId] ~= "sheriff" then
+                for userId, role in pairs(roleCache) do if role == "sheriff" then roleCache[userId] = "innocent" end end
+                roleCache[gunOwner.UserId], sheriff, fallbackChanged = "sheriff", gunOwner, true
+            end
+            if fallbackChanged then
+                local bus = getgenv().__NoirV4RoleBus
+                if bus and bus.Emit then bus:Emit() end
+            end
+            local applied = false
+            local remote = getPlayerDataRemote()
+            if remote then
+                local ok, data = pcall(function() return remote:InvokeServer() end)
+                if ok then applied = consumeData(data, true) end
+            end
+            if not applied and not knifeOwner then setTarget(nil) end
+            scanner.last, scanner.busy = os.clock(), false
+            if scanner.queued then scanner.queued = false; scanner:Request(false) end
+        end)
     end
-    local remote = getPlayerDataRemote()
-    if remote then
-        local ok, data = pcall(function() return remote:InvokeServer() end)
-        if ok and consumeData(data) then return end
-    end
-    setTarget(nil)
+    getgenv().__NoirV4RoleScanner = scanner
+end
+function refreshTarget(force)
+    local scanner = getgenv().__NoirV4RoleScanner
+    if scanner and scanner.Request then scanner:Request(force == true) end
 end
 function updatePing()
     pcall(function()
@@ -1965,7 +2057,8 @@ function fireGunAt(player)
 end
 function shootTarget()
     local player = selectTarget()
-    if not player then refreshTarget(); player = selectTarget() end
+    -- Keep the immediate weapon-owner fallback; a remote role refresh is now coalesced asynchronously to avoid a UI freeze.
+    if not player then player = findByKnife(); refreshTarget(true) end
     if player then return fireGunAt(player) end
     return false
 end
@@ -2371,16 +2464,27 @@ local gunUtilityState = {
     touchNoticeAt = 0,
     bindGui = nil,
     bindButton = nil,
-    bindConnections = {}
+    bindConnections = {},
+    cachedDropParts = {},
+    dropCacheAt = -1e9,
+    dropCacheDirty = true,
 }
 
 local function hasGunInInventory()
     return playerHasTool(LocalPlayer, "Gun") ~= nil
 end
 
--- A dropped MM2 gun is not always a single part named GunDrop. Scan every GunDrop
--- container and rank the physical touch receiver before Handle/decorative fallbacks.
+-- A dropped MM2 gun is not always a single part named GunDrop. The expensive world scan is cached
+-- and invalidated by relevant descendants, so Gun Aura never walks all of Workspace five times per second.
 local function getDroppedGunParts()
+    local now = os.clock()
+    local cached = gunUtilityState.cachedDropParts
+    if not gunUtilityState.dropCacheDirty and now - gunUtilityState.dropCacheAt < 1.25 then
+        local valid = {}
+        for _, part in ipairs(cached) do if part and part.Parent then valid[#valid + 1] = part end end
+        if #valid == #cached then return valid end
+        gunUtilityState.dropCacheDirty = true
+    end
     local candidates, seen = {}, {}
     local function add(part, priority)
         if not part or not part:IsA("BasePart") or seen[part] then return end
@@ -2393,26 +2497,26 @@ local function getDroppedGunParts()
             add(drop, ownTouch and 1 or (drop.Name == "Handle" and 2 or 3))
         end
         for _, child in ipairs(drop:GetDescendants()) do
-            if child:IsA("TouchTransmitter") and child.Parent and child.Parent:IsA("BasePart") then
-                add(child.Parent, 1)
-            elseif child:IsA("BasePart") and child.Name == "Handle" then
-                add(child, 2)
-            elseif child:IsA("BasePart") and child.Name == "GunDrop" then
-                add(child, 3)
-            elseif child:IsA("BasePart") then
-                add(child, 4)
-            end
+            if child:IsA("TouchTransmitter") and child.Parent and child.Parent:IsA("BasePart") then add(child.Parent, 1)
+            elseif child:IsA("BasePart") and child.Name == "Handle" then add(child, 2)
+            elseif child:IsA("BasePart") and child.Name == "GunDrop" then add(child, 3)
+            elseif child:IsA("BasePart") then add(child, 4) end
         end
     end
-    -- Descendant scanning covers models, folders and reparented GunDrop instances.
-    for _, instance in ipairs(Workspace:GetDescendants()) do
-        if instance.Name == "GunDrop" then scan(instance) end
-    end
+    for _, instance in ipairs(Workspace:GetDescendants()) do if instance.Name == "GunDrop" then scan(instance) end end
     table.sort(candidates, function(a, b) return a.priority < b.priority end)
     local parts = table.create(#candidates)
     for index, candidate in ipairs(candidates) do parts[index] = candidate.part end
+    gunUtilityState.cachedDropParts, gunUtilityState.dropCacheAt, gunUtilityState.dropCacheDirty = parts, now, false
     return parts
 end
+-- Mark only actual GunDrop-related hierarchy changes. A timed recheck remains as a fallback for unusual map scripts.
+Workspace.DescendantAdded:Connect(function(instance)
+    if instance.Name == "GunDrop" or instance:IsA("TouchTransmitter") then gunUtilityState.dropCacheDirty = true end
+end)
+Workspace.DescendantRemoving:Connect(function(instance)
+    if instance.Name == "GunDrop" or instance:IsA("TouchTransmitter") then gunUtilityState.dropCacheDirty = true end
+end)
 
 local function getDroppedGunPart()
     return getDroppedGunParts()[1]
@@ -2841,6 +2945,205 @@ do
     end)
     customIdControl:SetValue(cursorState.customId)
 end
+
+-- FPS controls are local visual/performance changes. Their state is restored whenever a toggle is turned off.
+task.defer(function()
+    local state = {
+        fpsBoost = false, lessLag = false, noShadows = false, frameEnhancement = false,
+        optimizeCoins = false, removeChroma = false, removePets = false, removeCoins = false, removeCorpses = false,
+        noRespawnDelay = false, partOriginals = {}, effectOriginals = {}, postOriginals = {},
+        coinOriginals = {}, hiddenPets = {}, hiddenCoins = {}, hiddenCorpses = {}, chromaOriginals = {}, perfConnection = nil,
+        originalRespawnTime = Players.RespawnTime, originalGlobalShadows = Lighting.GlobalShadows,
+        savedQuality = nil, savedMeshDetail = nil, savedDecoration = nil,
+    }
+    local function setProperty(instance, property, value)
+        pcall(function() instance[property] = value end)
+    end
+    local function isVisualEffect(instance)
+        return instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Smoke")
+            or instance:IsA("Fire") or instance:IsA("Sparkles") or instance:IsA("Beam")
+            or instance:IsA("PointLight") or instance:IsA("SpotLight") or instance:IsA("SurfaceLight")
+    end
+    local function restorePerformance()
+        for instance, original in pairs(state.partOriginals) do
+            if instance and instance.Parent then
+                setProperty(instance, "CastShadow", original.castShadow)
+                setProperty(instance, "RenderFidelity", original.renderFidelity)
+            end
+        end
+        for instance, enabled in pairs(state.effectOriginals) do if instance and instance.Parent then setProperty(instance, "Enabled", enabled) end end
+        for instance, enabled in pairs(state.postOriginals) do
+            if instance and instance.Parent then
+                local chromaName = string.lower(instance.Name or "")
+                local keepChromaHidden = state.removeChroma and (string.find(chromaName, "chroma", 1, true) or string.find(chromaName, "chrom", 1, true) or string.find(chromaName, "aberr", 1, true))
+                if not keepChromaHidden then setProperty(instance, "Enabled", enabled) end
+            end
+        end
+        table.clear(state.partOriginals); table.clear(state.effectOriginals); table.clear(state.postOriginals)
+    end
+    local function performanceActive()
+        return state.fpsBoost or state.lessLag or state.noShadows or state.frameEnhancement
+    end
+    local function applyPerformanceTo(instance)
+        if not performanceActive() or not instance then return end
+        local disableShadows = state.fpsBoost or state.lessLag or state.noShadows or state.frameEnhancement
+        local reduceEffects = state.fpsBoost or state.lessLag or state.frameEnhancement
+        local lowFidelity = state.fpsBoost or state.frameEnhancement
+        if instance:IsA("BasePart") then
+            if state.partOriginals[instance] == nil then state.partOriginals[instance] = { castShadow = instance.CastShadow, renderFidelity = instance.RenderFidelity } end
+            if disableShadows then setProperty(instance, "CastShadow", false) end
+            if lowFidelity then setProperty(instance, "RenderFidelity", Enum.RenderFidelity.Disabled) end
+        elseif isVisualEffect(instance) then
+            if state.effectOriginals[instance] == nil then state.effectOriginals[instance] = instance.Enabled end
+            if reduceEffects then setProperty(instance, "Enabled", false) end
+        elseif instance:IsA("ColorCorrectionEffect") or instance:IsA("BloomEffect") or instance:IsA("BlurEffect") or instance:IsA("SunRaysEffect") or instance:IsA("DepthOfFieldEffect") then
+            if state.postOriginals[instance] == nil then state.postOriginals[instance] = instance.Enabled end
+            if reduceEffects then setProperty(instance, "Enabled", false) end
+        end
+    end
+    local function refreshPerformance()
+        if performanceActive() then
+            -- Rebuild from original values so overlapping FPS toggles cannot leave a stronger setting behind.
+            restorePerformance()
+            for _, instance in ipairs(Workspace:GetDescendants()) do applyPerformanceTo(instance) end
+            if not state.perfConnection then state.perfConnection = Workspace.DescendantAdded:Connect(function(instance) task.defer(applyPerformanceTo, instance) end) end
+        else
+            if state.perfConnection then state.perfConnection:Disconnect(); state.perfConnection = nil end
+            restorePerformance()
+        end
+        local lowQuality = state.fpsBoost or state.frameEnhancement
+        pcall(function()
+            if lowQuality then
+                if state.savedQuality == nil then state.savedQuality = settings().Rendering.QualityLevel end
+                if state.savedMeshDetail == nil then state.savedMeshDetail = settings().Rendering.MeshPartDetailLevel end
+                settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+                settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Disabled
+            elseif state.savedQuality ~= nil then
+                settings().Rendering.QualityLevel = state.savedQuality
+                settings().Rendering.MeshPartDetailLevel = state.savedMeshDetail
+                state.savedQuality, state.savedMeshDetail = nil, nil
+            end
+        end)
+        pcall(function()
+            if lowQuality then
+                if state.savedDecoration == nil then state.savedDecoration = Workspace.Terrain.Decoration end
+                Workspace.Terrain.Decoration = false
+            elseif state.savedDecoration ~= nil then
+                Workspace.Terrain.Decoration = state.savedDecoration
+                state.savedDecoration = nil
+            end
+        end)
+        pcall(function()
+            Lighting.GlobalShadows = (state.fpsBoost or state.lessLag or state.noShadows or state.frameEnhancement) and false or state.originalGlobalShadows
+        end)
+    end
+    local function matchesNamedVisual(instance, words)
+        local current, depth = instance, 0
+        while current and depth < 4 do
+            local name = string.lower(current.Name or "")
+            for _, word in ipairs(words) do if string.find(name, word, 1, true) then return true end end
+            current, depth = current.Parent, depth + 1
+        end
+        return false
+    end
+    local function setHidden(root, bucket, hidden)
+        local function update(part)
+            if not part:IsA("BasePart") then return end
+            if bucket[part] == nil then bucket[part] = part.LocalTransparencyModifier end
+            part.LocalTransparencyModifier = hidden and 1 or bucket[part]
+        end
+        if root:IsA("BasePart") then update(root) end
+        for _, instance in ipairs(root:GetDescendants()) do update(instance) end
+    end
+    local function restoreHidden(bucket)
+        for part, original in pairs(bucket) do if part and part.Parent then setProperty(part, "LocalTransparencyModifier", original) end end
+        table.clear(bucket)
+    end
+    local function applyCoinOptimization(root)
+        local function update(instance)
+            if instance:IsA("BasePart") then
+                if state.coinOriginals[instance] == nil then state.coinOriginals[instance] = { material = instance.Material, castShadow = instance.CastShadow } end
+                setProperty(instance, "Material", Enum.Material.SmoothPlastic); setProperty(instance, "CastShadow", false)
+            elseif isVisualEffect(instance) then
+                if state.coinOriginals[instance] == nil then state.coinOriginals[instance] = { enabled = instance.Enabled } end
+                setProperty(instance, "Enabled", false)
+            end
+        end
+        if root:IsA("BasePart") or isVisualEffect(root) then update(root) end
+        for _, instance in ipairs(root:GetDescendants()) do update(instance) end
+    end
+    local function restoreCoinOptimization()
+        for instance, original in pairs(state.coinOriginals) do
+            if instance and instance.Parent then
+                if original.material ~= nil then setProperty(instance, "Material", original.material); setProperty(instance, "CastShadow", original.castShadow) else setProperty(instance, "Enabled", original.enabled) end
+            end
+        end
+        table.clear(state.coinOriginals)
+    end
+    local petWords, coinWords, corpseWords = { "pet", "companion", "minion", "familiar" }, { "coin", "currency", "token" }, { "corpse", "ragdoll", "deadbody", "body" }
+    local function applyAutoVisuals(instance)
+        if state.optimizeCoins and matchesNamedVisual(instance, coinWords) then applyCoinOptimization(instance) end
+        if state.removePets and matchesNamedVisual(instance, petWords) then setHidden(instance, state.hiddenPets, true) end
+        if state.removeCoins and matchesNamedVisual(instance, coinWords) then setHidden(instance, state.hiddenCoins, true) end
+        if state.removeCorpses and matchesNamedVisual(instance, corpseWords) then setHidden(instance, state.hiddenCorpses, true) end
+        if state.removeChroma and (instance:IsA("ColorCorrectionEffect") or instance:IsA("BloomEffect") or instance:IsA("BlurEffect")) then
+            local name = string.lower(instance.Name or "")
+            if string.find(name, "chroma", 1, true) or string.find(name, "chrom", 1, true) or string.find(name, "aberr", 1, true) then
+                if state.chromaOriginals[instance] == nil then state.chromaOriginals[instance] = instance.Enabled end
+                setProperty(instance, "Enabled", false)
+            end
+        end
+    end
+    local function scanAutoVisuals()
+        for _, instance in ipairs(Workspace:GetDescendants()) do applyAutoVisuals(instance) end
+        for _, instance in ipairs(Lighting:GetDescendants()) do applyAutoVisuals(instance) end
+    end
+    Workspace.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
+    Lighting.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
+    local function hookCorpse(character)
+        local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+        if humanoid then humanoid.Died:Connect(function() if state.removeCorpses then task.defer(setHidden, character, state.hiddenCorpses, true) end end) end
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character then hookCorpse(player.Character) end
+        player.CharacterAdded:Connect(hookCorpse)
+    end
+    Players.PlayerAdded:Connect(function(player) player.CharacterAdded:Connect(hookCorpse) end)
+
+    local fpsSection = tab:AddSection("MISC \u{2022} FPS", "Local visual-performance controls; server-side objects and round rules are not changed")
+    fpsSection:AddToggle("Fps Boost", function(enabled) state.fpsBoost = enabled == true; refreshPerformance() end)
+    fpsSection:AddToggle("Less Lag", function(enabled) state.lessLag = enabled == true; refreshPerformance() end)
+    fpsSection:AddToggle("No Shadows", function(enabled) state.noShadows = enabled == true; refreshPerformance() end)
+    fpsSection:AddToggle("Optimize Coins", function(enabled)
+        state.optimizeCoins = enabled == true
+        if state.optimizeCoins then scanAutoVisuals() else restoreCoinOptimization() end
+    end)
+    fpsSection:AddToggle("Auto Remove Chroma Effects", function(enabled)
+        state.removeChroma = enabled == true
+        if state.removeChroma then scanAutoVisuals() else
+            for instance, original in pairs(state.chromaOriginals) do if instance and instance.Parent then setProperty(instance, "Enabled", original) end end
+            table.clear(state.chromaOriginals)
+        end
+    end)
+    fpsSection:AddToggle("Auto Remove Pets Display", function(enabled)
+        state.removePets = enabled == true
+        if state.removePets then scanAutoVisuals() else restoreHidden(state.hiddenPets) end
+    end)
+    fpsSection:AddToggle("Auto Remove Coins", function(enabled)
+        state.removeCoins = enabled == true
+        if state.removeCoins then scanAutoVisuals() else restoreHidden(state.hiddenCoins) end
+    end)
+    fpsSection:AddToggle("Auto Remove Corpses", function(enabled)
+        state.removeCorpses = enabled == true
+        if state.removeCorpses then scanAutoVisuals() else restoreHidden(state.hiddenCorpses) end
+    end)
+    fpsSection:AddToggle("No Respawn Delay", function(enabled)
+        state.noRespawnDelay = enabled == true
+        pcall(function() Players.RespawnTime = state.noRespawnDelay and 0 or state.originalRespawnTime end)
+    end)
+    fpsSection:AddToggle("Enable Frame Enhancement", function(enabled) state.frameEnhancement = enabled == true; refreshPerformance() end)
+    fpsSection:AddLabel("No Respawn Delay applies the local respawn-time preference; a game server may still enforce its own timer.")
+end)
 
 -- Main universal utilities: all state stays in this scope while the connections retain only what they need.
 do
@@ -3319,11 +3622,11 @@ end)
 -- Visuals are compiled in a separate deferred chunk.  The primary UI stays identical to the last verified mobile-safe build.
 local __noirVisualContext = {
     tab = tab, players = Players, workspace = Workspace, runService = RunService,
-    localPlayer = LocalPlayer, getPlayers = getPlayers, roleCache = roleCache,
+    localPlayer = LocalPlayer, getPlayers = getPlayers, roleCache = roleCache, roleBus = getgenv().__NoirV4RoleBus,
     getMurderer = function() return murderer end, getSheriff = function() return sheriff end,
     getHero = function() return hero end, getRoundState = function() return roundState end,
-    -- Visuals can request a role read immediately instead of waiting for their periodic update cycle.
-    refreshRoles = function() task.spawn(refreshTarget) end,
+    -- Visuals can request a coalesced role read instead of starting concurrent RemoteFunction calls.
+    refreshRoles = function(force) refreshTarget(force == true) end,
     isRoleRevealActive = function()
         if murderer or sheriff or hero then return true end
         for _, role in pairs(roleCache) do
@@ -3335,12 +3638,12 @@ local __noirVisualContext = {
 }
 getgenv().__NoirV4VisualContext = __noirVisualContext
 local __noirVisualSource = [==[
--- Visuals run as a deferred satellite chunk so the main Noir loader remains within mobile executor limits.
+-- Visuals run in a deferred satellite chunk.  Updates are event-driven so ESP does not rescan Workspace each fraction of a second.
 local V = getgenv().__NoirV4VisualContext
 if type(V) ~= "table" or not V.tab then return end
 
 local state = {
-    revision = 0,
+    revision = 0, playersDirty = true,
     feature = {
         cham = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
         esp = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
@@ -3353,10 +3656,8 @@ local state = {
     },
     object = {gun=false,knife=false},
 }
-local entries, objectEntries = {}, {}
--- Players who join after role reveal are lobby spectators until the next role reveal.
-local joinedLobby, roleRevealActive = {}, false
-local drawingState = nil
+local entries, objectEntries, thumbnailCache, thumbnailPending = {}, {}, {}, {}
+local joinedLobby, roleRevealActive, drawingState, tracerCount = {}, false, nil, 0
 local prefix = "NoirSatelliteVisual_"
 
 local function safe(label, callback)
@@ -3364,13 +3665,18 @@ local function safe(label, callback)
     if not ok then warn("[Noir Visuals] " .. tostring(label) .. ": " .. tostring(err)) end
     return ok
 end
--- Refresh roles as soon as the Visuals satellite starts, then retry while MM2 finishes assigning roles.
+local function markPlayersDirty()
+    state.playersDirty = true
+end
+if V.roleBus and V.roleBus.Subscribe then V.roleBus:Subscribe(markPlayersDirty) end
+-- MM2 can finish assigning roles a moment after the UI appears. Requests are coalesced by the main scanner.
 task.spawn(function()
-    for _, pause in ipairs({0, .25, .6, 1.2, 2}) do
+    for _, pause in ipairs({0, .7, 1.8}) do
         if pause > 0 then task.wait(pause) end
-        if V.refreshRoles then safe("initial role refresh", V.refreshRoles) end
+        if V.refreshRoles then V.refreshRoles(false) end
     end
 end)
+
 local function color(role)
     if role == "murderer" then return Color3.fromRGB(255,72,82) end
     if role == "sheriff" then return Color3.fromRGB(72,158,255) end
@@ -3381,22 +3687,17 @@ end
 local function isInactive(player, character, cached)
     if cached == "dead" or joinedLobby[player] then return true end
     local round = V.getRoundState and V.getRoundState() or "waiting"
-    -- During map voting there are no assigned roles yet: all players are lobby/inactive.
-    -- Once the 10-second role reveal has started, known players can use their actual roles.
     if round == "waiting" and not (V.isRoleRevealActive and V.isRoleRevealActive()) then return true end
     local teamName = player.Team and string.lower(tostring(player.Team.Name)) or ""
-    if string.find(teamName,"lobby",1,true) or string.find(teamName,"spectat",1,true)
-        or string.find(teamName,"waiting",1,true) or string.find(teamName,"observer",1,true) then return true end
+    if string.find(teamName,"lobby",1,true) or string.find(teamName,"spectat",1,true) or string.find(teamName,"waiting",1,true) or string.find(teamName,"observer",1,true) then return true end
     for _, container in ipairs({player, character}) do
         if container then
             for key, value in pairs(container:GetAttributes()) do
                 local name = string.lower(tostring(key))
-                if (string.find(name,"inround",1,true) or string.find(name,"ingame",1,true)
-                    or string.find(name,"isplaying",1,true) or string.find(name,"alive",1,true)) and value == false then return true end
+                if (string.find(name,"inround",1,true) or string.find(name,"ingame",1,true) or string.find(name,"isplaying",1,true) or string.find(name,"alive",1,true)) and value == false then return true end
                 if string.find(name,"state",1,true) or string.find(name,"status",1,true) or string.find(name,"location",1,true) then
                     local text = string.lower(tostring(value))
-                    if string.find(text,"lobby",1,true) or string.find(text,"spectat",1,true)
-                        or string.find(text,"dead",1,true) or string.find(text,"waiting",1,true) then return true end
+                    if string.find(text,"lobby",1,true) or string.find(text,"spectat",1,true) or string.find(text,"dead",1,true) or string.find(text,"waiting",1,true) then return true end
                 end
             end
             for _, name in ipairs({"InLobby","Spectating","Dead","IsDead"}) do
@@ -3417,44 +3718,47 @@ local function roleOf(player, character)
     return "innocent"
 end
 local function wanted(kind, role)
-    local f = state.feature[kind]
-    return f and (f.everyone or f[role]) or false
+    local filters = state.feature[kind]
+    return filters and (filters.everyone or filters[role]) or false
 end
 local function anyPlayerVisual()
-    for _, filters in pairs(state.feature) do
-        for _, enabled in pairs(filters) do if enabled then return true end end
-    end
+    for _, filters in pairs(state.feature) do for _, enabled in pairs(filters) do if enabled then return true end end end
     return false
 end
 local function clearPlayer(player)
-    local e = entries[player]
-    if not e then return end
-    if e.line then pcall(function() e.line:Remove() end) end
-    for _, item in ipairs(e.items) do pcall(function() item:Destroy() end) end
+    local entry = entries[player]
+    if not entry then return end
+    if entry.line then tracerCount = math.max(0, tracerCount - 1); pcall(function() entry.line:Remove() end) end
+    for _, item in ipairs(entry.items) do pcall(function() item:Destroy() end) end
     entries[player] = nil
 end
-local function highlight(character, suffix, tint, fill, outline, e)
+local function addHighlight(character, suffix, tint, fill, outline, entry)
     local h = Instance.new("Highlight")
-    h.Name = prefix .. suffix
-    h.Adornee = character
-    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    h.FillColor, h.OutlineColor = tint, tint
-    h.FillTransparency, h.OutlineTransparency = fill, outline
-    h.Parent = character
-    table.insert(e.items, h)
+    h.Name, h.Adornee, h.DepthMode = prefix .. suffix, character, Enum.HighlightDepthMode.AlwaysOnTop
+    h.FillColor, h.OutlineColor, h.FillTransparency, h.OutlineTransparency, h.Parent = tint, tint, fill, outline, character
+    table.insert(entry.items, h)
 end
-local function billboard(root, suffix, size, offset, e)
+local function billboard(root, suffix, size, offset, entry)
     local b = Instance.new("BillboardGui")
-    b.Name = prefix .. suffix
-    b.Adornee = root
-    b.AlwaysOnTop = true
-    b.Size = size
-    b.StudsOffset = offset
-    b.Parent = root
-    table.insert(e.items, b)
+    b.Name, b.Adornee, b.AlwaysOnTop, b.Size, b.StudsOffset, b.Parent = prefix .. suffix, root, true, size, offset, root
+    table.insert(entry.items, b)
     return b
 end
-local function apply(player)
+local function loadAvatar(player, image)
+    local cached = thumbnailCache[player.UserId]
+    if cached then image.Image = cached; return end
+    if thumbnailPending[player.UserId] then return end
+    thumbnailPending[player.UserId] = true
+    task.spawn(function()
+        local ok, asset = pcall(function() return V.players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150) end)
+        thumbnailPending[player.UserId] = nil
+        if ok and asset then
+            thumbnailCache[player.UserId] = asset
+            if image.Parent then image.Image = asset end
+        end
+    end)
+end
+local function apply(player, enabled)
     if player == V.localPlayer then return end
     local character = player.Character
     if not character then clearPlayer(player); return end
@@ -3464,13 +3768,13 @@ local function apply(player)
     local old = entries[player]
     if old and old.character == character and old.sign == sign then return end
     clearPlayer(player)
-    if not anyPlayerVisual() then return end
+    if not enabled then return end
     local tint = color(role)
-    local e = {character=character, sign=sign, tint=tint, items={}, line=nil}
-    entries[player] = e
-    if wanted("cham",role) then highlight(character,"Cham",tint,.45,1,e) end
-    if wanted("outline",role) then highlight(character,"Outline",tint,1,0,e) end
-    if wanted("highlight",role) then highlight(character,"Highlight",tint,.68,.05,e) end
+    local entry = {character=character, root=root, sign=sign, tint=tint, items={}, line=nil}
+    entries[player] = entry
+    if wanted("cham",role) then addHighlight(character,"Cham",tint,.45,1,entry) end
+    if wanted("outline",role) then addHighlight(character,"Outline",tint,1,0,entry) end
+    if wanted("highlight",role) then addHighlight(character,"Highlight",tint,.68,.05,entry) end
     if wanted("tracer",role) then
         if drawingState == nil then
             local ok, api = pcall(function() return Drawing end)
@@ -3479,47 +3783,43 @@ local function apply(player)
         if drawingState then
             local line = drawingState.new("Line")
             line.Thickness, line.Transparency, line.Color, line.Visible = 1.5, 1, tint, false
-            e.line = line
+            entry.line, tracerCount = line, tracerCount + 1
         end
     end
     if root and wanted("esp",role) then
-        local b = billboard(root,"ESP",UDim2.fromOffset(156,42),Vector3.new(0,3.4,0),e)
+        local b = billboard(root,"ESP",UDim2.fromOffset(156,42),Vector3.new(0,3.4,0),entry)
         local l = Instance.new("TextLabel")
         l.Size, l.BackgroundTransparency, l.Font, l.TextSize = UDim2.fromScale(1,1), 1, Enum.Font.GothamSemibold, 14
-        l.TextColor3, l.TextStrokeTransparency = Color3.new(1,1,1), .35
-        l.Text, l.Parent = player.DisplayName .. "\n" .. string.upper(role), b
+        l.TextColor3, l.TextStrokeTransparency, l.Text, l.Parent = Color3.new(1,1,1), .35, player.DisplayName .. "\n" .. string.upper(role), b
     end
     if root and wanted("box",role) then
-        local b = billboard(root,"Box",UDim2.fromOffset(86,122),Vector3.new(0,1.8,0),e)
+        local b = billboard(root,"Box",UDim2.fromOffset(86,122),Vector3.new(0,1.8,0),entry)
         local f = Instance.new("Frame")
         f.Size, f.BackgroundTransparency, f.Parent = UDim2.fromScale(1,1), 1, b
-        local s = Instance.new("UIStroke")
-        s.Color, s.Thickness, s.Parent = tint, 1.7, f
+        local stroke = Instance.new("UIStroke")
+        stroke.Color, stroke.Thickness, stroke.Parent = tint, 1.7, f
     end
     if root and wanted("avatar",role) then
-        local b = billboard(root,"Avatar",UDim2.fromOffset(58,58),Vector3.new(0,4.8,0),e)
+        local b = billboard(root,"Avatar",UDim2.fromOffset(58,58),Vector3.new(0,4.8,0),entry)
         local image = Instance.new("ImageLabel")
         image.Size, image.BackgroundColor3, image.BorderSizePixel, image.Parent = UDim2.fromScale(1,1), Color3.fromRGB(12,14,18), 0, b
-        local c = Instance.new("UICorner"); c.CornerRadius, c.Parent = UDim.new(1,0), image
-        local s = Instance.new("UIStroke"); s.Color, s.Thickness, s.Parent = tint, 1.5, image
-        task.spawn(function()
-            local ok, asset = pcall(function() return V.players:GetUserThumbnailAsync(player.UserId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size150x150) end)
-            if ok and image.Parent then image.Image = asset end
-        end)
+        local corner = Instance.new("UICorner"); corner.CornerRadius, corner.Parent = UDim.new(1,0), image
+        local stroke = Instance.new("UIStroke"); stroke.Color, stroke.Thickness, stroke.Parent = tint, 1.5, image
+        loadAvatar(player, image)
     end
     if root and wanted("fire",role) then
         local flame = Instance.new("Fire")
         flame.Name, flame.Color, flame.SecondaryColor, flame.Size, flame.Heat, flame.Parent = prefix.."Fire", tint, tint:Lerp(Color3.new(1,1,1),.35), 5, 7, root
-        table.insert(e.items, flame)
+        table.insert(entry.items, flame)
     end
 end
 local function refreshPlayers()
-    local seen = {}
-    for _, player in ipairs(V.getPlayers()) do
-        if player ~= V.localPlayer then seen[player] = true; apply(player) end
-    end
+    local enabled, seen = anyPlayerVisual(), {}
+    for _, player in ipairs(V.getPlayers()) do if player ~= V.localPlayer then seen[player] = true; apply(player, enabled) end end
     for player in pairs(entries) do if not seen[player] then clearPlayer(player) end end
+    state.playersDirty = false
 end
+
 local function objectType(instance)
     if not instance:IsA("BasePart") then return nil end
     local owner = instance:FindFirstAncestorOfClass("Model")
@@ -3529,78 +3829,95 @@ local function objectType(instance)
     if string.find(name,"throw",1,true) and string.find(name,"knife",1,true) then return "knife" end
 end
 local function clearObject(instance)
-    local e = objectEntries[instance]
-    if e then for _, item in ipairs(e) do pcall(function() item:Destroy() end) end; objectEntries[instance] = nil end
+    local entry = objectEntries[instance]
+    if entry then for _, item in ipairs(entry) do pcall(function() item:Destroy() end) end; objectEntries[instance] = nil end
 end
-local function refreshObjects()
-    if not state.object.gun and not state.object.knife then
-        for instance in pairs(objectEntries) do clearObject(instance) end
+local function trackObject(instance)
+    local kind = objectType(instance)
+    if not kind or not state.object[kind] then
+        if objectEntries[instance] then clearObject(instance) end
         return
     end
-    local seen = {}
-    for _, instance in ipairs(V.workspace:GetDescendants()) do
-        local kind = objectType(instance)
-        if kind and state.object[kind] then
-            seen[instance] = true
-            if not objectEntries[instance] then
-                local tint = kind == "gun" and Color3.fromRGB(72,158,255) or Color3.fromRGB(255,126,72)
-                local h = Instance.new("Highlight")
-                h.Name, h.Adornee, h.DepthMode = prefix.."Object", instance, Enum.HighlightDepthMode.AlwaysOnTop
-                h.FillColor, h.OutlineColor, h.FillTransparency, h.OutlineTransparency, h.Parent = tint,tint,.72,0,instance
-                local b = Instance.new("BillboardGui")
-                b.Name, b.Adornee, b.AlwaysOnTop, b.Size, b.StudsOffset, b.Parent = prefix.."ObjectLabel",instance,true,UDim2.fromOffset(132,24),Vector3.new(0,1.5,0),instance
-                local l = Instance.new("TextLabel")
-                l.Size,l.BackgroundTransparency,l.Font,l.TextSize,l.TextColor3,l.TextStrokeTransparency,l.Text,l.Parent = UDim2.fromScale(1,1),1,Enum.Font.GothamBold,12,tint,.35,(kind=="gun" and "DROPPED GUN" or "THROWING KNIFE"),b
-                objectEntries[instance] = {h,b}
-            end
-        end
+    if objectEntries[instance] then return end
+    local tint = kind == "gun" and Color3.fromRGB(72,158,255) or Color3.fromRGB(255,126,72)
+    local h = Instance.new("Highlight")
+    h.Name, h.Adornee, h.DepthMode = prefix.."Object", instance, Enum.HighlightDepthMode.AlwaysOnTop
+    h.FillColor, h.OutlineColor, h.FillTransparency, h.OutlineTransparency, h.Parent = tint, tint, .72, 0, instance
+    local b = Instance.new("BillboardGui")
+    b.Name, b.Adornee, b.AlwaysOnTop, b.Size, b.StudsOffset, b.Parent = prefix.."ObjectLabel", instance, true, UDim2.fromOffset(132,24), Vector3.new(0,1.5,0), instance
+    local l = Instance.new("TextLabel")
+    l.Size, l.BackgroundTransparency, l.Font, l.TextSize, l.TextColor3, l.TextStrokeTransparency, l.Text, l.Parent = UDim2.fromScale(1,1),1,Enum.Font.GothamBold,12,tint,.35,(kind=="gun" and "DROPPED GUN" or "THROWING KNIFE"),b
+    objectEntries[instance] = {h,b}
+end
+local function refreshObjects(fullScan)
+    if fullScan and (state.object.gun or state.object.knife) then for _, instance in ipairs(V.workspace:GetDescendants()) do trackObject(instance) end end
+    for instance in pairs(objectEntries) do
+        local kind = instance.Parent and objectType(instance)
+        if not kind or not state.object[kind] then clearObject(instance) end
     end
-    for instance in pairs(objectEntries) do if not seen[instance] or not instance.Parent then clearObject(instance) end end
 end
 local function setFilter(kind, filter, enabled)
     state.feature[kind][filter] = enabled == true
-    state.revision = state.revision + 1
+    state.revision, state.playersDirty = state.revision + 1, true
     safe("player refresh", refreshPlayers)
 end
 local function setObject(kind, enabled)
     state.object[kind] = enabled == true
-    safe("object refresh", refreshObjects)
+    safe("object refresh", function() refreshObjects(true) end)
 end
+
 V.runService.RenderStepped:Connect(function()
-    if not next(entries) then return end
-    safe("tracer", function()
-        local camera = V.workspace.CurrentCamera
-        if not camera then return end
-        local viewport, origin = camera.ViewportSize, nil
-        origin = Vector2.new(viewport.X*.5,viewport.Y)
-        for _, e in pairs(entries) do
-            if e.line then
-                local root = e.character and e.character:FindFirstChild("HumanoidRootPart")
-                if root then
-                    local point, visible = camera:WorldToViewportPoint(root.Position)
-                    e.line.From,e.line.To,e.line.Color,e.line.Visible = origin,Vector2.new(point.X,point.Y),e.tint,visible and point.Z>0
-                else e.line.Visible = false end
-            end
+    if tracerCount <= 0 then return end
+    local camera = V.workspace.CurrentCamera
+    if not camera then return end
+    local viewport, origin = camera.ViewportSize, Vector2.new(camera.ViewportSize.X*.5,camera.ViewportSize.Y)
+    for _, entry in pairs(entries) do
+        local line, root = entry.line, entry.root
+        if line then
+            if root and root.Parent and root:IsDescendantOf(entry.character) then
+                local point, visible = camera:WorldToViewportPoint(root.Position)
+                line.From, line.To, line.Color, line.Visible = origin, Vector2.new(point.X,point.Y), entry.tint, visible and point.Z > 0
+            else line.Visible = false end
         end
-    end)
+    end
 end)
+local function watchCharacter(player, character)
+    markPlayersDirty()
+    task.defer(function()
+        local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+        if humanoid then humanoid.Died:Connect(markPlayersDirty) end
+    end)
+end
+for _, player in ipairs(V.getPlayers()) do
+    if player.Character then watchCharacter(player, player.Character) end
+    player.CharacterAdded:Connect(function(character) watchCharacter(player, character) end)
+end
 V.players.PlayerAdded:Connect(function(player)
-    -- A user arriving after roles have been dealt is in the lobby for this round.
     if V.isRoleRevealActive and V.isRoleRevealActive() then joinedLobby[player] = true end
+    player.CharacterAdded:Connect(function(character) watchCharacter(player, character) end)
+    markPlayersDirty()
 end)
 V.players.PlayerRemoving:Connect(function(player)
     joinedLobby[player] = nil
-    safe("cleanup",function() clearPlayer(player) end)
+    clearPlayer(player)
 end)
+V.workspace.DescendantAdded:Connect(function(instance)
+    if state.object.gun or state.object.knife then task.defer(trackObject, instance) end
+end)
+V.workspace.DescendantRemoving:Connect(function(instance)
+    if objectEntries[instance] then clearObject(instance) end
+end)
+
 task.spawn(function()
     while V.isRunning() do
         local revealing = V.isRoleRevealActive and V.isRoleRevealActive() or false
-        -- The first role reveal of a new round admits players that were waiting before it.
-        if revealing and not roleRevealActive then table.clear(joinedLobby) end
+        if revealing and not roleRevealActive then table.clear(joinedLobby); markPlayersDirty() end
+        if revealing ~= roleRevealActive then markPlayersDirty() end
         roleRevealActive = revealing
-        if anyPlayerVisual() or next(entries) then safe("player update",refreshPlayers) end
-        if state.object.gun or state.object.knife or next(objectEntries) then safe("object update",refreshObjects) end
-        task.wait(.35)
+        -- Event changes refresh immediately; this slow fallback covers unusual maps that do not signal character state changes.
+        if state.playersDirty or anyPlayerVisual() then safe("player update", refreshPlayers) end
+        if next(objectEntries) then safe("object cleanup", function() refreshObjects(false) end) end
+        task.wait(1)
     end
 end)
 
@@ -3608,8 +3925,8 @@ local filters = {{"Everyone","everyone"},{"Murderer Only","murderer"},{"Sheriff 
 for _, definition in ipairs({{"CHAM","cham"},{"ESP","esp"},{"OUTLINE","outline"},{"HIGHLIGHT","highlight"},{"TRACER","tracer"},{"ESP BOX","box"},{"ESP AVATAR","avatar"},{"ESP FIRE","fire"}}) do
     local title, kind = definition[1], definition[2]
     local section = V.tab:AddSection("VISUAL \u{2022} "..title,"BY PLAYER")
-    for _, f in ipairs(filters) do
-        local label, filter = f[1], f[2]
+    for _, filterDefinition in ipairs(filters) do
+        local label, filter = filterDefinition[1], filterDefinition[2]
         section:AddToggle(label,function(enabled) safe("toggle",function() setFilter(kind,filter,enabled) end) end)
     end
 end
@@ -5209,7 +5526,7 @@ serverMods:AddToggle("Show Round Timer", setRoundTimerVisible)
 serverMods:AddToggle("Instant Role Detection", function(v) instantRoleDetection = v; if v then task.spawn(refreshTarget) end end)
 serverMods:AddToggle("Auto Notify Roles", function(v) autoNotifyRoles = v; if not v then table.clear(announcedRoles) else task.spawn(refreshTarget) end end)
 serverMods:AddButton("Show Murderer Chance", showMurdererChance)
-serverMods:AddButton("Refresh Roles", refreshTarget)
+serverMods:AddButton("Refresh Roles", function() refreshTarget(true) end)
 serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
 
 local gunUtilities = tab:AddSection("WORLD \u{2022} GUN", "Auto GG, pickup, aura, notifications and bind button")
@@ -5388,13 +5705,19 @@ function connectRemote(name, handler)
     return first
 end
 
-connectRemote("PlayerDataChanged", function(data) consumeData(data) end)
+connectRemote("PlayerDataChanged", function(first, second)
+    if typeof(second) == "table" and typeof(first) == "Instance" and first:IsA("Player") then
+        consumeData({ [first.Name] = second }, false)
+    else
+        consumeData(first, false)
+    end
+end)
 connectRemote("RoundStart", function(timerValue, roundData)
     beginRoundTimer(timerValue)
     murderer, sheriff, hero = nil, nil, nil
     table.clear(roleCache); table.clear(announcedRoles)
-    if typeof(roundData) == "table" then consumeData(roundData) end
-    task.spawn(refreshTarget)
+    if typeof(roundData) == "table" then consumeData(roundData, true) end
+    refreshTarget(true)
 end)
 local function finishRound()
     resetRoundTimer()
