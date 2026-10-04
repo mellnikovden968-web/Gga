@@ -2017,7 +2017,8 @@ task.defer(function()
     if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
 
     local runtime = { stopped = false, connections = {}, bindConnections = {}, gui = nil, button = nil,
-        dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil, nextAction = 0 }
+        dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
+        poseBind = "NoirKnifeDualArmPose", nextAction = 0 }
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
         runtime.connections[#runtime.connections + 1] = connection
@@ -2221,10 +2222,17 @@ task.defer(function()
     end
     function runtime:KillSheriff() return killSheriff(false) end
     function runtime:KillEveryone() return killEveryone(false) end
-    runtime.connections[#runtime.connections + 1] = RunService.RenderStepped:Connect(function()
+    pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
+    RunService:BindToRenderStep(runtime.poseBind, Enum.RenderPriority.Last.Value, function()
         if runtime.stopped or not config.knifeDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
         local left, right = runtime.dualLeftShoulder, runtime.dualRightShoulder
-        if left and right and left.Parent and right.Parent then pcall(function() left.Transform = right.Transform end) end
+        if left and left.Parent then
+            pcall(function()
+                local pose = right and right.Parent and right.Transform or CFrame.new()
+                if pose == CFrame.new() then pose = CFrame.Angles(math.rad(-68), 0, math.rad(48)) end
+                left.Transform = pose
+            end)
+        end
     end)
     runtime.connections[#runtime.connections + 1] = RunService.Heartbeat:Connect(function()
         if runtime.stopped then return end
@@ -2235,6 +2243,7 @@ task.defer(function()
     function runtime:Stop()
         if runtime.stopped then return end
         runtime.stopped = true
+        pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
         for _, connection in ipairs(runtime.connections) do pcall(function() connection:Disconnect() end) end
         destroyBind(); destroyDualVisual()
     end
@@ -2310,7 +2319,7 @@ task.defer(function()
     if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
 
     local runtime = { stopped = false, connections = {}, dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
-        lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
+        poseBind = "NoirGunDualArmPose", lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
     local function equippedGun()
         local character = LocalPlayer.Character
         return character and character:FindFirstChild("Gun") or nil
@@ -2380,12 +2389,20 @@ task.defer(function()
         if not visible or (Vector2.new(projected.X, projected.Y) - Vector2.new(center.X, center.Y)).Magnitude > 26 then return false end
         return not config.gunTriggerBotWallCheck or targetVisible(part, true)
     end
+    pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
+    RunService:BindToRenderStep(runtime.poseBind, Enum.RenderPriority.Last.Value, function()
+        if runtime.stopped or not config.gunDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
+        local left, right = runtime.dualLeftShoulder, runtime.dualRightShoulder
+        if left and left.Parent then
+            pcall(function()
+                local pose = right and right.Parent and right.Transform or CFrame.new()
+                if pose == CFrame.new() then pose = CFrame.Angles(math.rad(-68), 0, math.rad(48)) end
+                left.Transform = pose
+            end)
+        end
+    end)
     runtime.connections[#runtime.connections + 1] = RunService.RenderStepped:Connect(function()
         if runtime.stopped then return end
-        local left, right = runtime.dualLeftShoulder, runtime.dualRightShoulder
-        if config.gunDualEffect and runtime.dualVisual and runtime.dualVisual.Parent and left and right and left.Parent and right.Parent then
-            pcall(function() left.Transform = right.Transform end)
-        end
         local now = os.clock()
         if now >= runtime.nextVisualCheck then runtime.nextVisualCheck = now + .25; refreshDual() end
         if not config.gunTriggerBot then runtime.wasPointing = false; return end
@@ -2401,6 +2418,7 @@ task.defer(function()
     function runtime:Stop()
         if runtime.stopped then return end
         runtime.stopped = true
+        pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
         for _, connection in ipairs(runtime.connections) do pcall(function() connection:Disconnect() end) end
         destroyDual()
     end
@@ -3805,7 +3823,7 @@ task.defer(function()
         local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
         local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner; table.insert(gradientStrokes, innerGradient)
         local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76),
-            BackgroundTransparency = 1, Text = "Aimlock", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 11, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 9 })
+            BackgroundTransparency = 1, Text = "Aimlock", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 12, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 9 })
         local pressScale = New("UIScale", { Parent = button, Scale = 1 })
         aim.bindOuterGradient, aim.bindInnerGradient, aim.bindPressScale = outerGradient, innerGradient, pressScale
         local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
