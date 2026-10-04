@@ -2953,6 +2953,7 @@ task.defer(function()
         optimizeCoins = false, removeChroma = false, removePets = false, removeCoins = false, removeCorpses = false,
         noRespawnDelay = false, partOriginals = {}, effectOriginals = {}, postOriginals = {},
         coinOriginals = {}, hiddenPets = {}, hiddenCoins = {}, hiddenCorpses = {}, chromaOriginals = {}, perfConnection = nil,
+        respawnFadeOriginals = {}, respawnFadeConnections = {},
         originalRespawnTime = Players.RespawnTime, originalGlobalShadows = Lighting.GlobalShadows,
         savedQuality = nil, savedMeshDetail = nil, savedDecoration = nil,
     }
@@ -2964,11 +2965,14 @@ task.defer(function()
             or instance:IsA("Fire") or instance:IsA("Sparkles") or instance:IsA("Beam")
             or instance:IsA("PointLight") or instance:IsA("SpotLight") or instance:IsA("SurfaceLight")
     end
+    -- RenderFidelity belongs to MeshPart, not ordinary Part. Delta surfaced that distinction as a runtime error.
+    local performanceFidelity = nil
+    pcall(function() performanceFidelity = Enum.RenderFidelity.Performance end)
     local function restorePerformance()
         for instance, original in pairs(state.partOriginals) do
             if instance and instance.Parent then
                 setProperty(instance, "CastShadow", original.castShadow)
-                setProperty(instance, "RenderFidelity", original.renderFidelity)
+                if original.renderFidelity ~= nil then setProperty(instance, "RenderFidelity", original.renderFidelity) end
             end
         end
         for instance, enabled in pairs(state.effectOriginals) do if instance and instance.Parent then setProperty(instance, "Enabled", enabled) end end
@@ -2990,9 +2994,14 @@ task.defer(function()
         local reduceEffects = state.fpsBoost or state.lessLag or state.frameEnhancement
         local lowFidelity = state.fpsBoost or state.frameEnhancement
         if instance:IsA("BasePart") then
-            if state.partOriginals[instance] == nil then state.partOriginals[instance] = { castShadow = instance.CastShadow, renderFidelity = instance.RenderFidelity } end
+            if state.partOriginals[instance] == nil then
+                local original = { castShadow = instance.CastShadow }
+                -- Non-MeshPart BaseParts do not expose RenderFidelity.
+                if instance:IsA("MeshPart") then original.renderFidelity = instance.RenderFidelity end
+                state.partOriginals[instance] = original
+            end
             if disableShadows then setProperty(instance, "CastShadow", false) end
-            if lowFidelity then setProperty(instance, "RenderFidelity", Enum.RenderFidelity.Disabled) end
+            if lowFidelity and instance:IsA("MeshPart") and performanceFidelity then setProperty(instance, "RenderFidelity", performanceFidelity) end
         elseif isVisualEffect(instance) then
             if state.effectOriginals[instance] == nil then state.effectOriginals[instance] = instance.Enabled end
             if reduceEffects then setProperty(instance, "Enabled", false) end
@@ -3098,8 +3107,74 @@ task.defer(function()
         for _, instance in ipairs(Workspace:GetDescendants()) do applyAutoVisuals(instance) end
         for _, instance in ipairs(Lighting:GetDescendants()) do applyAutoVisuals(instance) end
     end
+    -- MM2 owns the real respawn timer server-side. This removes only its local full-screen black fade,
+    -- leaving normal menus intact and restoring the exact UI state when the option is disabled.
+    local function isRespawnFade(instance)
+        if not (instance:IsA("Frame") or instance:IsA("ImageLabel") or instance:IsA("TextLabel")) then return false end
+        local name = string.lower(instance.Name or "")
+        local tagged = string.find(name, "fade", 1, true) or string.find(name, "black", 1, true)
+            or string.find(name, "death", 1, true) or string.find(name, "respawn", 1, true)
+            or string.find(name, "roundend", 1, true) or string.find(name, "transition", 1, true)
+        local size = instance.Size
+        local fullscreen = size.X.Scale >= .82 and size.Y.Scale >= .82
+        -- Some MM2 revisions call the fade simply "Frame". A genuinely full-screen near-black GuiObject is
+        -- treated as the respawn overlay too; this avoids relying solely on a fragile instance name.
+        local tint = instance:IsA("ImageLabel") and instance.ImageColor3 or instance.BackgroundColor3
+        local nearBlack = tint.R <= .12 and tint.G <= .12 and tint.B <= .12
+        if fullscreen and (tagged or nearBlack) then return true end
+        if not tagged then return false end
+        -- MM2 variants sometimes nest a small named frame inside a full fade ScreenGui.
+        local ancestor = instance.Parent
+        while ancestor and not ancestor:IsA("ScreenGui") do ancestor = ancestor.Parent end
+        return ancestor ~= nil and (string.find(name, "fade", 1, true) or string.find(name, "black", 1, true))
+    end
+    local function suppressRespawnFade(instance)
+        if not state.noRespawnDelay or not isRespawnFade(instance) then return end
+        if state.respawnFadeOriginals[instance] == nil then
+            state.respawnFadeOriginals[instance] = {
+                background = instance.BackgroundTransparency,
+                image = instance:IsA("ImageLabel") and instance.ImageTransparency or nil,
+                text = instance:IsA("TextLabel") and instance.TextTransparency or nil,
+            }
+        end
+        setProperty(instance, "BackgroundTransparency", 1)
+        if instance:IsA("ImageLabel") then setProperty(instance, "ImageTransparency", 1) end
+        if instance:IsA("TextLabel") then setProperty(instance, "TextTransparency", 1) end
+    end
+    local function restoreRespawnFades()
+        for instance, original in pairs(state.respawnFadeOriginals) do
+            if instance and instance.Parent then
+                setProperty(instance, "BackgroundTransparency", original.background)
+                if original.image ~= nil then setProperty(instance, "ImageTransparency", original.image) end
+                if original.text ~= nil then setProperty(instance, "TextTransparency", original.text) end
+            end
+        end
+        table.clear(state.respawnFadeOriginals)
+    end
+    local function scanRespawnFades(parent)
+        if not parent then return end
+        for _, instance in ipairs(parent:GetDescendants()) do suppressRespawnFade(instance) end
+    end
+    local function setNoRespawnDelay(enabled)
+        state.noRespawnDelay = enabled == true
+        pcall(function() Players.RespawnTime = state.noRespawnDelay and 0 or state.originalRespawnTime end)
+        if state.noRespawnDelay then
+            scanRespawnFades(LocalPlayer:FindFirstChildOfClass("PlayerGui"))
+            scanRespawnFades(CoreGui)
+        else
+            restoreRespawnFades()
+        end
+    end
     Workspace.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
     Lighting.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
+    local function watchRespawnFades(parent)
+        if parent then state.respawnFadeConnections[#state.respawnFadeConnections + 1] = parent.DescendantAdded:Connect(function(instance) task.defer(suppressRespawnFade, instance) end) end
+    end
+    watchRespawnFades(LocalPlayer:FindFirstChildOfClass("PlayerGui"))
+    watchRespawnFades(CoreGui)
+    LocalPlayer.ChildAdded:Connect(function(child)
+        if child:IsA("PlayerGui") then watchRespawnFades(child); if state.noRespawnDelay then task.defer(scanRespawnFades, child) end end
+    end)
     local function hookCorpse(character)
         local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
         if humanoid then humanoid.Died:Connect(function() if state.removeCorpses then task.defer(setHidden, character, state.hiddenCorpses, true) end end) end
@@ -3137,12 +3212,9 @@ task.defer(function()
         state.removeCorpses = enabled == true
         if state.removeCorpses then scanAutoVisuals() else restoreHidden(state.hiddenCorpses) end
     end)
-    fpsSection:AddToggle("No Respawn Delay", function(enabled)
-        state.noRespawnDelay = enabled == true
-        pcall(function() Players.RespawnTime = state.noRespawnDelay and 0 or state.originalRespawnTime end)
-    end)
+    fpsSection:AddToggle("No Respawn Delay", setNoRespawnDelay)
     fpsSection:AddToggle("Enable Frame Enhancement", function(enabled) state.frameEnhancement = enabled == true; refreshPerformance() end)
-    fpsSection:AddLabel("No Respawn Delay applies the local respawn-time preference; a game server may still enforce its own timer.")
+    fpsSection:AddLabel("No Respawn Delay hides the local MM2 black fade and sets local respawn time to zero; the server can still control actual character spawning.")
 end)
 
 -- Main universal utilities: all state stays in this scope while the connections retain only what they need.
