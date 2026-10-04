@@ -912,9 +912,10 @@ local config = {
     },
     knifeEnabled = false,
     knifeWallCheck = false,
-    knifePiercer = false,
     knifePrioritizeSheriff = false,
     knifeAutoThrow = false,
+    -- Preserve the prior always-on behavior while allowing the thrown-knife touch aura to be disabled independently.
+    knifeThrownAura = true,
     knifeRadius = 15,
     showShootButton = false,
     lockShootButton = false,
@@ -1424,7 +1425,7 @@ local function piercerShotOrigin(origin, aim, part, enabled)
 end
 
 function knifeRemote(remote, args)
-    if not (config.knifeEnabled or config.knifePiercer) or args.n < 2 then return false end
+    if not config.knifeEnabled or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if remote.Name ~= "KnifeThrown" then return false end
     if typeof(args[1]) ~= "CFrame" or typeof(args[2]) ~= "CFrame" then return false end
@@ -1487,7 +1488,7 @@ function redirect(remote, args)
         -- Piercer Bullet keeps the gun redirect active and deliberately bypasses only the local gun wall gate.
         useWallCheck = config.wallCheck and not config.piercerBullet
     elseif knifeRemote(remote, args) then
-        part = knifeTargetPart(); useWallCheck = config.knifeWallCheck and not config.knifePiercer; isKnife = true
+        part = knifeTargetPart(); useWallCheck = config.knifeWallCheck; isKnife = true
     else
         return
     end
@@ -1497,9 +1498,8 @@ function redirect(remote, args)
     if isKnife then
         local origin = args[1].Position
         local aim = calculateKnifeAim(part, origin)
-        local shotOrigin = piercerShotOrigin(origin, aim, part, config.knifePiercer)
-        if (config.alignDirection or shotOrigin ~= origin) and (aim - shotOrigin).Magnitude > 0.01 then
-            args[1] = CFrame.lookAt(shotOrigin, aim)
+        if config.alignDirection and (aim - origin).Magnitude > 0.01 then
+            args[1] = CFrame.lookAt(origin, aim)
         end
         args[2] = CFrame.new(aim)
         redirected = redirected + 1
@@ -1600,14 +1600,6 @@ function setPiercerBullet(value)
     end
 end
 
-function setKnifePiercer(value)
-    config.knifePiercer = value == true
-    if config.knifePiercer and not installHook() then
-        config.knifePiercer = false
-        notify("Piercer Knife Throw requires hook support", 4)
-    end
-end
-
 do
     local CollectionService = game:GetService("CollectionService")
     local touch = type(firetouchinterest) == "function" and firetouchinterest or nil
@@ -1678,7 +1670,7 @@ do
     end
 
     local function step()
-        if not config.knifeEnabled or next(active) == nil then stopStep() return end
+        if not config.knifeEnabled or not config.knifeThrownAura or next(active) == nil then stopStep() return end
         local now = os.clock()
         local radius = config.knifeRadius
         for knife, data in pairs(active) do
@@ -1702,7 +1694,7 @@ do
     end
 
     local function track(knife)
-        if active[knife] or not config.knifeEnabled then return end
+        if active[knife] or not config.knifeEnabled or not config.knifeThrownAura then return end
         local isKnife = knife.Name == "ThrowingKnife" or knife:HasTag("ThrowingKnife")
             or knife:FindFirstChild("HandleLink") ~= nil or knife:FindFirstChild("BladePosition") ~= nil
         if not isKnife then return end
@@ -2057,8 +2049,9 @@ function exportRevertConfig()
             ignoreFriends = config.ignoreFriends, maxDistance = config.maxDistance,
             adaptive = config.adaptive, fixedLead = config.fixedLead, extraLead = config.extraLead,
             alignDirection = config.alignDirection,
-            knifeWallCheck = config.knifeWallCheck, knifePiercer = config.knifePiercer,
+            knifeWallCheck = config.knifeWallCheck,
             knifePrioritizeSheriff = config.knifePrioritizeSheriff, knifeAutoThrow = config.knifeAutoThrow,
+            knifeThrownAura = config.knifeThrownAura,
             knifeAim = {
                 adaptive = config.knifeAim.adaptive,
                 fixedLead = config.knifeAim.fixedLead,
@@ -2109,10 +2102,10 @@ function applyRevertConfig(data)
             if typeof(noir[key]) == "number" then config[key] = noir[key] end
         end
         for _, key in ipairs({ "autoFire", "wallCheck", "piercerBullet", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
-                               "knifeWallCheck", "knifePiercer", "knifePrioritizeSheriff", "knifeAutoThrow" }) do
+                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow", "knifeThrownAura" }) do
             if typeof(noir[key]) == "boolean" then config[key] = noir[key] end
         end
-        if config.piercerBullet or config.knifePiercer then task.defer(installHook) end
+        if config.piercerBullet then task.defer(installHook) end
         local knifeAim = noir.knifeAim
         if typeof(knifeAim) == "table" then
             for _, key in ipairs({ "fixedLead", "extraLead", "maxSimulationMs", "predictionIntervalMs", "manualPingMs", "offsetX", "offsetY", "offsetZ", "horizontalMultiplier", "verticalMultiplier" }) do
@@ -4704,9 +4697,9 @@ do
     combatAim:AddToggle("Show Shoot Murder Button", setShootButtonVisible)
     combatAim:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton=v==true end)
 
-    local combatSheriff=tab:AddSection("SHERIFF", "Gun bullet controls")
-    combatSheriff:AddToggle("Piercer Bullet", setPiercerBullet)
-    combatSheriff:AddLabel("Sends a target-side Gun ray only when a wall blocks the selected target.")
+    local combatGun=tab:AddSection("GUN", "Gun targeting controls")
+    combatGun:AddToggle("Piercer Bullet", setPiercerBullet)
+    combatGun:AddLabel("Sends a target-side Gun ray when a wall blocks the selected target.")
 
     local combatKnife=tab:AddSection("KNIFE SILENT AIM", "Nearest player or Sheriff-only targeting")
     combatKnife:AddToggle("Knife Silent Aim", function(v)
@@ -4720,10 +4713,9 @@ do
         NoirPersistence.data.sliders[newKnifeAuraKey] = NoirPersistence.data.sliders[oldKnifeAuraKey]
         NoirPersistence.Save()
     end
+    combatKnife:AddToggle("KnifeThrown Aura", function(v) config.knifeThrownAura=v==true end)
     combatKnife:AddSlider("Knife Throw Aura", 1, 40, config.knifeRadius, function(v) config.knifeRadius = tonumber(v) or config.knifeRadius end)
     combatKnife:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck=v==true end)
-    combatKnife:AddToggle("Piercer Knife Throw", setKnifePiercer)
-    combatKnife:AddLabel("Sends KnifeThrown from the target side only when a wall blocks its path.")
     combatKnife:AddToggle("Prioritize Sheriff", function(v)
         config.knifePrioritizeSheriff=v==true
     end)
