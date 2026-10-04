@@ -937,14 +937,21 @@ function host.CreateTab()
                 New("UIGradient", { Parent = darkBlend, Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0) }) })
                 local spectrumKnob = New("Frame", { Parent = spectrum, AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(17, 17), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 76 })
                 corner(spectrumKnob, 9); New("UIStroke", { Parent = spectrumKnob, Color = C.text, Thickness = 2 })
-                local hueBar = New("Frame", { Parent = valueCard, Position = UDim2.fromOffset(17, 223), Size = UDim2.fromOffset(328, 16), BackgroundColor3 = Color3.fromRGB(255, 0, 0), BorderSizePixel = 0, Active = true, ZIndex = 73 })
-                corner(hueBar, 8); stroke(hueBar, C.border, .25)
-                New("UIGradient", { Parent = hueBar, Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)), ColorSequenceKeypoint.new(.166, Color3.fromRGB(255, 255, 0)),
-                    ColorSequenceKeypoint.new(.333, Color3.fromRGB(0, 255, 0)), ColorSequenceKeypoint.new(.5, Color3.fromRGB(0, 255, 255)),
-                    ColorSequenceKeypoint.new(.666, Color3.fromRGB(0, 0, 255)), ColorSequenceKeypoint.new(.833, Color3.fromRGB(255, 0, 255)),
-                    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
-                }) })
+                -- Use explicit rainbow segments rather than a long UIGradient: this renders reliably in mobile executors.
+                local hueBar = New("Frame", { Parent = valueCard, Position = UDim2.fromOffset(17, 223), Size = UDim2.fromOffset(328, 16), BackgroundTransparency = 1, BorderSizePixel = 0, Active = true, ZIndex = 73 })
+                local rainbowTrack = New("Frame", { Parent = hueBar, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 73 })
+                corner(rainbowTrack, 8); stroke(rainbowTrack, C.border, .25)
+                local rainbow = {
+                    Color3.fromRGB(255, 0, 0), Color3.fromRGB(255, 72, 0), Color3.fromRGB(255, 150, 0), Color3.fromRGB(255, 225, 0),
+                    Color3.fromRGB(170, 255, 0), Color3.fromRGB(65, 255, 0), Color3.fromRGB(0, 255, 90), Color3.fromRGB(0, 255, 180),
+                    Color3.fromRGB(0, 235, 255), Color3.fromRGB(0, 155, 255), Color3.fromRGB(0, 65, 255), Color3.fromRGB(75, 0, 255),
+                    Color3.fromRGB(150, 0, 255), Color3.fromRGB(220, 0, 255), Color3.fromRGB(255, 0, 190), Color3.fromRGB(255, 0, 105),
+                    Color3.fromRGB(255, 0, 42), Color3.fromRGB(255, 0, 0),
+                }
+                for index, rainbowColor in ipairs(rainbow) do
+                    New("Frame", { Parent = rainbowTrack, Position = UDim2.new((index - 1) / #rainbow, 0, 0, 0), Size = UDim2.new(1 / #rainbow, 1, 0, 0),
+                        BackgroundColor3 = rainbowColor, BorderSizePixel = 0, ZIndex = 74 })
+                end
                 local hueKnob = New("Frame", { Parent = hueBar, AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(11, 24), BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = 76 })
                 corner(hueKnob, 5); New("UIStroke", { Parent = hueKnob, Color = Color3.new(0, 0, 0), Thickness = 1 })
                 New("TextLabel", { Parent = valueCard, Position = UDim2.fromOffset(17, 252), Size = UDim2.fromOffset(44, 16), BackgroundTransparency = 1, Text = "HEX", TextColor3 = C.dim, TextSize = 11, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 73 })
