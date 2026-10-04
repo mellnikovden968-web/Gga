@@ -5949,8 +5949,11 @@ do
 
     -- Omega/CFG is adapted to Noir's real pistol prediction table; it never touches odh_internal_shared/MM2_GPL.
     do
-        local omega = { enabled = false, adaptive = true, locked = false, upgrade = false, monitor = false,
-            lastApply = -1e9, currentProfile = "--", classicIndex = nil, statusControl = nil }
+        local priorOmega = getgenv().__NoirOmegaRuntime
+        if type(priorOmega) == "table" and type(priorOmega.Stop) == "function" then pcall(priorOmega.Stop) end
+        local omega = { enabled = false, adaptive = true, locked = false, upgrade = false, monitor = false, stopped = false,
+            lastApply = -1e9, currentProfile = "--", classicIndex = nil, statusControl = nil,
+            monitorGui = nil, monitorLabels = nil }
         local function pingMilliseconds()
             return math.clamp(math.floor(cachedPing * 1000 + .5), 5, 1000)
         end
@@ -5970,11 +5973,60 @@ do
             end
             return classicOmegaProfile(ping)
         end
+        local function destroyOmegaMonitor()
+            if omega.monitorGui then omega.monitorGui:Destroy() end
+            omega.monitorGui, omega.monitorLabels = nil, nil
+            for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+                if parent then
+                    local stale = parent:FindFirstChild("NoirOmegaMonitor")
+                    if stale then stale:Destroy() end
+                end
+            end
+        end
+        local function createOmegaMonitor()
+            if omega.monitorGui and omega.monitorGui.Parent then return end
+            destroyOmegaMonitor()
+            local parent = guiParent
+            if typeof(parent) ~= "Instance" then parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") end
+            if typeof(parent) ~= "Instance" then return end
+            local screen = New("ScreenGui", { Parent = parent, Name = "NoirOmegaMonitor", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 82, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+            local card = New("Frame", { Parent = screen, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -20, 0, 108), Size = UDim2.fromOffset(264, 112), BackgroundColor3 = Color3.fromRGB(10, 12, 16), BackgroundTransparency = .12, BorderSizePixel = 0 })
+            corner(card, 14); stroke(card, C.accent, .22)
+            local accent = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 15), Size = UDim2.fromOffset(3, 54), BackgroundColor3 = C.accent, BorderSizePixel = 0 }); corner(accent, 2)
+            local title = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(16, 10), Size = UDim2.fromOffset(230, 20), BackgroundTransparency = 1, Text = "OMEGA • SILENT AIM", TextColor3 = C.text, TextSize = 13, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left })
+            local function line(y)
+                return New("TextLabel", { Parent = card, Position = UDim2.fromOffset(16, y), Size = UDim2.fromOffset(232, 17), BackgroundTransparency = 1, Text = "", TextColor3 = C.dim, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+            end
+            omega.monitorGui = screen
+            omega.monitorLabels = { state = line(36), config = line(56), values = line(76) }
+        end
+        local function setText(label, value)
+            if label and label.Text ~= value then label.Text = value end
+        end
+        local function syncOmegaControls()
+            local values = {
+                maxSimulationMs = config.maxSimulationMs, predictionIntervalMs = config.predictionIntervalMs, manualPingMs = config.manualPingMs,
+                offsetX = config.offsetX, offsetY = config.offsetY, offsetZ = config.offsetZ,
+                horizontalMultiplier = config.horizontalMultiplier, verticalMultiplier = config.verticalMultiplier,
+            }
+            for key, value in pairs(values) do
+                local control = noirMirrorControls["pistol." .. key]
+                if type(control) == "table" and type(control.SetValue) == "function" then
+                    local current = type(control.GetValue) == "function" and control:GetValue() or nil
+                    if tonumber(current) ~= tonumber(value) then pcall(control.SetValue, control, value) end
+                end
+            end
+        end
         local function updateOmegaStatus()
-            if not omega.statusControl then return end
             local state = not omega.enabled and "OFF" or omega.locked and "LOCKED" or "ON"
             local mode = omega.adaptive and "Adaptive" or "Classic"
-            omega.statusControl:SetValue("Omega: " .. state .. "  |  " .. pingMilliseconds() .. " ms  |  " .. mode .. "  |  " .. omega.currentProfile .. (omega.upgrade and "  +Upgrade" or ""))
+            local summary = "Omega: " .. state .. "  |  " .. pingMilliseconds() .. " ms  |  " .. mode .. "  |  " .. omega.currentProfile .. (omega.upgrade and "  +Upgrade" or "")
+            if omega.statusControl then omega.statusControl:SetValue(summary) end
+            if omega.monitorLabels then
+                setText(omega.monitorLabels.state, state .. "  •  " .. mode .. (omega.upgrade and "  •  UPGRADE" or ""))
+                setText(omega.monitorLabels.config, "Ping " .. pingMilliseconds() .. " ms  •  " .. omega.currentProfile)
+                setText(omega.monitorLabels.values, "Sim " .. tostring(config.maxSimulationMs) .. "  |  Int " .. tostring(config.predictionIntervalMs) .. "  |  H/V " .. tostring(config.horizontalMultiplier) .. "/" .. tostring(config.verticalMultiplier))
+            end
         end
         local function applyOmega(force)
             local now = os.clock()
@@ -5983,16 +6035,16 @@ do
             if not omega.enabled or omega.locked then updateOmegaStatus(); return end
             local ping = pingMilliseconds()
             local profile, name = omegaConfig(ping)
-            if omega.upgrade then
-                profile.Sim += 1; profile.H += 2; profile.V += 2
-            end
-            -- Direct Noir mapping: these are the same controls CFG maps through MM2_GPL slots 4..10.
+            if omega.upgrade then profile.Sim += 1; profile.H += 2; profile.V += 2 end
+            -- Direct Noir mapping: these are the same prediction values CFG writes through MM2_GPL slots 4..10.
             config.maxSimulationMs = profile.Sim
             config.predictionIntervalMs = profile.Interval
             config.offsetX, config.offsetY, config.offsetZ = profile.X, profile.Y, profile.Z
             config.horizontalMultiplier, config.verticalMultiplier = profile.H, profile.V
             config.manualPingMs = ping
             omega.currentProfile = name
+            -- Mirror the live pistol values into Noir's existing Pistol Prediction sliders without unnecessary saves.
+            syncOmegaControls()
             updateOmegaStatus()
         end
         local function reconfigureOmega()
@@ -6025,6 +6077,7 @@ do
         end)
         combatAim:AddToggle("Omega Monitor", function(enabled)
             omega.monitor = enabled == true
+            if omega.monitor then createOmegaMonitor() else destroyOmegaMonitor() end
             updateOmegaStatus()
         end)
         combatAim:AddButton("Omega Print Telemetry", telemetryOmega)
@@ -6032,11 +6085,18 @@ do
         combatAim:AddLabel("Omega changes pistol prediction only. Disable it to stop updates; the last applied values stay in place.")
 
         task.spawn(function()
-            while running do
+            while running and not omega.stopped do
                 if omega.enabled or omega.monitor then applyOmega(false) end
                 task.wait(.4)
             end
         end)
+        getgenv().__NoirOmegaRuntime = {
+            Stop = function()
+                omega.stopped = true
+                destroyOmegaMonitor()
+            end,
+            Sync = function() syncOmegaControls(); updateOmegaStatus() end,
+        }
     end
 
     local combatGun=tab:AddSection("GUN", "Gun targeting controls")
@@ -6166,6 +6226,8 @@ do
             local control=noirMirrorControls[entry[1]]
             if type(control)=="table" and type(control.SetValue)=="function" then pcall(control.SetValue,control,entry[2]) end
         end
+    local omegaRuntime = getgenv().__NoirOmegaRuntime
+    if type(omegaRuntime) == "table" and type(omegaRuntime.Sync) == "function" then omegaRuntime.Sync() end
     end
 end
 
