@@ -2492,99 +2492,81 @@ end
 
 local tab = host.CreateTab()
 
--- Misc cursor controls: generated UI cursors work without an external image dependency;
--- an optional Roblox image ID can replace the template.
+-- Misc cursor controls alter Roblox's existing mouse/Shift Lock cursor instead of drawing a second cursor overlay.
 do
-    local cursorState = {
-        enabled = false,
-        template = "Default",
-        customId = "",
-        size = 28,
-        gui = nil,
-        cursor = nil,
-        mouseIconOriginal = nil,
-    }
+    local cursorState = { enabled = false, template = "Default", customId = "", originalMouseIcon = nil, originalImages = {} }
+    local cursorTemplates = { "Default", "Crosshair", "Dot", "Ring", "Custom Image" }
 
     local function assetId(value)
         local digits = tostring(value or ""):match("(%d+)")
         return digits and ("rbxassetid://" .. digits) or ""
     end
-
-    local function clearCursor()
-        if cursorState.gui then cursorState.gui:Destroy() end
-        cursorState.gui, cursorState.cursor = nil, nil
+    local function desiredCursorImage()
+        local custom = assetId(cursorState.customId)
+        if cursorState.template == "Custom Image" and custom ~= "" then return custom end
+        if cursorState.template == "Default" then return "" end
+        -- Built-in Roblox cursor resources keep the change on the native Shift Lock cursor.
+        if cursorState.template == "Crosshair" then return "rbxasset://textures/MouseLockedCursor.png" end
+        if cursorState.template == "Dot" then return "rbxasset://textures/Cursors/KeyboardMouse/ArrowCursor.png" end
+        if cursorState.template == "Ring" then return "rbxasset://textures/MouseLockedCursor.png" end
+        return ""
     end
-
-    local function buildCursor()
+    local function isShiftLockVisual(instance)
+        if not (instance and (instance:IsA("ImageLabel") or instance:IsA("ImageButton"))) then return false end
+        local name = string.lower(instance.Name)
+        return string.find(name, "mouselock", 1, true) ~= nil or string.find(name, "shiftlock", 1, true) ~= nil
+    end
+    local function restoreShiftLockVisuals()
+        for instance, image in pairs(cursorState.originalImages) do
+            if instance and instance.Parent then pcall(function() instance.Image = image end) end
+        end
+        table.clear(cursorState.originalImages)
+        pcall(function()
+            if cursorState.originalMouseIcon ~= nil then LocalPlayer:GetMouse().Icon = cursorState.originalMouseIcon end
+        end)
+    end
+    local function applyToShiftLockVisual(instance, image)
+        if not isShiftLockVisual(instance) or image == "" then return end
+        if cursorState.originalImages[instance] == nil then cursorState.originalImages[instance] = instance.Image end
+        pcall(function() instance.Image = image end)
+    end
+    local function applyCursor()
+        restoreShiftLockVisuals()
         if not cursorState.enabled then return end
-        clearCursor()
-        local parent = guiParent
-        if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
-        local cursorGui = New("ScreenGui", { Parent = parent, Name = "NoirCustomCursor", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 120, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
-        local cursor = New("Frame", { Parent = cursorGui, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5),
-            Size = UDim2.fromOffset(cursorState.size, cursorState.size), BackgroundTransparency = 1, BorderSizePixel = 0, Active = false, ZIndex = 120 })
-        cursorState.gui, cursorState.cursor = cursorGui, cursor
-        local image = assetId(cursorState.customId)
-        if cursorState.template == "Custom Image" and image ~= "" then
-            New("ImageLabel", { Parent = cursor, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Image = image, ImageColor3 = C.text, ZIndex = 121 })
-        elseif cursorState.template == "Crosshair" then
-            for _, spec in ipairs({
-                { UDim2.new(.5, -1, 0, 0), UDim2.fromOffset(2, math.floor(cursorState.size * .36)) },
-                { UDim2.new(.5, -1, 1, -math.floor(cursorState.size * .36)), UDim2.fromOffset(2, math.floor(cursorState.size * .36)) },
-                { UDim2.new(0, 0, .5, -1), UDim2.fromOffset(math.floor(cursorState.size * .36), 2) },
-                { UDim2.new(1, -math.floor(cursorState.size * .36), .5, -1), UDim2.fromOffset(math.floor(cursorState.size * .36), 2) },
-            }) do
-                New("Frame", { Parent = cursor, Position = spec[1], Size = spec[2], BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = 121 })
+        local image = desiredCursorImage()
+        pcall(function()
+            local mouse = LocalPlayer:GetMouse()
+            if cursorState.originalMouseIcon == nil then cursorState.originalMouseIcon = mouse.Icon end
+            if image ~= "" then mouse.Icon = image else mouse.Icon = cursorState.originalMouseIcon end
+        end)
+        if image == "" then return end
+        for _, parent in ipairs({ CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+            if parent then
+                for _, instance in ipairs(parent:GetDescendants()) do applyToShiftLockVisual(instance, image) end
             end
-            local center = New("Frame", { Parent = cursor, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(5, 5), BackgroundColor3 = C.accent, BorderSizePixel = 0, ZIndex = 121 }); corner(center, 3)
-        elseif cursorState.template == "Ring" then
-            local ring = New("Frame", { Parent = cursor, Position = UDim2.fromOffset(3, 3), Size = UDim2.new(1, -6, 1, -6), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 121 })
-            corner(ring, math.floor(cursorState.size / 2))
-            New("UIStroke", { Parent = ring, Color = C.accent, Thickness = 2 })
-            local center = New("Frame", { Parent = cursor, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(4, 4), BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = 121 }); corner(center, 2)
-        else
-            local diameter = cursorState.template == "Dot" and math.max(8, math.floor(cursorState.size * .38)) or math.max(10, math.floor(cursorState.size * .54))
-            local dot = New("Frame", { Parent = cursor, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(diameter, diameter), BackgroundColor3 = cursorState.template == "Dot" and C.accent or C.text, BorderSizePixel = 0, ZIndex = 121 })
-            corner(dot, math.floor(diameter / 2)); stroke(dot, C.border, .18)
         end
     end
-
     local function setCursorEnabled(enabled)
         cursorState.enabled = enabled == true
-        if cursorState.enabled then
-            pcall(function()
-                if cursorState.mouseIconOriginal == nil then cursorState.mouseIconOriginal = UIS.MouseIconEnabled end
-                UIS.MouseIconEnabled = false
-            end)
-            buildCursor()
-        else
-            clearCursor()
-            pcall(function()
-                if cursorState.mouseIconOriginal ~= nil then UIS.MouseIconEnabled = cursorState.mouseIconOriginal end
-            end)
-        end
+        applyCursor()
     end
-
-    local function moveCursor(position)
-        if cursorState.enabled and cursorState.cursor and typeof(position) == "Vector3" then
-            cursorState.cursor.Position = UDim2.fromOffset(position.X, position.Y)
-        end
+    local function watchShiftLock(parent)
+        if not parent then return end
+        parent.DescendantAdded:Connect(function(instance)
+            if cursorState.enabled then applyToShiftLockVisual(instance, desiredCursorImage()) end
+        end)
     end
-    UIS.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then moveCursor(input.Position) end
-    end)
-    UIS.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then moveCursor(input.Position) end
-    end)
+    watchShiftLock(CoreGui)
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    watchShiftLock(playerGui)
 
-    local cursorSection = tab:AddSection("MISC \u{2022} CUSTOMIZE CURSOR", "Local cursor templates and custom image ID")
+    local cursorSection = tab:AddSection("MISC \u{2022} CUSTOMIZE CURSOR", "Edits the existing Roblox Shift Lock cursor; no second overlay is created")
     cursorSection:AddToggle("Enable Custom Cursor", setCursorEnabled)
-    local cursorTemplates = { "Default", "Crosshair", "Dot", "Ring", "Custom Image" }
     local savedTemplate = NoirPersistence.data.dropdowns["MISC \u{2022} CUSTOMIZE CURSOR::Template Cursor"]
     cursorState.template = table.find(cursorTemplates, savedTemplate) and savedTemplate or "Default"
     local templateControl = cursorSection:AddDropdown("Template Cursor", cursorTemplates, function(value)
         cursorState.template = value
-        buildCursor()
+        applyCursor()
     end)
     templateControl:SetValue(cursorState.template)
     cursorState.customId = tostring(NoirPersistence.data.textboxes["MISC \u{2022} CUSTOMIZE CURSOR::Custom Cursor ID"] or "")
@@ -2592,13 +2574,9 @@ do
         cursorState.customId = tostring(value or ""):sub(1, 100)
         NoirPersistence.data.textboxes["MISC \u{2022} CUSTOMIZE CURSOR::Custom Cursor ID"] = cursorState.customId
         NoirPersistence.Save()
-        buildCursor()
+        applyCursor()
     end)
     customIdControl:SetValue(cursorState.customId)
-    cursorSection:AddSlider("Cursor Size", 12, 80, cursorState.size, function(value)
-        cursorState.size = tonumber(value) or cursorState.size
-        buildCursor()
-    end)
 end
 
 -- Main universal utilities: all state stays in this scope while the connections retain only what they need.
@@ -2691,7 +2669,7 @@ do
         local button = universalState.invisibleBindButton
         if not button then return end
         local label = button:FindFirstChild("Text")
-        if label then label.Text = universalState.invisible and "Desync\nON" or "Desync\nOFF" end
+        if label then label.Text = universalState.invisible and "Invisible\nON" or "Invisible\nOFF" end
     end
 
     local function setInvisible(enabled)
@@ -2730,7 +2708,7 @@ do
         bindGui.Parent = parent
 
         local button = Instance.new("ImageButton")
-        button.Name = "Desync"
+        button.Name = "Invisible"
         button.AnchorPoint = Vector2.new(.5, .5)
         button.Position = NoirPersistence.GetPosition("invisible_bind_v1", UDim2.new(.24, 0, .88, 0))
         button.Size = UDim2.new(universalState.invisibleBindSize, 0, universalState.invisibleBindSize, 0)
@@ -2790,7 +2768,6 @@ do
         universalState.invisibleBindEnabled = enabled == true
         if universalState.invisibleBindEnabled then createInvisibleBindButton() else removeInvisibleBindButton() end
     end
-
 
 
     -- Adapted AntiFling core from the supplied FlingGui: other characters' collision parts are locally disabled while active.
@@ -2896,26 +2873,146 @@ do
     universalMods:AddToggle("Infinite Jump", function(enabled) universalState.infiniteJump = enabled == true end)
     universalMods:AddToggle("AntiFling", setAntiFling)
 
-    -- Keep existing Invisible settings while moving the feature into Misc with the requested Desync names.
-    local oldDesyncKey, newDesyncKey = "MAIN \u{2022} INVISIBLE::Invisible", "MISC \u{2022} DESYNC::Desync"
-    local oldBindKey, newBindKey = "MAIN \u{2022} INVISIBLE::Enable Invisible Bind Button", "MISC \u{2022} DESYNC::Enable Desync Bind Button"
-    local oldSizeKey, newSizeKey = "MAIN \u{2022} INVISIBLE::Invisible Bind Button Size", "MISC \u{2022} DESYNC::Desync Bind Button Size"
-    if NoirPersistence.data.toggles[newDesyncKey] == nil and NoirPersistence.data.toggles[oldDesyncKey] ~= nil then NoirPersistence.data.toggles[newDesyncKey] = NoirPersistence.data.toggles[oldDesyncKey] end
-    if NoirPersistence.data.toggles[newBindKey] == nil and NoirPersistence.data.toggles[oldBindKey] ~= nil then NoirPersistence.data.toggles[newBindKey] = NoirPersistence.data.toggles[oldBindKey] end
-    if NoirPersistence.data.sliders[newSizeKey] == nil and NoirPersistence.data.sliders[oldSizeKey] ~= nil then NoirPersistence.data.sliders[newSizeKey] = NoirPersistence.data.sliders[oldSizeKey] end
-
-    local desyncMods = tab:AddSection("MISC \u{2022} DESYNC", "Short down-frame desync and floating bind button")
-    desyncMods:AddToggle("Desync", setInvisible)
-    desyncMods:AddToggle("Enable Desync Bind Button", setInvisibleBindButton)
-    desyncMods:AddSlider("Desync Bind Button Size", 5, 25, universalState.invisibleBindSize * 100, function(value)
+    local invisibleMods = tab:AddSection("MAIN \u{2022} INVISIBLE", "Desync invisibility and floating bind button")
+    invisibleMods:AddToggle("Invisible", setInvisible)
+    invisibleMods:AddToggle("Enable Invisible Bind Button", setInvisibleBindButton)
+    invisibleMods:AddSlider("Invisible Bind Button Size", 5, 25, universalState.invisibleBindSize * 100, function(value)
         universalState.invisibleBindSize = (tonumber(value) or 10.5) / 100
         updateInvisibleBindButtonSize()
     end)
-    desyncMods:AddLabel("Round Desync button: tap to toggle; drag it to move. Its size and position are saved.")
-    -- AddToggle restores saved state synchronously; do not remove a Desync button that was restored as enabled.
+    invisibleMods:AddLabel("Round Invisible button: tap to toggle; drag it to move. Its size and position are saved.")
     if not universalState.invisibleBindEnabled then removeInvisibleBindButton() end
+
 end
 
+
+task.defer(function()
+    -- then restores the local movement CFrame. This keeps local movement responsive while sending
+    -- the saved location to the server on the desync frame.
+    local desyncState = {
+        enabled = false,
+        anchorCFrame = nil,
+        bindEnabled = false,
+        bindGui = nil,
+        bindButton = nil,
+        bindSize = .105,
+        bindConnections = {},
+    }
+
+    local function updateDesyncBindText()
+        if desyncState.bindButton then desyncState.bindButton.Text = desyncState.enabled and "Desync\nON" or "Desync\nOFF" end
+    end
+    local function setDesync(enabled)
+        desyncState.enabled = enabled == true
+        if desyncState.enabled then
+            local root = localRoot()
+            desyncState.anchorCFrame = root and root.CFrame or nil
+            if not desyncState.anchorCFrame then desyncState.enabled = false end
+        else
+            desyncState.anchorCFrame = nil
+        end
+        updateDesyncBindText()
+    end
+    local function disconnectDesyncBind()
+        for _, connection in ipairs(desyncState.bindConnections) do pcall(function() connection:Disconnect() end) end
+        table.clear(desyncState.bindConnections)
+    end
+    local function removeDesyncBindButton()
+        disconnectDesyncBind()
+        if desyncState.bindGui then desyncState.bindGui:Destroy() end
+        desyncState.bindGui, desyncState.bindButton = nil, nil
+        for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+            if parent then
+                local stale = parent:FindFirstChild("NoirDesyncBindButton")
+                if stale then stale:Destroy() end
+            end
+        end
+    end
+    local function updateDesyncBindSize()
+        local button, camera = desyncState.bindButton, Workspace.CurrentCamera
+        if not button or not camera then return end
+        local viewport = camera.ViewportSize
+        local h = desyncState.bindSize
+        button.Size = UDim2.new(h * (viewport.Y / math.max(viewport.X, 1)), 0, h, 0)
+    end
+    local function createDesyncBindButton()
+        if desyncState.bindButton then return end
+        removeDesyncBindButton()
+        local parent = guiParent
+        if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
+        local bindGui = New("ScreenGui", { Parent = parent, Name = "NoirDesyncBindButton", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 83, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+        local button = New("TextButton", { Parent = bindGui, Name = "Desync", AnchorPoint = Vector2.new(.5, .5),
+            Position = NoirPersistence.GetPosition("desync_bind_v1", UDim2.new(.35, 0, .88, 0)), Size = UDim2.fromScale(desyncState.bindSize, desyncState.bindSize),
+            BackgroundColor3 = C.panel, Text = "", TextColor3 = C.text, TextSize = 13, TextWrapped = true, Font = Enum.Font.Gotham, AutoButtonColor = false, ZIndex = 7 })
+        styleCircularButton(button, 64)
+        local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1 })
+        local dragging, moved, startInput, startPosition, dragInput = false, false, nil, nil, nil
+        desyncState.bindConnections[#desyncState.bindConnections + 1] = button.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging, moved, startInput, startPosition = true, false, input.Position, button.Position
+            end
+        end)
+        desyncState.bindConnections[#desyncState.bindConnections + 1] = button.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end
+        end)
+        desyncState.bindConnections[#desyncState.bindConnections + 1] = UIS.InputChanged:Connect(function(input)
+            if not dragging or input ~= dragInput then return end
+            local delta = input.Position - startInput
+            if delta.Magnitude > 7 then moved = true end
+            button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end)
+        desyncState.bindConnections[#desyncState.bindConnections + 1] = UIS.InputEnded:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
+                dragging = false
+                NoirPersistence.SetPosition("desync_bind_v1", button.Position)
+            end
+        end)
+        desyncState.bindConnections[#desyncState.bindConnections + 1] = button.Activated:Connect(function()
+            if not moved then setDesync(not desyncState.enabled) end
+        end)
+        desyncState.bindGui, desyncState.bindButton = bindGui, button
+        updateDesyncBindSize(); updateDesyncBindText()
+    end
+    local function setDesyncBindButton(enabled)
+        desyncState.bindEnabled = enabled == true
+        if desyncState.bindEnabled then createDesyncBindButton() else removeDesyncBindButton() end
+    end
+    RunService.Heartbeat:Connect(function()
+        if not desyncState.enabled then return end
+        local root = localRoot()
+        local humanoid = localHumanoid()
+        if not root or not humanoid then return end
+        if not desyncState.anchorCFrame then desyncState.anchorCFrame = root.CFrame end
+        local localCFrame, localOffset = root.CFrame, humanoid.CameraOffset
+        local sent = pcall(function()
+            root.CFrame = desyncState.anchorCFrame
+            humanoid.CameraOffset = desyncState.anchorCFrame:ToObjectSpace(CFrame.new(localCFrame.Position)).Position
+        end)
+        if not sent then return end
+        RunService.RenderStepped:Wait()
+        pcall(function()
+            if root.Parent then root.CFrame = localCFrame end
+            if humanoid.Parent then humanoid.CameraOffset = localOffset end
+        end)
+    end)
+    LocalPlayer.CharacterAdded:Connect(function(character)
+        if desyncState.enabled then
+            task.wait(.35)
+            local root = character:FindFirstChild("HumanoidRootPart")
+            if root then desyncState.anchorCFrame = root.CFrame end
+        end
+    end)
+
+    local desyncMods = tab:AddSection("MISC \u{2022} DESYNC", "Keeps the server-facing character position at the activation point")
+    desyncMods:AddToggle("Desync", setDesync)
+    desyncMods:AddToggle("Enable Desync Bind Button", setDesyncBindButton)
+    desyncMods:AddSlider("Desync Bind Button Size", 5, 25, desyncState.bindSize * 100, function(value)
+        desyncState.bindSize = (tonumber(value) or 10.5) / 100
+        updateDesyncBindSize()
+    end)
+    desyncMods:AddLabel("Enable Desync to save the current position; you can then move locally while its saved position is sent on desync frames.")
+    if not desyncState.bindEnabled then removeDesyncBindButton() end
+end)
 
 -- Visuals are compiled in a separate deferred chunk.  The primary UI stays identical to the last verified mobile-safe build.
 local __noirVisualContext = {
