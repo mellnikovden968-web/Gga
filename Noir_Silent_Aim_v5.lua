@@ -4713,7 +4713,12 @@ do
         NoirPersistence.data.sliders[newKnifeAuraKey] = NoirPersistence.data.sliders[oldKnifeAuraKey]
         NoirPersistence.Save()
     end
-    combatKnife:AddToggle("KnifeThrown Aura", function(v) config.knifeThrownAura=v==true end)
+    -- The old working Knife Silent Aim kept this behavior enabled with no separate control.
+    -- First run preserves that default; later user choices are saved normally.
+    local knifeAuraToggle = combatKnife:AddToggle("KnifeThrown Aura", function(v) config.knifeThrownAura=v==true end)
+    if NoirPersistence.data.toggles["KNIFE SILENT AIM::KnifeThrown Aura"] == nil then
+        knifeAuraToggle(true)
+    end
     combatKnife:AddSlider("Knife Throw Aura", 1, 40, config.knifeRadius, function(v) config.knifeRadius = tonumber(v) or config.knifeRadius end)
     combatKnife:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck=v==true end)
     combatKnife:AddToggle("Prioritize Sheriff", function(v)
