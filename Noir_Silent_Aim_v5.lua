@@ -3282,7 +3282,8 @@ task.defer(function()
         targetPart = "Head", selectedPlayer = nil, targetPlayer = nil, lastSearch = 0, searchInterval = .10,
         lastAimPos = nil, lastTarget = nil, cachedPlayer = nil, cachedCharacter = nil,
         cachedRoot = nil, cachedHead = nil, key = "T", bindVisible = false, bindSize = .11,
-        overlay = nil, bindButton = nil, fovCircle = nil, connections = {}, stopped = false,
+        overlay = nil, bindButton = nil, bindOuterGradient = nil, bindInnerGradient = nil, bindPressScale = nil,
+        fovCircle = nil, connections = {}, stopped = false,
     }
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
@@ -3388,6 +3389,14 @@ task.defer(function()
         aim.fovCircle.Visible = true
         aim.fovCircle.Size = UDim2.fromOffset(aim.fovRadius * 2, aim.fovRadius * 2)
     end
+    local aimMetallicGradient = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)),
+        ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)),
+    })
+    local aimActiveGradient = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(21, 108, 66)), ColorSequenceKeypoint.new(.24, Color3.fromRGB(110, 255, 178)),
+        ColorSequenceKeypoint.new(.5, Color3.fromRGB(42, 178, 105)), ColorSequenceKeypoint.new(.76, Color3.fromRGB(176, 255, 212)), ColorSequenceKeypoint.new(1, Color3.fromRGB(19, 103, 61)),
+    })
     local function updateBindSize()
         local button, camera = aim.bindButton, Workspace.CurrentCamera
         if not button or not camera then return end
@@ -3397,8 +3406,10 @@ task.defer(function()
     local function updateBindVisual()
         local button = aim.bindButton
         if not button then return end
-        button.Text = aim.enabled and "AIM\nON" or "AIM"
-        button.BackgroundColor3 = aim.enabled and C.accent or Color3.fromRGB(14, 16, 20)
+        local label = button:FindFirstChild("Text")
+        if label then label.Text = aim.enabled and "Aim\nON" or "Aim\nOFF" end
+        if aim.bindOuterGradient then aim.bindOuterGradient.Color = aim.enabled and aimActiveGradient or aimMetallicGradient end
+        if aim.bindInnerGradient then aim.bindInnerGradient.Color = aim.enabled and aimActiveGradient or aimMetallicGradient end
     end
     local function setAimlock(enabled)
         aim.enabled = enabled == true
@@ -3417,7 +3428,7 @@ task.defer(function()
     local function removeBindButton()
         disconnectBindButton()
         if aim.bindButton and aim.bindButton.Parent then aim.bindButton:Destroy() end
-        aim.bindButton = nil
+        aim.bindButton, aim.bindOuterGradient, aim.bindInnerGradient, aim.bindPressScale = nil, nil, nil, nil
         if aim.overlay then
             local stale = aim.overlay:FindFirstChild("AimlockButton")
             if stale then stale:Destroy() end
@@ -3427,15 +3438,26 @@ task.defer(function()
         if aim.bindButton then return end
         local overlay = ensureOverlay()
         if not overlay then return end
-        local button = New("TextButton", { Name = "AimlockButton", Parent = overlay, AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("aimlock_bind_v1", UDim2.new(.83, 0, .70, 0)),
-            BackgroundColor3 = Color3.fromRGB(14, 16, 20), BackgroundTransparency = .12, BorderSizePixel = 0, AutoButtonColor = false,
-            Text = "AIM", TextColor3 = Color3.new(1, 1, 1), TextSize = 13, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 8 })
-        corner(button, 999); stroke(button, C.border, .18)
+        -- The floating Aim button deliberately uses the same Noir metallic two-stroke treatment as Desync.
+        local button = New("ImageButton", { Name = "AimlockButton", Parent = overlay, AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("aimlock_bind_v1", UDim2.new(.83, 0, .70, 0)),
+            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0, AutoButtonColor = false,
+            Image = "", ClipsDescendants = false, ZIndex = 8 })
+        corner(button, 999)
         local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
+        local outer = New("UIStroke", { Parent = button, Color = Color3.fromRGB(255, 255, 255), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+        local outerGradient = New("UIGradient", { Parent = outer, Color = aimMetallicGradient })
+        table.insert(gradientStrokes, outerGradient)
+        local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+        local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner; table.insert(gradientStrokes, innerGradient)
+        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76),
+            BackgroundTransparency = 1, Text = "Aim\nOFF", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 14, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 9 })
+        local pressScale = New("UIScale", { Parent = button, Scale = 1 })
+        aim.bindOuterGradient, aim.bindInnerGradient, aim.bindPressScale = outerGradient, innerGradient, pressScale
         local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
         aim.bindConnections[#aim.bindConnections + 1] = button.InputBegan:Connect(function(input)
             if not isPrimaryPress(input) then return end
             dragging, moved, dragStart, startPosition = true, false, input.Position, button.Position
+            TweenService:Create(pressScale, TweenInfo.new(.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = 1.035 }):Play()
         end)
         aim.bindConnections[#aim.bindConnections + 1] = button.InputChanged:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
@@ -3449,7 +3471,8 @@ task.defer(function()
         aim.bindConnections[#aim.bindConnections + 1] = UIS.InputEnded:Connect(function(input)
             if not dragging or not isPrimaryPress(input) then return end
             dragging = false
-            NoirPersistence.SetPosition("aimlock_bind_v1", button.Position)
+            TweenService:Create(pressScale, TweenInfo.new(.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+            if moved then NoirPersistence.SetPosition("aimlock_bind_v1", button.Position) end
         end)
         aim.bindConnections[#aim.bindConnections + 1] = button.Activated:Connect(function()
             if not moved then setAimlock(not aim.enabled) end
