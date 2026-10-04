@@ -2115,7 +2115,7 @@ task.defer(function()
     end
     local function destroyDualVisual()
         if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
-        runtime.dualVisual, runtime.dualSource = nil, nil
+        runtime.dualVisual, runtime.dualSource, runtime.dualLimb = nil, nil, nil
     end
     local function refreshDualEffect()
         if not config.knifeDualEffect then destroyDualVisual(); return end
@@ -2277,21 +2277,24 @@ task.defer(function()
     local prior = getgenv().__NoirGunTriggerRuntime
     if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
 
-    local runtime = { stopped = false, connections = {}, dualVisual = nil, dualSource = nil, lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
+    local runtime = { stopped = false, connections = {}, dualVisual = nil, dualSource = nil, dualLimb = nil, lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
     local function equippedGun()
         local character = LocalPlayer.Character
         return character and character:FindFirstChild("Gun") or nil
     end
     local function destroyDual()
         if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
-        runtime.dualVisual, runtime.dualSource = nil, nil
+        runtime.dualVisual, runtime.dualSource, runtime.dualLimb = nil, nil, nil
     end
     local function refreshDual()
         if not config.gunDualEffect then destroyDual(); return end
+        local character = LocalPlayer.Character
         local gun = equippedGun()
         local handle = gun and gun:FindFirstChild("Handle", true)
-        if not handle or not handle:IsA("BasePart") then destroyDual(); return end
-        if runtime.dualVisual and runtime.dualVisual.Parent and runtime.dualSource == handle then return end
+        local leftHand = character and (character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftLowerArm"))
+        local rightHand = character and (character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm") or character:FindFirstChild("RightLowerArm"))
+        if not handle or not handle:IsA("BasePart") or not leftHand or not leftHand:IsA("BasePart") then destroyDual(); return end
+        if runtime.dualVisual and runtime.dualVisual.Parent and runtime.dualSource == handle and runtime.dualLimb == leftHand then return end
         destroyDual()
         local ok, visual = pcall(function()
             local clone = handle:Clone()
@@ -2300,13 +2303,17 @@ task.defer(function()
             end
             clone.Name = "NoirGunDualEffect"
             clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = false, false, false, false, true
-            clone.CFrame = handle.CFrame * CFrame.new(.34, 0, 0) * CFrame.Angles(0, 0, math.rad(-10))
-            clone.Parent = gun.Parent
+            -- Transfer the real gun's wrist-relative grip from the right hand to the left hand.
+            -- The duplicate is welded to the left limb, not to the original Handle, so one gun
+            -- visibly remains in each hand instead of both being stacked in the right hand.
+            local gripOffset = rightHand and rightHand.CFrame:ToObjectSpace(handle.CFrame) or CFrame.new(0, -.45, 0)
+            clone.CFrame = leftHand.CFrame * gripOffset
+            clone.Parent = character
             local weld = Instance.new("WeldConstraint")
-            weld.Part0, weld.Part1, weld.Parent = handle, clone, clone
+            weld.Part0, weld.Part1, weld.Parent = leftHand, clone, clone
             return clone
         end)
-        runtime.dualVisual, runtime.dualSource = ok and visual or nil, ok and handle or nil
+        runtime.dualVisual, runtime.dualSource, runtime.dualLimb = ok and visual or nil, ok and handle or nil, ok and leftHand or nil
     end
     local function murdererTarget()
         local target = selectTarget("Murderer")
