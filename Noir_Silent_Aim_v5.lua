@@ -1090,11 +1090,26 @@ local config = {
     knifeWallCheck = false,
     knifePrioritizeSheriff = false,
     knifeAutoThrow = false,
+    -- Native Knife Silent Aim utilities, kept separate from the original redirect settings.
+    knifeDualEffect = false,
+    knifeDisableStab = false,
+    knifeInstantThrow = false,
+    knifeFastThrow = false,
+    knifeAutoKillEveryone = false,
+    knifeAutoKillSheriff = false,
+    knifeKillPlayer = "N/A",
+    knifeSheriffBind = false,
+    knifeSheriffBindShape = "Circle",
     -- Preserve the prior always-on behavior while allowing the thrown-knife touch aura to be disabled independently.
     knifeThrownAura = true,
     knifeRadius = 15,
     showShootButton = false,
     lockShootButton = false,
+    -- Native Silent Aim gun utilities.
+    gunDualEffect = false,
+    gunTriggerBot = false,
+    gunTriggerBotWallCheck = true,
+    gunTriggerBotPrediction = true,
     selectedPlayer = nil,
 }
 
@@ -1942,7 +1957,7 @@ do
         local touched = tool:FindFirstChild("HandleTouched", true)
         if touched and touched:IsA("RemoteEvent") then pcall(touched.FireServer, touched, part) end
         local stabbed = tool:FindFirstChild("KnifeStabbed", true)
-        if stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
+        if not config.knifeDisableStab and stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
     end
 
     local function stopStep()
@@ -1995,6 +2010,206 @@ do
     end)
 end
 
+-- Native Knife Silent Aim utility layer.  It intentionally uses only the currently equipped
+-- Knife and its own remotes; no Overdrive loader, paid API, or opaque external dependency is used.
+task.defer(function()
+    local prior = getgenv().__NoirKnifeUtilityRuntime
+    if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
+
+    local runtime = { stopped = false, connections = {}, gui = nil, button = nil, dualVisual = nil, dualSource = nil, nextAction = 0 }
+    local function connect(signal, callback)
+        local connection = signal:Connect(callback)
+        runtime.connections[#runtime.connections + 1] = connection
+        return connection
+    end
+    local function equippedKnife()
+        local character = LocalPlayer.Character
+        return character and character:FindFirstChild("Knife") or nil
+    end
+    local function rootFor(player)
+        local character = player and player.Character
+        return character and (character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart) or nil
+    end
+    local function killPlayerByName()
+        local name = tostring(config.knifeKillPlayer or "N/A")
+        local player = name ~= "N/A" and Players:FindFirstChild(name) or nil
+        return validTarget(player) and player or nil
+    end
+    local function sheriffTarget()
+        if validTarget(sheriff) then return sheriff end
+        local fallback = findByGun()
+        return validTarget(fallback) and fallback or nil
+    end
+    local function knifeThrowRemote(tool)
+        for _, object in ipairs(tool:GetDescendants()) do
+            if object:IsA("RemoteEvent") and object.Name == "KnifeThrown" then return object end
+        end
+        return nil
+    end
+    local function throwAt(player)
+        local tool, part = equippedKnife(), getAimPart(player)
+        local handle = tool and tool:FindFirstChild("Handle", true)
+        local remote = tool and knifeThrowRemote(tool)
+        if not tool or not part or not handle or not handle:IsA("BasePart") or not remote then return false end
+        local now = os.clock()
+        local cooldown = config.knifeInstantThrow and .055 or config.knifeFastThrow and .14 or .42
+        if now < runtime.nextAction then return false end
+        runtime.nextAction = now + cooldown
+        local origin, aim = handle.Position, calculateKnifeAim(part, handle.Position)
+        local ok = pcall(function() remote:FireServer(CFrame.lookAt(origin, aim), CFrame.new(aim)) end)
+        return ok
+    end
+    local function stabAt(player)
+        if config.knifeDisableStab then return false end
+        local tool, targetRoot, ownRoot = equippedKnife(), rootFor(player), localRoot()
+        if not tool or not targetRoot or not ownRoot or (targetRoot.Position - ownRoot.Position).Magnitude > 9 then return false end
+        local handle = tool:FindFirstChild("Handle", true)
+        if not handle or not handle:IsA("BasePart") then return false end
+        local now = os.clock()
+        if now < runtime.nextAction then return false end
+        runtime.nextAction = now + .11
+        local touched = tool:FindFirstChild("HandleTouched", true)
+        local stabbed = tool:FindFirstChild("KnifeStabbed", true)
+        if type(firetouchinterest) == "function" then
+            pcall(firetouchinterest, handle, targetRoot, true)
+            task.defer(function() if handle.Parent and targetRoot.Parent then pcall(firetouchinterest, handle, targetRoot, false) end end)
+        end
+        if touched and touched:IsA("RemoteEvent") then pcall(touched.FireServer, touched, targetRoot) end
+        if stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
+        return true
+    end
+    local function attack(player)
+        if not validTarget(player) then return false end
+        -- A nearby target is handled with the knife's normal touch/stab route; farther targets
+        -- are sent through the regular KnifeThrown remote only when Fast/Instant Throw is enabled.
+        if stabAt(player) then return true end
+        if config.knifeInstantThrow or config.knifeFastThrow then return throwAt(player) end
+        return false
+    end
+    local function killSheriff(silent)
+        local target = sheriffTarget()
+        local success = target and attack(target) or false
+        if not silent then notify(success and ("Knife action: " .. target.Name) or "Knife action: Sheriff not available or out of range", 3) end
+        return success
+    end
+    local function killEveryone(silent)
+        local count = 0
+        for _, player in ipairs(getPlayers()) do
+            if validTarget(player) and stabAt(player) then count += 1 end
+        end
+        -- A thrown knife has one trajectory: never fire multiple conflicting ranged remotes.
+        if count == 0 and (config.knifeInstantThrow or config.knifeFastThrow) then
+            local chosen, distance = nil, math.huge
+            local ownRoot = localRoot()
+            for _, player in ipairs(getPlayers()) do
+                local root = rootFor(player)
+                if validTarget(player) and root then
+                    local d = ownRoot and (root.Position - ownRoot.Position).Magnitude or 0
+                    if d < distance then chosen, distance = player, d end
+                end
+            end
+            if chosen and throwAt(chosen) then count = 1 end
+        end
+        if not silent then notify(count > 0 and ("Knife action sent to " .. tostring(count) .. " target(s)") or "Knife action: no valid target", 3) end
+        return count
+    end
+    local function destroyDualVisual()
+        if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
+        runtime.dualVisual, runtime.dualSource = nil, nil
+    end
+    local function refreshDualEffect()
+        if not config.knifeDualEffect then destroyDualVisual(); return end
+        local tool = equippedKnife()
+        local handle = tool and tool:FindFirstChild("Handle", true)
+        if not handle or not handle:IsA("BasePart") then destroyDualVisual(); return end
+        if runtime.dualVisual and runtime.dualVisual.Parent and runtime.dualSource == handle then return end
+        destroyDualVisual()
+        local ok, visual = pcall(function()
+            local clone = handle:Clone()
+            for _, child in ipairs(clone:GetDescendants()) do
+                if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then child:Destroy() end
+            end
+            clone.Name = "NoirKnifeDualEffect"
+            clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = false, false, false, false, true
+            clone.CFrame = handle.CFrame * CFrame.new(-.38, 0, 0) * CFrame.Angles(0, 0, math.rad(12))
+            clone.Parent = tool.Parent
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0, weld.Part1, weld.Parent = handle, clone, clone
+            return clone
+        end)
+        runtime.dualVisual, runtime.dualSource = ok and visual or nil, ok and handle or nil
+    end
+    local function destroyBind()
+        if runtime.gui then runtime.gui:Destroy() end
+        runtime.gui, runtime.button = nil, nil
+        for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+            local stale = parent and parent:FindFirstChild("NoirKnifeSheriffBind")
+            if stale then stale:Destroy() end
+        end
+    end
+    local function updateBindShape()
+        local button = runtime.button
+        if not button then return end
+        local cornerObject = button:FindFirstChild("NoirShape")
+        if cornerObject then cornerObject.CornerRadius = config.knifeSheriffBindShape == "Circle" and UDim.new(1, 0) or UDim.new(0, 11) end
+    end
+    local function createBind()
+        if runtime.button then updateBindShape(); return end
+        local parent = guiParent
+        if typeof(parent) ~= "Instance" then parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") end
+        if typeof(parent) ~= "Instance" then return end
+        local gui = New("ScreenGui", { Parent = parent, Name = "NoirKnifeSheriffBind", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 84, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+        local button = New("TextButton", { Parent = gui, Name = "KillSheriff", AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("knife_sheriff_bind_v1", UDim2.new(.68, 0, .73, 0)), Size = UDim2.fromOffset(48, 48),
+            BackgroundColor3 = Color3.fromRGB(12, 15, 18), BackgroundTransparency = .20, BorderSizePixel = 0, AutoButtonColor = false, Text = "KILL\nSHERIFF", TextColor3 = C.text, TextSize = 8, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 8 })
+        local shape = New("UICorner", { Parent = button, Name = "NoirShape", CornerRadius = UDim.new(1, 0) })
+        stroke(button, C.accent, .26)
+        runtime.gui, runtime.button = gui, button
+        updateBindShape()
+        local dragging, moved, start, origin, dragInput = false, false, nil, nil, nil
+        runtime.connections[#runtime.connections + 1] = button.InputBegan:Connect(function(input)
+            if not isPrimaryPress(input) then return end
+            dragging, moved, start, origin = true, false, input.Position, button.Position
+        end)
+        runtime.connections[#runtime.connections + 1] = button.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+        end)
+        runtime.connections[#runtime.connections + 1] = UIS.InputChanged:Connect(function(input)
+            if not dragging or input ~= dragInput then return end
+            local delta = input.Position - start
+            if delta.Magnitude > 7 then moved = true end
+            button.Position = UDim2.new(origin.X.Scale, origin.X.Offset + delta.X, origin.Y.Scale, origin.Y.Offset + delta.Y)
+        end)
+        runtime.connections[#runtime.connections + 1] = UIS.InputEnded:Connect(function(input)
+            if dragging and isPrimaryPress(input) then
+                dragging = false
+                if moved then NoirPersistence.SetPosition("knife_sheriff_bind_v1", button.Position) end
+            end
+        end)
+        runtime.connections[#runtime.connections + 1] = button.Activated:Connect(function() if not moved then killSheriff(false) end end)
+    end
+    function runtime:Refresh()
+        refreshDualEffect()
+        if config.knifeSheriffBind then createBind() else destroyBind() end
+        updateBindShape()
+    end
+    function runtime:KillSheriff() return killSheriff(false) end
+    function runtime:KillEveryone() return killEveryone(false) end
+    runtime.connections[#runtime.connections + 1] = RunService.Heartbeat:Connect(function()
+        if runtime.stopped then return end
+        refreshDualEffect()
+        if config.knifeAutoKillEveryone then killEveryone(true)
+        elseif config.knifeAutoKillSheriff then killSheriff(true) end
+    end)
+    function runtime:Stop()
+        if runtime.stopped then return end
+        runtime.stopped = true
+        for _, connection in ipairs(runtime.connections) do pcall(function() connection:Disconnect() end) end
+        destroyBind(); destroyDualVisual()
+    end
+    getgenv().__NoirKnifeUtilityRuntime = runtime
+    runtime:Refresh()
+end)
+
 function findGunRemote()
     local gun=localGunTool()
     if not gun then return nil end
@@ -2010,7 +2225,7 @@ function findGunRemote()
     end
     return best
 end
-function fireGunAt(player)
+function fireGunAt(player, usePrediction)
     if shootBusy then return false end
     shootBusy = true
     local success = false
@@ -2038,7 +2253,7 @@ function fireGunAt(player)
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        local aim=calculateAim(part)
+        local aim = usePrediction == false and part.Position or calculateAim(part)
         local origin=handle.Position
         local shotOrigin=piercerShotOrigin(origin,aim,part,config.piercerBullet)
         buttonShotActive = true
@@ -2055,6 +2270,94 @@ function fireGunAt(player)
     shootBusy = false
     return success
 end
+
+-- Native Gun Trigger Bot and local dual-effect layer.  This is self-contained in Noir and
+-- uses the currently equipped Gun; it neither loads nor depends on an Overdrive service.
+task.defer(function()
+    local prior = getgenv().__NoirGunTriggerRuntime
+    if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
+
+    local runtime = { stopped = false, connections = {}, dualVisual = nil, dualSource = nil, lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
+    local function equippedGun()
+        local character = LocalPlayer.Character
+        return character and character:FindFirstChild("Gun") or nil
+    end
+    local function destroyDual()
+        if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
+        runtime.dualVisual, runtime.dualSource = nil, nil
+    end
+    local function refreshDual()
+        if not config.gunDualEffect then destroyDual(); return end
+        local gun = equippedGun()
+        local handle = gun and gun:FindFirstChild("Handle", true)
+        if not handle or not handle:IsA("BasePart") then destroyDual(); return end
+        if runtime.dualVisual and runtime.dualVisual.Parent and runtime.dualSource == handle then return end
+        destroyDual()
+        local ok, visual = pcall(function()
+            local clone = handle:Clone()
+            for _, child in ipairs(clone:GetDescendants()) do
+                if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then child:Destroy() end
+            end
+            clone.Name = "NoirGunDualEffect"
+            clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = false, false, false, false, true
+            clone.CFrame = handle.CFrame * CFrame.new(.34, 0, 0) * CFrame.Angles(0, 0, math.rad(-10))
+            clone.Parent = gun.Parent
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0, weld.Part1, weld.Parent = handle, clone, clone
+            return clone
+        end)
+        runtime.dualVisual, runtime.dualSource = ok and visual or nil, ok and handle or nil
+    end
+    local function murdererTarget()
+        local target = selectTarget("Murderer")
+        if not target then
+            local fallback = findByKnife()
+            if validTarget(fallback) then target = fallback end
+        end
+        return target
+    end
+    local function crosshairOn(player)
+        local camera, part = Workspace.CurrentCamera, getAimPart(player)
+        if not camera or not part then return false end
+        local center = camera.ViewportSize * .5
+        local ray = camera:ViewportPointToRay(center.X, center.Y)
+        local ownCharacter = LocalPlayer.Character
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = ownCharacter and { ownCharacter } or {}
+        params.IgnoreWater = true
+        local hit = Workspace:Raycast(ray.Origin, ray.Direction * 2000, params)
+        if hit and hit.Instance and hit.Instance:IsDescendantOf(player.Character) then return true end
+        -- On a transparent target part/no direct ray hit, retain an intentionally tight screen
+        -- tolerance.  Wall Check decides whether this fallback is allowed through geometry.
+        local projected, visible = camera:WorldToViewportPoint(part.Position)
+        if not visible or (Vector2.new(projected.X, projected.Y) - Vector2.new(center.X, center.Y)).Magnitude > 26 then return false end
+        return not config.gunTriggerBotWallCheck or targetVisible(part, true)
+    end
+    runtime.connections[#runtime.connections + 1] = RunService.RenderStepped:Connect(function()
+        if runtime.stopped then return end
+        local now = os.clock()
+        if now >= runtime.nextVisualCheck then runtime.nextVisualCheck = now + .25; refreshDual() end
+        if not config.gunTriggerBot then runtime.wasPointing = false; return end
+        local target = murdererTarget()
+        local pointing = target and crosshairOn(target) or false
+        if pointing and not runtime.wasPointing and now - runtime.lastShot >= .28 then
+            runtime.lastShot = now
+            fireGunAt(target, config.gunTriggerBotPrediction)
+        end
+        runtime.wasPointing = pointing
+    end)
+    function runtime:RefreshDual() refreshDual() end
+    function runtime:Stop()
+        if runtime.stopped then return end
+        runtime.stopped = true
+        for _, connection in ipairs(runtime.connections) do pcall(function() connection:Disconnect() end) end
+        destroyDual()
+    end
+    getgenv().__NoirGunTriggerRuntime = runtime
+    refreshDual()
+end)
+
 function shootTarget()
     local player = selectTarget()
     -- Keep the immediate weapon-owner fallback; a remote role refresh is now coalesced asynchronously to avoid a UI freeze.
@@ -2341,9 +2644,15 @@ function exportRevertConfig()
             ignoreFriends = config.ignoreFriends, maxDistance = config.maxDistance,
             adaptive = config.adaptive, fixedLead = config.fixedLead, extraLead = config.extraLead,
             alignDirection = config.alignDirection,
+            gunDualEffect = config.gunDualEffect, gunTriggerBot = config.gunTriggerBot,
+            gunTriggerBotWallCheck = config.gunTriggerBotWallCheck, gunTriggerBotPrediction = config.gunTriggerBotPrediction,
             knifeWallCheck = config.knifeWallCheck,
             knifePrioritizeSheriff = config.knifePrioritizeSheriff, knifeAutoThrow = config.knifeAutoThrow,
-            knifeThrownAura = config.knifeThrownAura,
+            knifeDualEffect = config.knifeDualEffect, knifeDisableStab = config.knifeDisableStab,
+            knifeInstantThrow = config.knifeInstantThrow, knifeFastThrow = config.knifeFastThrow,
+            knifeAutoKillEveryone = config.knifeAutoKillEveryone, knifeAutoKillSheriff = config.knifeAutoKillSheriff,
+            knifeKillPlayer = config.knifeKillPlayer, knifeSheriffBind = config.knifeSheriffBind,
+            knifeSheriffBindShape = config.knifeSheriffBindShape, knifeThrownAura = config.knifeThrownAura,
             knifeAim = {
                 adaptive = config.knifeAim.adaptive,
                 fixedLead = config.knifeAim.fixedLead,
@@ -2394,9 +2703,18 @@ function applyRevertConfig(data)
             if typeof(noir[key]) == "number" then config[key] = noir[key] end
         end
         for _, key in ipairs({ "autoFire", "wallCheck", "piercerBullet", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
-                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow", "knifeThrownAura" }) do
+                               "gunDualEffect", "gunTriggerBot", "gunTriggerBotWallCheck", "gunTriggerBotPrediction",
+                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow", "knifeThrownAura", "knifeDualEffect", "knifeDisableStab",
+                               "knifeInstantThrow", "knifeFastThrow", "knifeAutoKillEveryone", "knifeAutoKillSheriff", "knifeSheriffBind" }) do
             if typeof(noir[key]) == "boolean" then config[key] = noir[key] end
         end
+        for _, key in ipairs({ "knifeKillPlayer", "knifeSheriffBindShape" }) do
+            if typeof(noir[key]) == "string" then config[key] = noir[key] end
+        end
+        local knifeRuntime = getgenv().__NoirKnifeUtilityRuntime
+        if type(knifeRuntime) == "table" and type(knifeRuntime.Refresh) == "function" then task.defer(function() pcall(knifeRuntime.Refresh, knifeRuntime) end) end
+        local gunRuntime = getgenv().__NoirGunTriggerRuntime
+        if type(gunRuntime) == "table" and type(gunRuntime.RefreshDual) == "function" then task.defer(function() pcall(gunRuntime.RefreshDual, gunRuntime) end) end
         if config.piercerBullet then task.defer(installHook) end
         local knifeAim = noir.knifeAim
         if typeof(knifeAim) == "table" then
@@ -6136,6 +6454,20 @@ do
         }
     end
 
+    combatAim:AddLabel("GUN UTILITIES • native Noir implementation")
+    local function refreshGunDualEffect()
+        local runtime = getgenv().__NoirGunTriggerRuntime
+        if type(runtime) == "table" and type(runtime.RefreshDual) == "function" then pcall(runtime.RefreshDual, runtime) end
+    end
+    combatAim:AddToggle("Use Gun Dual Effect", function(v)
+        config.gunDualEffect = v == true
+        refreshGunDualEffect()
+    end)
+    combatAim:AddParagraph("GUN TRIGGER BOT", "Shoots once when the centre cursor/crosshair points at the Murderer. Works with mobile Shift Lock; move off target and back to arm the next shot.")
+    combatAim:AddToggle("Gun Trigger Bot", function(v) config.gunTriggerBot = v == true end)
+    combatAim:AddToggle("Gun Trigger Bot Wall Check", function(v) config.gunTriggerBotWallCheck = v == true end)
+    combatAim:AddToggle("Apply Prediction On Gun Trigger Bot", function(v) config.gunTriggerBotPrediction = v == true end)
+
     local combatGun=tab:AddSection("GUN", "Gun targeting controls")
     combatGun:AddToggle("Piercer Bullet", setPiercerBullet)
     combatGun:AddLabel("Sends a target-side Gun ray when a wall blocks the selected target.")
@@ -6163,6 +6495,35 @@ do
     combatKnife:AddToggle("Prioritize Sheriff", function(v)
         config.knifePrioritizeSheriff=v==true
     end)
+    combatKnife:AddLabel("NATIVE KNIFE UTILITIES • equipped Knife only")
+    local function refreshKnifeUtilities()
+        local runtime = getgenv().__NoirKnifeUtilityRuntime
+        if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
+    end
+    combatKnife:AddToggle("Use Knife Dual Effect", function(v) config.knifeDualEffect = v == true; refreshKnifeUtilities() end)
+    combatKnife:AddToggle("Disable Stab", function(v) config.knifeDisableStab = v == true end)
+    combatKnife:AddToggle("Instant Throw", function(v) config.knifeInstantThrow = v == true end)
+    combatKnife:AddToggle("Fast Throw", function(v) config.knifeFastThrow = v == true end)
+    combatKnife:AddToggle("Auto Kill Everyone", function(v) config.knifeAutoKillEveryone = v == true end)
+    combatKnife:AddToggle("Auto Kill Sheriff", function(v) config.knifeAutoKillSheriff = v == true end)
+    combatKnife:AddButton("Kill Everyone", function()
+        local runtime = getgenv().__NoirKnifeUtilityRuntime
+        if type(runtime) == "table" and type(runtime.KillEveryone) == "function" then runtime:KillEveryone() else notify("Knife utilities are starting", 2) end
+    end)
+    combatKnife:AddButton("Kill Sheriff", function()
+        local runtime = getgenv().__NoirKnifeUtilityRuntime
+        if type(runtime) == "table" and type(runtime.KillSheriff) == "function" then runtime:KillSheriff() else notify("Knife utilities are starting", 2) end
+    end)
+    combatKnife:AddToggle("Enable Kill Sheriff Bindable Button", function(v) config.knifeSheriffBind = v == true; refreshKnifeUtilities() end)
+    combatKnife:AddDropdown("Kill Sheriff Bindable Shape Type", { "Circle", "Square" }, function(v) config.knifeSheriffBindShape = v == "Square" and "Square" or "Circle"; refreshKnifeUtilities() end)
+    local function knifePlayerChoices()
+        local values = { "N/A" }
+        for _, player in ipairs(getPlayers()) do if player ~= LocalPlayer then values[#values + 1] = player.Name end end
+        table.sort(values, function(a, b) if a == "N/A" then return true elseif b == "N/A" then return false end return string.lower(a) < string.lower(b) end)
+        return values
+    end
+    local selectedKnifePlayer = combatKnife:AddDropdown("Kill Player", knifePlayerChoices(), function(v) config.knifeKillPlayer = tostring(v or "N/A") end)
+    combatKnife:AddButton("Refresh Kill Player List", function() selectedKnifePlayer:Refresh(knifePlayerChoices(), config.knifeKillPlayer) end)
 
     local function addPrediction(section,profile,prefix)
         local function addToggle(key,label)
