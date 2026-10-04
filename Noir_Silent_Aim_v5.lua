@@ -949,7 +949,7 @@ function host.CreateTab()
                     Color3.fromRGB(255, 0, 42), Color3.fromRGB(255, 0, 0),
                 }
                 for index, rainbowColor in ipairs(rainbow) do
-                    New("Frame", { Parent = rainbowTrack, Position = UDim2.new((index - 1) / #rainbow, 0, 0, 0), Size = UDim2.new(1 / #rainbow, 1, 0, 0),
+                    New("Frame", { Parent = rainbowTrack, Position = UDim2.new((index - 1) / #rainbow, 0, 0, 0), Size = UDim2.new(1 / #rainbow, 0, 1, 0),
                         BackgroundColor3 = rainbowColor, BorderSizePixel = 0, ZIndex = 74 })
                 end
                 local hueKnob = New("Frame", { Parent = hueBar, AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(11, 24), BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = 76 })
@@ -1160,18 +1160,20 @@ function localCharacter() return LocalPlayer.Character end
 local localHumCache, localHumChar
 function localHumanoid()
     local c = LocalPlayer.Character
-    if c ~= localHumChar then
+    -- A newly spawned character can exist a moment before its Humanoid. Never cache that nil result forever.
+    if c ~= localHumChar or not localHumCache or not localHumCache.Parent then
         localHumChar = c
-        localHumCache = c and c:FindFirstChildWhichIsA("Humanoid")
+        localHumCache = c and c:FindFirstChildWhichIsA("Humanoid") or nil
     end
     return localHumCache
 end
 local localRootCache, localRootChar
 function localRoot()
     local c = LocalPlayer.Character
-    if c ~= localRootChar then
+    -- Same respawn-safe rule for the root part, used by movement and Infinite Jump helpers.
+    if c ~= localRootChar or not localRootCache or not localRootCache.Parent then
         localRootChar = c
-        localRootCache = c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso"))
+        localRootCache = c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso")) or nil
     end
     return localRootCache
 end
@@ -2167,7 +2169,15 @@ function applyCharacterMods()
     if utility.walkEnabled then humanoid.WalkSpeed = utility.walkSpeed end
     if utility.jumpEnabled then humanoid.UseJumpPower = true; humanoid.JumpPower = utility.jumpPower end
 end
-LocalPlayer.CharacterAdded:Connect(function() task.wait(1); applyCharacterMods() end)
+LocalPlayer.CharacterAdded:Connect(function(character)
+    -- Apply immediately once the new rig is assembled, rather than relying on a stale pre-respawn Humanoid cache.
+    localHumChar, localHumCache, localRootChar, localRootCache = nil, nil, nil, nil
+    task.spawn(function()
+        character:WaitForChild("Humanoid", 10)
+        character:WaitForChild("HumanoidRootPart", 10)
+        if LocalPlayer.Character == character then applyCharacterMods() end
+    end)
+end)
 applyCharacterMods()
 
 function findSheriff()
