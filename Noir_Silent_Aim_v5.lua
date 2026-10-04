@@ -3116,7 +3116,19 @@ task.defer(function()
         if state.optimizeCoins and matchesNamedVisual(instance, coinWords) then applyCoinOptimization(instance) end
         if state.removePets and matchesNamedVisual(instance, petWords) then setHidden(instance, state.hiddenPets, true) end
         if state.removeCoins and matchesNamedVisual(instance, coinWords) then setHidden(instance, state.hiddenCoins, true) end
-        if state.removeCorpses and matchesNamedVisual(instance, corpseWords) then setHidden(instance, state.hiddenCorpses, true) end
+        if state.removeCorpses then
+            -- MM2 may leave the dead character under its player name rather than naming the model "Corpse".
+            if instance:IsA("Humanoid") and instance.Health <= 0 then
+                local model = instance.Parent
+                if model then setHidden(model, state.hiddenCorpses, true, true) end
+            elseif instance:IsA("BasePart") then
+                local model = instance:FindFirstAncestorOfClass("Model")
+                local humanoid = model and model:FindFirstChildWhichIsA("Humanoid")
+                if humanoid and humanoid.Health <= 0 then setHidden(instance, state.hiddenCorpses, true) end
+            elseif matchesNamedVisual(instance, corpseWords) then
+                setHidden(instance, state.hiddenCorpses, true)
+            end
+        end
         if state.removeChroma and (instance:IsA("ColorCorrectionEffect") or instance:IsA("BloomEffect") or instance:IsA("BlurEffect")) then
             local name = string.lower(instance.Name or "")
             if string.find(name, "chroma", 1, true) or string.find(name, "chrom", 1, true) or string.find(name, "aberr", 1, true) then
@@ -3141,15 +3153,44 @@ task.defer(function()
     end
     Workspace.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
     Lighting.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
+    local corpseHumanoidConnections = {}
+    local function hideDeadModel(model)
+        if state.removeCorpses and model and model.Parent then setHidden(model, state.hiddenCorpses, true, true) end
+    end
+    local function watchCorpseHumanoid(humanoid)
+        if not humanoid or corpseHumanoidConnections[humanoid] then return end
+        corpseHumanoidConnections[humanoid] = humanoid.Died:Connect(function() task.defer(hideDeadModel, humanoid.Parent) end)
+        humanoid.HealthChanged:Connect(function(health)
+            if health <= 0 then task.defer(hideDeadModel, humanoid.Parent) end
+        end)
+        if humanoid.Health <= 0 then task.defer(hideDeadModel, humanoid.Parent) end
+    end
     local function hookCorpse(character)
-        local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-        if humanoid then humanoid.Died:Connect(function() if state.removeCorpses then task.defer(setHidden, character, state.hiddenCorpses, true, true) end end) end
+        if not character then return end
+        if character:IsA("Humanoid") then watchCorpseHumanoid(character); return end
+        for _, instance in ipairs(character:GetDescendants()) do if instance:IsA("Humanoid") then watchCorpseHumanoid(instance) end end
+        character.DescendantAdded:Connect(function(instance) if instance:IsA("Humanoid") then watchCorpseHumanoid(instance) end end)
     end
     for _, player in ipairs(Players:GetPlayers()) do
         if player.Character then hookCorpse(player.Character) end
         player.CharacterAdded:Connect(hookCorpse)
     end
     Players.PlayerAdded:Connect(function(player) player.CharacterAdded:Connect(hookCorpse) end)
+    Workspace.DescendantAdded:Connect(function(instance)
+        if instance:IsA("Humanoid") then watchCorpseHumanoid(instance) end
+    end)
+    task.spawn(function()
+        while running do
+            if state.removeCorpses then
+                for _, player in ipairs(Players:GetPlayers()) do
+                    local character = player.Character
+                    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+                    if humanoid and humanoid.Health <= 0 then hideDeadModel(character) end
+                end
+            end
+            task.wait(.45)
+        end
+    end)
 
     local fpsSection = tab:AddSection("MISC \u{2022} FPS", "Local visual-performance controls; server-side objects and round rules are not changed")
     fpsSection:AddToggle("Fps Boost", function(enabled) state.fpsBoost = enabled == true; refreshPerformance() end)
