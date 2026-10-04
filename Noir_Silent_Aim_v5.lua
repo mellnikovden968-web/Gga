@@ -213,6 +213,7 @@ do
         { "world",  16898613509, Vector2.new(771, 563), "World" },
         { "visual", 16898613353, Vector2.new(771, 563), "Visuals" },
         { "emotes", 16898613777, Vector2.new(967, 759), "Emotes" },
+        { "misc",   16898613509, Vector2.new(820, 147), "Misc" },
     }
     for i, d in ipairs(navDefs) do
         local b = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(16, 116 + (i - 1) * 52), Size = UDim2.fromOffset(208, 46),
@@ -226,6 +227,7 @@ do
         local bar = New("Frame", { Parent = b, Position = UDim2.fromOffset(0, 12), Size = UDim2.fromOffset(3, 22), BackgroundColor3 = C.accent, BackgroundTransparency = 1 })
         corner(bar, 2)
         local glyphs = nil
+        local rings = nil
         if d[1] == "emotes" then
             -- A clear person-shaped icon for Emotes instead of the Combat crossed-swords sprite.
             ic.Visible = false
@@ -240,8 +242,20 @@ do
             glyphPart(UDim2.fromOffset(15, 20), UDim2.fromOffset(20, 4), 2)
             glyphPart(UDim2.fromOffset(19, 27), UDim2.fromOffset(4, 8), 2)
             glyphPart(UDim2.fromOffset(27, 27), UDim2.fromOffset(4, 8), 2)
+        elseif d[1] == "misc" then
+            -- Requested Misc mark: a circular outline containing three dots.
+            ic.Visible = false
+            glyphs, rings = {}, {}
+            local ring = New("Frame", { Parent = b, Position = UDim2.fromOffset(14, 10), Size = UDim2.fromOffset(26, 26), BackgroundTransparency = 1, BorderSizePixel = 0 })
+            corner(ring, 13)
+            local ringStroke = New("UIStroke", { Parent = ring, Color = C.dim, Thickness = 1.5, Transparency = .08 })
+            rings[#rings + 1] = ringStroke
+            for index = 0, 2 do
+                local dot = New("Frame", { Parent = ring, Position = UDim2.fromOffset(5 + index * 6, 11), Size = UDim2.fromOffset(4, 4), BackgroundColor3 = C.dim, BorderSizePixel = 0 })
+                corner(dot, 2); glyphs[#glyphs + 1] = dot
+            end
         end
-        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, label = lbl, bar = bar, glyphs = glyphs }
+        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, label = lbl, bar = bar, glyphs = glyphs, rings = rings }
     end
 end
 local status = New("Frame", { Parent = sidebar, Position = UDim2.fromOffset(16, 596), Size = UDim2.fromOffset(208, 84), BackgroundColor3 = C.panel, BackgroundTransparency = .18 })
@@ -443,6 +457,13 @@ for i = 1, 2 do
         BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
     New("UIListLayout", { Parent = emotesCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
 end
+local miscContent = content:Clone(); miscContent.Name = "MiscContent"; miscContent.Parent = win; miscContent.Visible = false; miscContent:ClearAllChildren()
+local miscCols = {}
+for i = 1, 2 do
+    miscCols[i] = New("Frame", { Parent = miscContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
+        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
+    New("UIListLayout", { Parent = miscCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+end
 
 local dashboard = New("Frame", { Parent = win, Position = content.Position, Size = content.Size, BackgroundTransparency = 1 })
 local profile = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 0), Size = UDim2.fromOffset(430, 168), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
@@ -500,7 +521,7 @@ end)
 local activePage = "home"
 local selectPage
 do
-    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent, emotes = emotesContent }
+    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent, emotes = emotesContent, misc = miscContent }
     local pageBasePosition = content.Position
     local pageTransitionId = 0
     local function pageScaleFor(object)
@@ -556,6 +577,9 @@ do
                 if data.glyphs then
                     for _, glyph in ipairs(data.glyphs) do TweenService:Create(glyph, TweenInfo.new(.2), { BackgroundColor3 = active and C.accent or C.dim }):Play() end
                 end
+                if data.rings then
+                    for _, ring in ipairs(data.rings) do TweenService:Create(ring, TweenInfo.new(.2), { Color = active and C.accent or C.dim }):Play() end
+                end
                 TweenService:Create(data.label, TweenInfo.new(.2), { TextColor3 = active and C.text or C.dim }):Play()
                 TweenService:Create(data.bar, TweenInfo.new(.2), { BackgroundTransparency = active and 0 or 1 }):Play()
             end
@@ -565,7 +589,7 @@ end
 for name, b in pairs(navButtons) do b.MouseButton1Click:Connect(function() if activePage == name then selectPage("home") else selectPage(name) end end) end
 selectPage("home")
 
-local sectionCount, mainSectionCount, worldSectionCount, visualSectionCount, emotesSectionCount, configSectionCount = 0, 0, 0, 0, 0, 0
+local sectionCount, mainSectionCount, worldSectionCount, visualSectionCount, emotesSectionCount, miscSectionCount, configSectionCount = 0, 0, 0, 0, 0, 0, 0
 local sectionPanels, controls = {}, {}
 function refreshCanvas()
     task.defer(function()
@@ -574,6 +598,7 @@ function refreshCanvas()
         visualContent.CanvasSize = UDim2.fromOffset(0, math.max(visualCols[1].AbsoluteSize.Y, visualCols[2].AbsoluteSize.Y) + 165)
         mainContent.CanvasSize = UDim2.fromOffset(0, math.max(mainCols[1].AbsoluteSize.Y, mainCols[2].AbsoluteSize.Y) + 165)
         worldContent.CanvasSize = UDim2.fromOffset(0, math.max(worldCols[1].AbsoluteSize.Y, worldCols[2].AbsoluteSize.Y) + 130)
+        miscContent.CanvasSize = UDim2.fromOffset(0, math.max(miscCols[1].AbsoluteSize.Y, miscCols[2].AbsoluteSize.Y) + 165)
         local embeddedEmotes = emotesContent:FindFirstChild("NoirEmotesNative") or emotesContent:FindFirstChild("NoirEmbeddedEmotesCanvas")
         if embeddedEmotes then
             emotesContent.CanvasSize = UDim2.fromOffset(0, embeddedEmotes.Position.Y.Offset + embeddedEmotes.Size.Y.Offset + 16)
@@ -584,7 +609,7 @@ function refreshCanvas()
 end
 search:GetPropertyChangedSignal("Text"):Connect(function()
     local q = string.lower(search.Text or "")
-    local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0 }
+    local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0, misc = 0 }
     for _, entry in ipairs(sectionPanels) do
         local hay = entry.name
         for _, d in ipairs(entry.panel:GetDescendants()) do
@@ -595,7 +620,7 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
         if match then counts[entry.page] = (counts[entry.page] or 0) + 1 end
     end
     if q ~= "" and activePage ~= "home" and (counts[activePage] or 0) == 0 then
-        for _, page in ipairs({ "main", "aim", "world", "visual", "emotes" }) do if counts[page] > 0 then selectPage(page) break end end
+        for _, page in ipairs({ "main", "aim", "world", "visual", "emotes", "misc" }) do if counts[page] > 0 then selectPage(page) break end end
     end
     refreshCanvas()
 end)
@@ -664,11 +689,13 @@ function host.CreateTab()
         local isMain = string.sub(name, 1, 5) == "MAIN "
         local isWorld = string.sub(name, 1, 6) == "WORLD "
         local isEmotes = string.sub(name, 1, 7) == "EMOTES "
+        local isMisc = string.sub(name, 1, 5) == "MISC "
         local col, page = nil, "aim"
         if isVisual then visualSectionCount += 1; col = visualCols[(visualSectionCount - 1) % 2 + 1]; page = "visual"
         elseif isMain then mainSectionCount += 1; col = mainCols[(mainSectionCount - 1) % 2 + 1]; page = "main"
         elseif isWorld then worldSectionCount += 1; col = worldCols[(worldSectionCount - 1) % 2 + 1]; page = "world"
         elseif isEmotes then emotesSectionCount += 1; col = emotesCols[(emotesSectionCount - 1) % 2 + 1]; page = "emotes"
+        elseif isMisc then miscSectionCount += 1; col = miscCols[(miscSectionCount - 1) % 2 + 1]; page = "misc"
         else sectionCount += 1; col = cols[(sectionCount - 1) % 2 + 1] end
         local panel = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
             BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
@@ -676,7 +703,7 @@ function host.CreateTab()
         local tick = New("Frame", { Parent = panel, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
         corner(tick, 2)
         table.insert(sectionPanels, { panel = panel, page = page, name = string.lower(name .. " " .. (description or "")) })
-        local shownName = name:gsub("^MAIN \u{2022} ", ""):gsub("^WORLD \u{2022} ", ""):gsub("^VISUAL \u{2022} ", ""):gsub("^EMOTES \u{2022} ", "")
+        local shownName = name:gsub("^MAIN \u{2022} ", ""):gsub("^WORLD \u{2022} ", ""):gsub("^VISUAL \u{2022} ", ""):gsub("^EMOTES \u{2022} ", ""):gsub("^MISC \u{2022} ", "")
         text(panel, shownName, 18, UDim2.fromOffset(24, 16))
         if description and description ~= "" then text(panel, description, 12, UDim2.fromOffset(24, 44), true) end
         local holder = New("Frame", { Parent = panel, Position = UDim2.fromOffset(20, description ~= "" and 74 or 57), Size = UDim2.new(1, -40, 0, 0),
@@ -2465,6 +2492,115 @@ end
 
 local tab = host.CreateTab()
 
+-- Misc cursor controls: generated UI cursors work without an external image dependency;
+-- an optional Roblox image ID can replace the template.
+do
+    local cursorState = {
+        enabled = false,
+        template = "Default",
+        customId = "",
+        size = 28,
+        gui = nil,
+        cursor = nil,
+        mouseIconOriginal = nil,
+    }
+
+    local function assetId(value)
+        local digits = tostring(value or ""):match("(%d+)")
+        return digits and ("rbxassetid://" .. digits) or ""
+    end
+
+    local function clearCursor()
+        if cursorState.gui then cursorState.gui:Destroy() end
+        cursorState.gui, cursorState.cursor = nil, nil
+    end
+
+    local function buildCursor()
+        if not cursorState.enabled then return end
+        clearCursor()
+        local parent = guiParent
+        if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
+        local cursorGui = New("ScreenGui", { Parent = parent, Name = "NoirCustomCursor", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 120, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+        local cursor = New("Frame", { Parent = cursorGui, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5),
+            Size = UDim2.fromOffset(cursorState.size, cursorState.size), BackgroundTransparency = 1, BorderSizePixel = 0, Active = false, ZIndex = 120 })
+        cursorState.gui, cursorState.cursor = cursorGui, cursor
+        local image = assetId(cursorState.customId)
+        if cursorState.template == "Custom Image" and image ~= "" then
+            New("ImageLabel", { Parent = cursor, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Image = image, ImageColor3 = C.text, ZIndex = 121 })
+        elseif cursorState.template == "Crosshair" then
+            for _, spec in ipairs({
+                { UDim2.new(.5, -1, 0, 0), UDim2.fromOffset(2, math.floor(cursorState.size * .36)) },
+                { UDim2.new(.5, -1, 1, -math.floor(cursorState.size * .36)), UDim2.fromOffset(2, math.floor(cursorState.size * .36)) },
+                { UDim2.new(0, 0, .5, -1), UDim2.fromOffset(math.floor(cursorState.size * .36), 2) },
+                { UDim2.new(1, -math.floor(cursorState.size * .36), .5, -1), UDim2.fromOffset(math.floor(cursorState.size * .36), 2) },
+            }) do
+                New("Frame", { Parent = cursor, Position = spec[1], Size = spec[2], BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = 121 })
+            end
+            local center = New("Frame", { Parent = cursor, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(5, 5), BackgroundColor3 = C.accent, BorderSizePixel = 0, ZIndex = 121 }); corner(center, 3)
+        elseif cursorState.template == "Ring" then
+            local ring = New("Frame", { Parent = cursor, Position = UDim2.fromOffset(3, 3), Size = UDim2.new(1, -6, 1, -6), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 121 })
+            corner(ring, math.floor(cursorState.size / 2))
+            New("UIStroke", { Parent = ring, Color = C.accent, Thickness = 2 })
+            local center = New("Frame", { Parent = cursor, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(4, 4), BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = 121 }); corner(center, 2)
+        else
+            local diameter = cursorState.template == "Dot" and math.max(8, math.floor(cursorState.size * .38)) or math.max(10, math.floor(cursorState.size * .54))
+            local dot = New("Frame", { Parent = cursor, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(diameter, diameter), BackgroundColor3 = cursorState.template == "Dot" and C.accent or C.text, BorderSizePixel = 0, ZIndex = 121 })
+            corner(dot, math.floor(diameter / 2)); stroke(dot, C.border, .18)
+        end
+    end
+
+    local function setCursorEnabled(enabled)
+        cursorState.enabled = enabled == true
+        if cursorState.enabled then
+            pcall(function()
+                if cursorState.mouseIconOriginal == nil then cursorState.mouseIconOriginal = UIS.MouseIconEnabled end
+                UIS.MouseIconEnabled = false
+            end)
+            buildCursor()
+        else
+            clearCursor()
+            pcall(function()
+                if cursorState.mouseIconOriginal ~= nil then UIS.MouseIconEnabled = cursorState.mouseIconOriginal end
+            end)
+        end
+    end
+
+    local function moveCursor(position)
+        if cursorState.enabled and cursorState.cursor and typeof(position) == "Vector3" then
+            cursorState.cursor.Position = UDim2.fromOffset(position.X, position.Y)
+        end
+    end
+    UIS.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then moveCursor(input.Position) end
+    end)
+    UIS.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then moveCursor(input.Position) end
+    end)
+
+    local cursorSection = tab:AddSection("MISC \u{2022} CUSTOMIZE CURSOR", "Local cursor templates and custom image ID")
+    cursorSection:AddToggle("Enable Custom Cursor", setCursorEnabled)
+    local cursorTemplates = { "Default", "Crosshair", "Dot", "Ring", "Custom Image" }
+    local savedTemplate = NoirPersistence.data.dropdowns["MISC \u{2022} CUSTOMIZE CURSOR::Template Cursor"]
+    cursorState.template = table.find(cursorTemplates, savedTemplate) and savedTemplate or "Default"
+    local templateControl = cursorSection:AddDropdown("Template Cursor", cursorTemplates, function(value)
+        cursorState.template = value
+        buildCursor()
+    end)
+    templateControl:SetValue(cursorState.template)
+    cursorState.customId = tostring(NoirPersistence.data.textboxes["MISC \u{2022} CUSTOMIZE CURSOR::Custom Cursor ID"] or "")
+    local customIdControl = cursorSection:AddTextBox("Custom Cursor ID", function(value)
+        cursorState.customId = tostring(value or ""):sub(1, 100)
+        NoirPersistence.data.textboxes["MISC \u{2022} CUSTOMIZE CURSOR::Custom Cursor ID"] = cursorState.customId
+        NoirPersistence.Save()
+        buildCursor()
+    end)
+    customIdControl:SetValue(cursorState.customId)
+    cursorSection:AddSlider("Cursor Size", 12, 80, cursorState.size, function(value)
+        cursorState.size = tonumber(value) or cursorState.size
+        buildCursor()
+    end)
+end
+
 -- Main universal utilities: all state stays in this scope while the connections retain only what they need.
 do
     local universalState = {
@@ -2555,7 +2691,7 @@ do
         local button = universalState.invisibleBindButton
         if not button then return end
         local label = button:FindFirstChild("Text")
-        if label then label.Text = universalState.invisible and "Invisible\nON" or "Invisible\nOFF" end
+        if label then label.Text = universalState.invisible and "Desync\nON" or "Desync\nOFF" end
     end
 
     local function setInvisible(enabled)
@@ -2594,7 +2730,7 @@ do
         bindGui.Parent = parent
 
         local button = Instance.new("ImageButton")
-        button.Name = "Invisible"
+        button.Name = "Desync"
         button.AnchorPoint = Vector2.new(.5, .5)
         button.Position = NoirPersistence.GetPosition("invisible_bind_v1", UDim2.new(.24, 0, .88, 0))
         button.Size = UDim2.new(universalState.invisibleBindSize, 0, universalState.invisibleBindSize, 0)
@@ -2760,15 +2896,23 @@ do
     universalMods:AddToggle("Infinite Jump", function(enabled) universalState.infiniteJump = enabled == true end)
     universalMods:AddToggle("AntiFling", setAntiFling)
 
-    local invisibleMods = tab:AddSection("MAIN \u{2022} INVISIBLE", "Desync invisibility and floating bind button")
-    invisibleMods:AddToggle("Invisible", setInvisible)
-    invisibleMods:AddToggle("Enable Invisible Bind Button", setInvisibleBindButton)
-    invisibleMods:AddSlider("Invisible Bind Button Size", 5, 25, universalState.invisibleBindSize * 100, function(value)
+    -- Keep existing Invisible settings while moving the feature into Misc with the requested Desync names.
+    local oldDesyncKey, newDesyncKey = "MAIN \u{2022} INVISIBLE::Invisible", "MISC \u{2022} DESYNC::Desync"
+    local oldBindKey, newBindKey = "MAIN \u{2022} INVISIBLE::Enable Invisible Bind Button", "MISC \u{2022} DESYNC::Enable Desync Bind Button"
+    local oldSizeKey, newSizeKey = "MAIN \u{2022} INVISIBLE::Invisible Bind Button Size", "MISC \u{2022} DESYNC::Desync Bind Button Size"
+    if NoirPersistence.data.toggles[newDesyncKey] == nil and NoirPersistence.data.toggles[oldDesyncKey] ~= nil then NoirPersistence.data.toggles[newDesyncKey] = NoirPersistence.data.toggles[oldDesyncKey] end
+    if NoirPersistence.data.toggles[newBindKey] == nil and NoirPersistence.data.toggles[oldBindKey] ~= nil then NoirPersistence.data.toggles[newBindKey] = NoirPersistence.data.toggles[oldBindKey] end
+    if NoirPersistence.data.sliders[newSizeKey] == nil and NoirPersistence.data.sliders[oldSizeKey] ~= nil then NoirPersistence.data.sliders[newSizeKey] = NoirPersistence.data.sliders[oldSizeKey] end
+
+    local desyncMods = tab:AddSection("MISC \u{2022} DESYNC", "Short down-frame desync and floating bind button")
+    desyncMods:AddToggle("Desync", setInvisible)
+    desyncMods:AddToggle("Enable Desync Bind Button", setInvisibleBindButton)
+    desyncMods:AddSlider("Desync Bind Button Size", 5, 25, universalState.invisibleBindSize * 100, function(value)
         universalState.invisibleBindSize = (tonumber(value) or 10.5) / 100
         updateInvisibleBindButtonSize()
     end)
-    invisibleMods:AddLabel("Round Invisible button: tap to toggle; drag it to move. Its size and position are saved.")
-    -- AddToggle restores saved state synchronously; do not remove an Invisible button that was restored as enabled.
+    desyncMods:AddLabel("Round Desync button: tap to toggle; drag it to move. Its size and position are saved.")
+    -- AddToggle restores saved state synchronously; do not remove a Desync button that was restored as enabled.
     if not universalState.invisibleBindEnabled then removeInvisibleBindButton() end
 end
 
