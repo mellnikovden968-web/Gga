@@ -2953,7 +2953,7 @@ task.defer(function()
         optimizeCoins = false, removeChroma = false, removePets = false, removeCoins = false, removeCorpses = false,
         partOriginals = {}, effectOriginals = {}, postOriginals = {},
         coinOriginals = {}, hiddenPets = {}, hiddenCoins = {}, hiddenCorpses = {}, chromaOriginals = {}, perfConnection = nil,
-        perfToken = 0, autoScanToken = 0, ragdollModelCache = {}, originalGlobalShadows = Lighting.GlobalShadows,
+        perfToken = 0, autoScanToken = 0, knownCorpseParts = {}, trackedCharacterParts = {}, originalGlobalShadows = Lighting.GlobalShadows,
         savedQuality = nil, savedMeshDetail = nil, savedDecoration = nil,
     }
     local function setProperty(instance, property, value)
@@ -3111,67 +3111,25 @@ task.defer(function()
             table.clear(state.coinOriginals)
         end)
     end
-    local petWords, coinWords, corpseWords = { "pet", "companion", "minion", "familiar" }, { "coin", "currency", "token" }, { "corpse", "ragdoll", "deadbody", "body" }
-    local avatarPartNames = {
-        ["head"] = true, ["torso"] = true, ["uppertorso"] = true, ["lowertorso"] = true,
-        ["left arm"] = true, ["right arm"] = true, ["left leg"] = true, ["right leg"] = true,
-        ["leftarm"] = true, ["rightarm"] = true, ["leftleg"] = true, ["rightleg"] = true,
-        ["lefthand"] = true, ["righthand"] = true, ["leftfoot"] = true, ["rightfoot"] = true,
-        ["leftupperarm"] = true, ["rightupperarm"] = true, ["leftlowerarm"] = true, ["rightlowerarm"] = true,
-        ["leftupperleg"] = true, ["rightupperleg"] = true, ["leftlowerleg"] = true, ["rightlowerleg"] = true,
-    }
-    local function isDetachedCorpsePart(part)
-        if not part:IsA("BasePart") or part.Anchored or not avatarPartNames[string.lower(part.Name or "")] then return false end
-        local model = part:FindFirstAncestorOfClass("Model")
-        if model then
-            local humanoid = model:FindFirstChildWhichIsA("Humanoid")
-            -- Lobby/display NPCs are living rigs too, even though they are not Players.
-            if humanoid and humanoid.Health > 0 then return false end
-            -- A normal rig without a Humanoid still keeps Motor6D joints; a real MM2 corpse has broken/detached joints.
-            if not humanoid and model:FindFirstChildWhichIsA("Motor6D", true) then return false end
+    local petWords, coinWords, corpseWords = { "pet", "companion", "minion", "familiar" }, { "coin", "currency", "token" }, { "corpse", "ragdoll", "deadbody" }
+    -- Only parts captured from a real Player.Character at the moment of death qualify as an unnamed corpse.
+    -- This avoids confusing live players or decorative lobby NPCs with detached body parts.
+    local function hideKnownCorpseParts()
+        if not state.removeCorpses then return end
+        for part in pairs(state.knownCorpseParts) do
+            if part and part.Parent then setHidden(part, state.hiddenCorpses, true) end
         end
-        return true
-    end
-    local function isHumanoidlessRagdoll(model)
-        if not model then return false end
-        local cached = state.ragdollModelCache[model]
-        if cached ~= nil then return cached end
-        local result = false
-        -- Do not treat an intact Humanoid-less lobby/display rig as a corpse.
-        if not model:FindFirstChildWhichIsA("Humanoid") and not model:FindFirstChildWhichIsA("Motor6D", true) and model:FindFirstChild("HumanoidRootPart") then
-            local limbs = 0
-            for _, descendant in ipairs(model:GetDescendants()) do
-                if descendant:IsA("BasePart") and avatarPartNames[string.lower(descendant.Name or "")] then
-                    limbs += 1
-                    if limbs >= 3 then result = true; break end
-                end
-            end
-        end
-        state.ragdollModelCache[model] = result
-        return result
     end
     local function applyAutoVisuals(instance)
         if state.optimizeCoins and matchesNamedVisual(instance, coinWords) then applyCoinOptimization(instance) end
         if state.removePets and matchesNamedVisual(instance, petWords) then setHidden(instance, state.hiddenPets, true) end
         if state.removeCoins and matchesNamedVisual(instance, coinWords) then setHidden(instance, state.hiddenCoins, true) end
         if state.removeCorpses then
-            -- MM2 may leave the dead character under its player name rather than naming the model "Corpse".
-            if instance:IsA("Humanoid") and instance.Health <= 0 then
-                local model = instance.Parent
-                if model then setHidden(model, state.hiddenCorpses, true, true) end
-            elseif instance:IsA("BasePart") then
-                local model = instance:FindFirstAncestorOfClass("Model")
-                local humanoid = model and model:FindFirstChildWhichIsA("Humanoid")
-                if humanoid and humanoid.Health <= 0 then
-                    setHidden(instance, state.hiddenCorpses, true)
-                elseif isHumanoidlessRagdoll(model) then
-                    setHidden(model, state.hiddenCorpses, true, true)
-                elseif isDetachedCorpsePart(instance) then
-                    -- MM2 can split a dead avatar into separate unanchored Head/Torso/limb parts with no Model/Humanoid.
-                    setHidden(instance, state.hiddenCorpses, true)
-                end
-            elseif matchesNamedVisual(instance, corpseWords) then
+            if state.knownCorpseParts[instance] then
                 setHidden(instance, state.hiddenCorpses, true)
+            elseif matchesNamedVisual(instance, corpseWords) then
+                -- Named corpse/ragdoll containers are safe to hide; do not use generic words such as "body".
+                setHidden(instance, state.hiddenCorpses, true, instance:IsA("Model") or instance:IsA("Folder"))
             end
         end
         if state.removeChroma and (instance:IsA("ColorCorrectionEffect") or instance:IsA("BloomEffect") or instance:IsA("BlurEffect")) then
@@ -3197,49 +3155,52 @@ task.defer(function()
         end)
     end
     Workspace.DescendantAdded:Connect(function(instance)
-        local model = instance:FindFirstAncestorOfClass("Model")
-        if model then state.ragdollModelCache[model] = nil end
         task.defer(applyAutoVisuals, instance)
     end)
     Lighting.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
-    local corpseHumanoidConnections = {}
-    local function hideDeadModel(model)
-        if state.removeCorpses and model and model.Parent then setHidden(model, state.hiddenCorpses, true, true) end
-    end
-    local function watchCorpseHumanoid(humanoid)
-        if not humanoid or corpseHumanoidConnections[humanoid] then return end
-        corpseHumanoidConnections[humanoid] = humanoid.Died:Connect(function() task.defer(hideDeadModel, humanoid.Parent) end)
-        humanoid.HealthChanged:Connect(function(health)
-            if health <= 0 then task.defer(hideDeadModel, humanoid.Parent) end
-        end)
-        if humanoid.Health <= 0 then task.defer(hideDeadModel, humanoid.Parent) end
-    end
-    local function hookCorpse(character)
+    local corpseHumanoidConnections, characterTrackConnections = {}, {}
+    local function markCharacterAsCorpse(character)
         if not character then return end
-        if character:IsA("Humanoid") then watchCorpseHumanoid(character); return end
-        for _, instance in ipairs(character:GetDescendants()) do if instance:IsA("Humanoid") then watchCorpseHumanoid(instance) end end
-        character.DescendantAdded:Connect(function(instance) if instance:IsA("Humanoid") then watchCorpseHumanoid(instance) end end)
-    end
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player.Character then hookCorpse(player.Character) end
-        player.CharacterAdded:Connect(hookCorpse)
-    end
-    Players.PlayerAdded:Connect(function(player) player.CharacterAdded:Connect(hookCorpse) end)
-    Workspace.DescendantAdded:Connect(function(instance)
-        if instance:IsA("Humanoid") then watchCorpseHumanoid(instance) end
-    end)
-    task.spawn(function()
-        while running do
-            if state.removeCorpses then
-                for _, player in ipairs(Players:GetPlayers()) do
-                    local character = player.Character
-                    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-                    if humanoid and humanoid.Health <= 0 then hideDeadModel(character) end
-                end
-            end
-            task.wait(.45)
+        local parts = state.trackedCharacterParts[character]
+        if not parts then return end
+        for part in pairs(parts) do
+            state.knownCorpseParts[part] = true
+            if state.removeCorpses and part and part.Parent then setHidden(part, state.hiddenCorpses, true) end
         end
-    end)
+    end
+    local function watchCorpseHumanoid(character, humanoid)
+        if not humanoid or corpseHumanoidConnections[humanoid] then return end
+        corpseHumanoidConnections[humanoid] = true
+        humanoid.Died:Connect(function() task.defer(markCharacterAsCorpse, character) end)
+        humanoid.HealthChanged:Connect(function(health)
+            if health <= 0 then task.defer(markCharacterAsCorpse, character) end
+        end)
+        if humanoid.Health <= 0 then task.defer(markCharacterAsCorpse, character) end
+    end
+    local function trackPlayerCharacter(character)
+        if not character or state.trackedCharacterParts[character] then return end
+        local parts = {}
+        state.trackedCharacterParts[character] = parts
+        local function remember(instance)
+            if instance:IsA("BasePart") then parts[instance] = true end
+            if instance:IsA("Humanoid") then watchCorpseHumanoid(character, instance) end
+        end
+        for _, instance in ipairs(character:GetDescendants()) do remember(instance) end
+        local descendantConnection = character.DescendantAdded:Connect(remember)
+        characterTrackConnections[character] = descendantConnection
+        local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+        if humanoid then watchCorpseHumanoid(character, humanoid) end
+    end
+    local function watchPlayerForCorpses(player)
+        if player.Character then trackPlayerCharacter(player.Character) end
+        player.CharacterAdded:Connect(trackPlayerCharacter)
+        player.CharacterRemoving:Connect(function(character)
+            local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+            if humanoid and humanoid.Health <= 0 then markCharacterAsCorpse(character) end
+        end)
+    end
+    for _, player in ipairs(Players:GetPlayers()) do watchPlayerForCorpses(player) end
+    Players.PlayerAdded:Connect(watchPlayerForCorpses)
 
     local fpsSection = tab:AddSection("MISC \u{2022} FPS", "Local visual-performance controls; server-side objects and round rules are not changed")
     fpsSection:AddToggle("Fps Boost", function(enabled) state.fpsBoost = enabled == true; refreshPerformance() end)
@@ -3266,7 +3227,7 @@ task.defer(function()
     end)
     fpsSection:AddToggle("Auto Remove Corpses", function(enabled)
         state.removeCorpses = enabled == true
-        if state.removeCorpses then scanAutoVisuals() else restoreHidden(state.hiddenCorpses) end
+        if state.removeCorpses then hideKnownCorpseParts(); scanAutoVisuals() else restoreHidden(state.hiddenCorpses) end
     end)
     fpsSection:AddToggle("Enable Frame Enhancement", function(enabled) state.frameEnhancement = enabled == true; refreshPerformance() end)
 end)
@@ -5985,6 +5946,98 @@ do
     combatAim:AddToggle("Wall Check", function(v) config.wallCheck=v==true end)
     combatAim:AddToggle("Show Shoot Murder Button", setShootButtonVisible)
     combatAim:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton=v==true end)
+
+    -- Omega/CFG is adapted to Noir's real pistol prediction table; it never touches odh_internal_shared/MM2_GPL.
+    do
+        local omega = { enabled = false, adaptive = true, locked = false, upgrade = false, monitor = false,
+            lastApply = -1e9, currentProfile = "--", classicIndex = nil, statusControl = nil }
+        local function pingMilliseconds()
+            return math.clamp(math.floor(cachedPing * 1000 + .5), 5, 1000)
+        end
+        local function classicOmegaProfile(ping)
+            local thresholds = { 50, 100, 150 }
+            local index = omega.classicIndex or 1
+            while index < 4 and ping > thresholds[index] + 4 do index += 1 end
+            while index > 1 and ping <= thresholds[index - 1] - 4 do index -= 1 end
+            omega.classicIndex = index
+            local point = PingProfiles[index + 1] or PingProfiles[#PingProfiles]
+            return { Sim = point.Sim, Interval = point.Interval, H = point.H, V = point.V, X = point.X, Y = point.Y, Z = point.Z }, "Classic " .. string.char(64 + index)
+        end
+        local function omegaConfig(ping)
+            if omega.adaptive then
+                omega.classicIndex = nil
+                return interpolateProfile(ping), "Dynamic " .. tostring(ping) .. " ms"
+            end
+            return classicOmegaProfile(ping)
+        end
+        local function updateOmegaStatus()
+            if not omega.statusControl then return end
+            local state = not omega.enabled and "OFF" or omega.locked and "LOCKED" or "ON"
+            local mode = omega.adaptive and "Adaptive" or "Classic"
+            omega.statusControl:SetValue("Omega: " .. state .. "  |  " .. pingMilliseconds() .. " ms  |  " .. mode .. "  |  " .. omega.currentProfile .. (omega.upgrade and "  +Upgrade" or ""))
+        end
+        local function applyOmega(force)
+            local now = os.clock()
+            if not force and now - omega.lastApply < .4 then return end
+            omega.lastApply = now
+            if not omega.enabled or omega.locked then updateOmegaStatus(); return end
+            local ping = pingMilliseconds()
+            local profile, name = omegaConfig(ping)
+            if omega.upgrade then
+                profile.Sim += 1; profile.H += 2; profile.V += 2
+            end
+            -- Direct Noir mapping: these are the same controls CFG maps through MM2_GPL slots 4..10.
+            config.maxSimulationMs = profile.Sim
+            config.predictionIntervalMs = profile.Interval
+            config.offsetX, config.offsetY, config.offsetZ = profile.X, profile.Y, profile.Z
+            config.horizontalMultiplier, config.verticalMultiplier = profile.H, profile.V
+            config.manualPingMs = ping
+            omega.currentProfile = name
+            updateOmegaStatus()
+        end
+        local function reconfigureOmega()
+            omega.lastApply = -1e9
+            applyOmega(true)
+        end
+        local function telemetryOmega()
+            local text = "Omega • Ping " .. pingMilliseconds() .. " ms • " .. (omega.adaptive and "Adaptive" or "Classic") .. " • " .. omega.currentProfile
+            notify(text, 4)
+            print("[Noir Omega] " .. text)
+        end
+
+        combatAim:AddLabel("OMEGA AUTO REVERT • Noir prediction profile")
+        combatAim:AddToggle("Omega Auto Revert", function(enabled)
+            omega.enabled = enabled == true
+            reconfigureOmega()
+        end)
+        combatAim:AddToggle("Omega Adaptive Engine", function(enabled)
+            omega.adaptive = enabled == true
+            omega.classicIndex = nil
+            reconfigureOmega()
+        end)
+        combatAim:AddToggle("Omega Lock Config", function(enabled)
+            omega.locked = enabled == true
+            updateOmegaStatus()
+        end)
+        combatAim:AddToggle("Omega Upgrade Mode", function(enabled)
+            omega.upgrade = enabled == true
+            reconfigureOmega()
+        end)
+        combatAim:AddToggle("Omega Monitor", function(enabled)
+            omega.monitor = enabled == true
+            updateOmegaStatus()
+        end)
+        combatAim:AddButton("Omega Print Telemetry", telemetryOmega)
+        omega.statusControl = combatAim:AddLabel("Omega: OFF  |  -- ms  |  Adaptive  |  --")
+        combatAim:AddLabel("Omega changes pistol prediction only. Disable it to stop updates; the last applied values stay in place.")
+
+        task.spawn(function()
+            while running do
+                if omega.enabled or omega.monitor then applyOmega(false) end
+                task.wait(.4)
+            end
+        end)
+    end
 
     local combatGun=tab:AddSection("GUN", "Gun targeting controls")
     combatGun:AddToggle("Piercer Bullet", setPiercerBullet)
