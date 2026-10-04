@@ -880,6 +880,7 @@ local config = {
     autoFireKey = "None",
     shotMethod = "Remote",
     wallCheck = false,
+    piercerBullet = false,
     ignoreDead = true,
     ignoreFriends = false,
     maxDistance = 0,
@@ -1434,7 +1435,7 @@ local function remoteBelongsToLocalGun(remote)
     return (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun))
 end
 function shotRemote(remote, args)
-    if not (config.enabled or buttonShotActive) or args.n < 2 then return false end
+    if not (config.enabled or config.piercerBullet or buttonShotActive) or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if not remoteBelongsToLocalGun(remote) then return false end
     local first, second = args[1], args[2]
@@ -1467,7 +1468,8 @@ function redirect(remote, args)
         if not buttonShotActive and config.aimKey ~= "None" and not aimHeld then return end
         if config.shotMethod == "CFrame" and not hasCFrameArgument(args) then return end
         part = (buttonShotActive and buttonShotTarget and getAimPart(buttonShotTarget)) or targetPart()
-        useWallCheck = config.wallCheck
+        -- Piercer Bullet keeps the gun redirect active and deliberately bypasses only the local gun wall gate.
+        useWallCheck = config.wallCheck and not config.piercerBullet
     elseif knifeRemote(remote, args) then
         part = knifeTargetPart(); useWallCheck = config.knifeWallCheck; isKnife = true
     else
@@ -1567,6 +1569,14 @@ function toggle(value)
         notify("Enabled", 2)
     else
         notify("Disabled", 2)
+    end
+end
+
+function setPiercerBullet(value)
+    config.piercerBullet = value == true
+    if config.piercerBullet and not installHook() then
+        config.piercerBullet = false
+        notify("Piercer Bullet requires hook support", 4)
     end
 end
 
@@ -1708,7 +1718,7 @@ function fireGunAt(player)
         local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
         local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
         if not part or not character or not humanoid then return end
-        if config.wallCheck and not targetVisible(part) then return end
+        if config.wallCheck and not config.piercerBullet and not targetVisible(part) then return end
         local autoEquipped = false
         local gun = character:FindFirstChild("Gun")
         if not gun and backpack then
@@ -1753,7 +1763,7 @@ task.spawn(function()
             local player = selectTarget()
             if player and inFOV(player) then
                 local part = getAimPart(player)
-                if part and (not config.wallCheck or targetVisible(part)) then fireGunAt(player) end
+                if part and (config.piercerBullet or not config.wallCheck or targetVisible(part)) then fireGunAt(player) end
             end
         end
         task.wait(0.03)
@@ -2014,7 +2024,7 @@ function exportRevertConfig()
         },
         noir = {
             targetMode = config.targetMode, hitPart = config.hitPart, fovSize = config.fovSize,
-            shotMethod = config.shotMethod, autoFire = config.autoFire, wallCheck = config.wallCheck, ignoreDead = config.ignoreDead,
+            shotMethod = config.shotMethod, autoFire = config.autoFire, wallCheck = config.wallCheck, piercerBullet = config.piercerBullet, ignoreDead = config.ignoreDead,
             ignoreFriends = config.ignoreFriends, maxDistance = config.maxDistance,
             adaptive = config.adaptive, fixedLead = config.fixedLead, extraLead = config.extraLead,
             alignDirection = config.alignDirection,
@@ -2069,10 +2079,11 @@ function applyRevertConfig(data)
         for _, key in ipairs({ "fovSize", "maxDistance", "fixedLead", "extraLead" }) do
             if typeof(noir[key]) == "number" then config[key] = noir[key] end
         end
-        for _, key in ipairs({ "autoFire", "wallCheck", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
+        for _, key in ipairs({ "autoFire", "wallCheck", "piercerBullet", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
                                "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow" }) do
             if typeof(noir[key]) == "boolean" then config[key] = noir[key] end
         end
+        if config.piercerBullet then task.defer(installHook) end
         local knifeAim = noir.knifeAim
         if typeof(knifeAim) == "table" then
             for _, key in ipairs({ "fixedLead", "extraLead", "maxSimulationMs", "predictionIntervalMs", "manualPingMs", "offsetX", "offsetY", "offsetZ", "horizontalMultiplier", "verticalMultiplier" }) do
@@ -4635,6 +4646,10 @@ do
     combatAim:AddToggle("Wall Check", function(v) config.wallCheck=v==true end)
     combatAim:AddToggle("Show Shoot Murder Button", setShootButtonVisible)
     combatAim:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton=v==true end)
+
+    local combatSheriff=tab:AddSection("SHERIFF", "Gun bullet controls")
+    combatSheriff:AddToggle("Piercer Bullet", setPiercerBullet)
+    combatSheriff:AddLabel("Redirects Gun shots through the local wall check to the selected target.")
 
     local combatKnife=tab:AddSection("KNIFE SILENT AIM", "Nearest player or Sheriff-only targeting")
     combatKnife:AddToggle("Knife Silent Aim", function(v)
