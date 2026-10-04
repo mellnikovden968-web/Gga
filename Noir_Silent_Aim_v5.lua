@@ -2951,10 +2951,9 @@ task.defer(function()
     local state = {
         fpsBoost = false, lessLag = false, noShadows = false, frameEnhancement = false,
         optimizeCoins = false, removeChroma = false, removePets = false, removeCoins = false, removeCorpses = false,
-        noRespawnDelay = false, partOriginals = {}, effectOriginals = {}, postOriginals = {},
+        partOriginals = {}, effectOriginals = {}, postOriginals = {},
         coinOriginals = {}, hiddenPets = {}, hiddenCoins = {}, hiddenCorpses = {}, chromaOriginals = {}, perfConnection = nil,
-        respawnFadeOriginals = {}, respawnFadeConnections = {},
-        originalRespawnTime = Players.RespawnTime, originalGlobalShadows = Lighting.GlobalShadows,
+        perfToken = 0, autoScanToken = 0, originalGlobalShadows = Lighting.GlobalShadows,
         savedQuality = nil, savedMeshDetail = nil, savedDecoration = nil,
     }
     local function setProperty(instance, property, value)
@@ -2965,25 +2964,34 @@ task.defer(function()
             or instance:IsA("Fire") or instance:IsA("Sparkles") or instance:IsA("Beam")
             or instance:IsA("PointLight") or instance:IsA("SpotLight") or instance:IsA("SurfaceLight")
     end
-    -- RenderFidelity belongs to MeshPart, not ordinary Part. Delta surfaced that distinction as a runtime error.
-    local performanceFidelity = nil
-    pcall(function() performanceFidelity = Enum.RenderFidelity.Performance end)
-    local function restorePerformance()
+    -- RenderFidelity is intentionally not touched: Roblox rejects changing SolidModel fidelity at run time.
+    -- All world-wide work below is batched so a mobile toggle never blocks a frame while traversing a map.
+    local function restorePerformance(token)
+        local processed = 0
         for instance, original in pairs(state.partOriginals) do
-            if instance and instance.Parent then
-                setProperty(instance, "CastShadow", original.castShadow)
-                if original.renderFidelity ~= nil then setProperty(instance, "RenderFidelity", original.renderFidelity) end
-            end
+            if token and token ~= state.perfToken then return false end
+            if instance and instance.Parent then setProperty(instance, "CastShadow", original.castShadow) end
+            processed += 1
+            if token and processed % 140 == 0 then task.wait() end
         end
-        for instance, enabled in pairs(state.effectOriginals) do if instance and instance.Parent then setProperty(instance, "Enabled", enabled) end end
+        for instance, enabled in pairs(state.effectOriginals) do
+            if token and token ~= state.perfToken then return false end
+            if instance and instance.Parent then setProperty(instance, "Enabled", enabled) end
+            processed += 1
+            if token and processed % 140 == 0 then task.wait() end
+        end
         for instance, enabled in pairs(state.postOriginals) do
+            if token and token ~= state.perfToken then return false end
             if instance and instance.Parent then
                 local chromaName = string.lower(instance.Name or "")
                 local keepChromaHidden = state.removeChroma and (string.find(chromaName, "chroma", 1, true) or string.find(chromaName, "chrom", 1, true) or string.find(chromaName, "aberr", 1, true))
                 if not keepChromaHidden then setProperty(instance, "Enabled", enabled) end
             end
+            processed += 1
+            if token and processed % 140 == 0 then task.wait() end
         end
         table.clear(state.partOriginals); table.clear(state.effectOriginals); table.clear(state.postOriginals)
+        return true
     end
     local function performanceActive()
         return state.fpsBoost or state.lessLag or state.noShadows or state.frameEnhancement
@@ -2992,16 +3000,9 @@ task.defer(function()
         if not performanceActive() or not instance then return end
         local disableShadows = state.fpsBoost or state.lessLag or state.noShadows or state.frameEnhancement
         local reduceEffects = state.fpsBoost or state.lessLag or state.frameEnhancement
-        local lowFidelity = state.fpsBoost or state.frameEnhancement
         if instance:IsA("BasePart") then
-            if state.partOriginals[instance] == nil then
-                local original = { castShadow = instance.CastShadow }
-                -- Non-MeshPart BaseParts do not expose RenderFidelity.
-                if instance:IsA("MeshPart") then original.renderFidelity = instance.RenderFidelity end
-                state.partOriginals[instance] = original
-            end
+            if state.partOriginals[instance] == nil then state.partOriginals[instance] = { castShadow = instance.CastShadow } end
             if disableShadows then setProperty(instance, "CastShadow", false) end
-            if lowFidelity and instance:IsA("MeshPart") and performanceFidelity then setProperty(instance, "RenderFidelity", performanceFidelity) end
         elseif isVisualEffect(instance) then
             if state.effectOriginals[instance] == nil then state.effectOriginals[instance] = instance.Enabled end
             if reduceEffects then setProperty(instance, "Enabled", false) end
@@ -3011,15 +3012,24 @@ task.defer(function()
         end
     end
     local function refreshPerformance()
-        if performanceActive() then
-            -- Rebuild from original values so overlapping FPS toggles cannot leave a stronger setting behind.
-            restorePerformance()
-            for _, instance in ipairs(Workspace:GetDescendants()) do applyPerformanceTo(instance) end
+        state.perfToken += 1
+        local token = state.perfToken
+        local active = performanceActive()
+        if active then
             if not state.perfConnection then state.perfConnection = Workspace.DescendantAdded:Connect(function(instance) task.defer(applyPerformanceTo, instance) end) end
-        else
-            if state.perfConnection then state.perfConnection:Disconnect(); state.perfConnection = nil end
-            restorePerformance()
+        elseif state.perfConnection then
+            state.perfConnection:Disconnect(); state.perfConnection = nil
         end
+        -- The map scan and restoration yield every short batch; a later toggle cancels obsolete work.
+        task.spawn(function()
+            if not restorePerformance(token) or token ~= state.perfToken or not performanceActive() then return end
+            local descendants = Workspace:GetDescendants()
+            for index, instance in ipairs(descendants) do
+                if token ~= state.perfToken then return end
+                applyPerformanceTo(instance)
+                if index % 140 == 0 then task.wait() end
+            end
+        end)
         local lowQuality = state.fpsBoost or state.frameEnhancement
         pcall(function()
             if lowQuality then
@@ -3043,7 +3053,7 @@ task.defer(function()
             end
         end)
         pcall(function()
-            Lighting.GlobalShadows = (state.fpsBoost or state.lessLag or state.noShadows or state.frameEnhancement) and false or state.originalGlobalShadows
+            Lighting.GlobalShadows = active and false or state.originalGlobalShadows
         end)
     end
     local function matchesNamedVisual(instance, words)
@@ -3055,39 +3065,51 @@ task.defer(function()
         end
         return false
     end
-    local function setHidden(root, bucket, hidden)
+    local function setHidden(root, bucket, hidden, deep)
         local function update(part)
             if not part:IsA("BasePart") then return end
             if bucket[part] == nil then bucket[part] = part.LocalTransparencyModifier end
             part.LocalTransparencyModifier = hidden and 1 or bucket[part]
         end
         if root:IsA("BasePart") then update(root) end
-        for _, instance in ipairs(root:GetDescendants()) do update(instance) end
+        if deep then for _, instance in ipairs(root:GetDescendants()) do update(instance) end end
     end
     local function restoreHidden(bucket)
-        for part, original in pairs(bucket) do if part and part.Parent then setProperty(part, "LocalTransparencyModifier", original) end end
-        table.clear(bucket)
-    end
-    local function applyCoinOptimization(root)
-        local function update(instance)
-            if instance:IsA("BasePart") then
-                if state.coinOriginals[instance] == nil then state.coinOriginals[instance] = { material = instance.Material, castShadow = instance.CastShadow } end
-                setProperty(instance, "Material", Enum.Material.SmoothPlastic); setProperty(instance, "CastShadow", false)
-            elseif isVisualEffect(instance) then
-                if state.coinOriginals[instance] == nil then state.coinOriginals[instance] = { enabled = instance.Enabled } end
-                setProperty(instance, "Enabled", false)
+        local token = state.autoScanToken
+        task.spawn(function()
+            local processed = 0
+            for part, original in pairs(bucket) do
+                if token ~= state.autoScanToken then return end
+                if part and part.Parent then setProperty(part, "LocalTransparencyModifier", original) end
+                processed += 1
+                if processed % 140 == 0 then task.wait() end
             end
+            table.clear(bucket)
+        end)
+    end
+    local function applyCoinOptimization(instance)
+        if instance:IsA("BasePart") then
+            if state.coinOriginals[instance] == nil then state.coinOriginals[instance] = { material = instance.Material, castShadow = instance.CastShadow } end
+            setProperty(instance, "Material", Enum.Material.SmoothPlastic); setProperty(instance, "CastShadow", false)
+        elseif isVisualEffect(instance) then
+            if state.coinOriginals[instance] == nil then state.coinOriginals[instance] = { enabled = instance.Enabled } end
+            setProperty(instance, "Enabled", false)
         end
-        if root:IsA("BasePart") or isVisualEffect(root) then update(root) end
-        for _, instance in ipairs(root:GetDescendants()) do update(instance) end
     end
     local function restoreCoinOptimization()
-        for instance, original in pairs(state.coinOriginals) do
-            if instance and instance.Parent then
-                if original.material ~= nil then setProperty(instance, "Material", original.material); setProperty(instance, "CastShadow", original.castShadow) else setProperty(instance, "Enabled", original.enabled) end
+        local token = state.autoScanToken
+        task.spawn(function()
+            local processed = 0
+            for instance, original in pairs(state.coinOriginals) do
+                if token ~= state.autoScanToken then return end
+                if instance and instance.Parent then
+                    if original.material ~= nil then setProperty(instance, "Material", original.material); setProperty(instance, "CastShadow", original.castShadow) else setProperty(instance, "Enabled", original.enabled) end
+                end
+                processed += 1
+                if processed % 140 == 0 then task.wait() end
             end
-        end
-        table.clear(state.coinOriginals)
+            table.clear(state.coinOriginals)
+        end)
     end
     local petWords, coinWords, corpseWords = { "pet", "companion", "minion", "familiar" }, { "coin", "currency", "token" }, { "corpse", "ragdoll", "deadbody", "body" }
     local function applyAutoVisuals(instance)
@@ -3104,80 +3126,24 @@ task.defer(function()
         end
     end
     local function scanAutoVisuals()
-        for _, instance in ipairs(Workspace:GetDescendants()) do applyAutoVisuals(instance) end
-        for _, instance in ipairs(Lighting:GetDescendants()) do applyAutoVisuals(instance) end
-    end
-    -- MM2 owns the real respawn timer server-side. This removes only its local full-screen black fade,
-    -- leaving normal menus intact and restoring the exact UI state when the option is disabled.
-    local function isRespawnFade(instance)
-        if not (instance:IsA("Frame") or instance:IsA("ImageLabel") or instance:IsA("TextLabel")) then return false end
-        local name = string.lower(instance.Name or "")
-        local tagged = string.find(name, "fade", 1, true) or string.find(name, "black", 1, true)
-            or string.find(name, "death", 1, true) or string.find(name, "respawn", 1, true)
-            or string.find(name, "roundend", 1, true) or string.find(name, "transition", 1, true)
-        local size = instance.Size
-        local fullscreen = size.X.Scale >= .82 and size.Y.Scale >= .82
-        -- Some MM2 revisions call the fade simply "Frame". A genuinely full-screen near-black GuiObject is
-        -- treated as the respawn overlay too; this avoids relying solely on a fragile instance name.
-        local tint = instance:IsA("ImageLabel") and instance.ImageColor3 or instance.BackgroundColor3
-        local nearBlack = tint.R <= .12 and tint.G <= .12 and tint.B <= .12
-        if fullscreen and (tagged or nearBlack) then return true end
-        if not tagged then return false end
-        -- MM2 variants sometimes nest a small named frame inside a full fade ScreenGui.
-        local ancestor = instance.Parent
-        while ancestor and not ancestor:IsA("ScreenGui") do ancestor = ancestor.Parent end
-        return ancestor ~= nil and (string.find(name, "fade", 1, true) or string.find(name, "black", 1, true))
-    end
-    local function suppressRespawnFade(instance)
-        if not state.noRespawnDelay or not isRespawnFade(instance) then return end
-        if state.respawnFadeOriginals[instance] == nil then
-            state.respawnFadeOriginals[instance] = {
-                background = instance.BackgroundTransparency,
-                image = instance:IsA("ImageLabel") and instance.ImageTransparency or nil,
-                text = instance:IsA("TextLabel") and instance.TextTransparency or nil,
-            }
-        end
-        setProperty(instance, "BackgroundTransparency", 1)
-        if instance:IsA("ImageLabel") then setProperty(instance, "ImageTransparency", 1) end
-        if instance:IsA("TextLabel") then setProperty(instance, "TextTransparency", 1) end
-    end
-    local function restoreRespawnFades()
-        for instance, original in pairs(state.respawnFadeOriginals) do
-            if instance and instance.Parent then
-                setProperty(instance, "BackgroundTransparency", original.background)
-                if original.image ~= nil then setProperty(instance, "ImageTransparency", original.image) end
-                if original.text ~= nil then setProperty(instance, "TextTransparency", original.text) end
+        state.autoScanToken += 1
+        local token = state.autoScanToken
+        task.spawn(function()
+            for _, parent in ipairs({ Workspace, Lighting }) do
+                local descendants = parent:GetDescendants()
+                for index, instance in ipairs(descendants) do
+                    if token ~= state.autoScanToken then return end
+                    applyAutoVisuals(instance)
+                    if index % 140 == 0 then task.wait() end
+                end
             end
-        end
-        table.clear(state.respawnFadeOriginals)
-    end
-    local function scanRespawnFades(parent)
-        if not parent then return end
-        for _, instance in ipairs(parent:GetDescendants()) do suppressRespawnFade(instance) end
-    end
-    local function setNoRespawnDelay(enabled)
-        state.noRespawnDelay = enabled == true
-        pcall(function() Players.RespawnTime = state.noRespawnDelay and 0 or state.originalRespawnTime end)
-        if state.noRespawnDelay then
-            scanRespawnFades(LocalPlayer:FindFirstChildOfClass("PlayerGui"))
-            scanRespawnFades(CoreGui)
-        else
-            restoreRespawnFades()
-        end
+        end)
     end
     Workspace.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
     Lighting.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
-    local function watchRespawnFades(parent)
-        if parent then state.respawnFadeConnections[#state.respawnFadeConnections + 1] = parent.DescendantAdded:Connect(function(instance) task.defer(suppressRespawnFade, instance) end) end
-    end
-    watchRespawnFades(LocalPlayer:FindFirstChildOfClass("PlayerGui"))
-    watchRespawnFades(CoreGui)
-    LocalPlayer.ChildAdded:Connect(function(child)
-        if child:IsA("PlayerGui") then watchRespawnFades(child); if state.noRespawnDelay then task.defer(scanRespawnFades, child) end end
-    end)
     local function hookCorpse(character)
         local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-        if humanoid then humanoid.Died:Connect(function() if state.removeCorpses then task.defer(setHidden, character, state.hiddenCorpses, true) end end) end
+        if humanoid then humanoid.Died:Connect(function() if state.removeCorpses then task.defer(setHidden, character, state.hiddenCorpses, true, true) end end) end
     end
     for _, player in ipairs(Players:GetPlayers()) do
         if player.Character then hookCorpse(player.Character) end
@@ -3212,9 +3178,7 @@ task.defer(function()
         state.removeCorpses = enabled == true
         if state.removeCorpses then scanAutoVisuals() else restoreHidden(state.hiddenCorpses) end
     end)
-    fpsSection:AddToggle("No Respawn Delay", setNoRespawnDelay)
     fpsSection:AddToggle("Enable Frame Enhancement", function(enabled) state.frameEnhancement = enabled == true; refreshPerformance() end)
-    fpsSection:AddLabel("No Respawn Delay hides the local MM2 black fade and sets local respawn time to zero; the server can still control actual character spawning.")
 end)
 
 -- Main universal utilities: all state stays in this scope while the connections retain only what they need.
