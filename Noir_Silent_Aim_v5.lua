@@ -1589,18 +1589,27 @@ function autoTuneForPing()
 end
 function leadTime(profile)
     local settings = profile == "knife" and config.knifeAim or config
+    local observedPing = settings.prioritizePing and cachedPing or (settings.manualPingMs / 1000)
     local prediction
     if settings.adaptive then
-        local ping = settings.prioritizePing and cachedPing or (settings.manualPingMs / 1000)
-        prediction = ping + settings.extraLead
+        prediction = observedPing + settings.extraLead
         if settings.predictLag then
             local samplingDelay = math.clamp(settings.predictionIntervalMs / 2000, 0, 0.05)
-            prediction = prediction + samplingDelay + math.max(0, ping - 0.10) * 0.15
+            prediction = prediction + samplingDelay + math.max(0, observedPing - 0.10) * 0.15
         end
     else
         prediction = settings.fixedLead
     end
-    return math.clamp(prediction, 0.02, settings.maxSimulationMs / 1000)
+    -- Omega's Sim figures are a remote simulation window.  The native redirect also needs
+    -- the high-ping server-arrival portion of the round trip.  Without this small extension
+    -- a 200ms profile was capped at 76ms before its multiplier was applied, consistently
+    -- leading fast targets too little.  Below 100ms this is unchanged; at higher latency it
+    -- smoothly adds up to 75ms while keeping a strict 300ms safety ceiling.
+    local simulationCap = settings.maxSimulationMs / 1000
+    if settings.adaptive then
+        simulationCap = math.min(.30, simulationCap + math.clamp(observedPing - .10, 0, .25) * .30)
+    end
+    return math.clamp(prediction, 0.02, simulationCap)
 end
 function sampleMotion(part, settings)
     settings = settings or config
@@ -3371,13 +3380,20 @@ task.defer(function()
         ColorSequenceKeypoint.new(0, Color3.fromRGB(21, 108, 66)), ColorSequenceKeypoint.new(.24, Color3.fromRGB(110, 255, 178)),
         ColorSequenceKeypoint.new(.5, Color3.fromRGB(42, 178, 105)), ColorSequenceKeypoint.new(.76, Color3.fromRGB(176, 255, 212)), ColorSequenceKeypoint.new(1, Color3.fromRGB(19, 103, 61)),
     })
+    local function bindButtonPixels()
+        -- CurrentCamera can be nil for one frame while Roblox rebuilds the mobile UI.
+        -- Retain the normal 720px short-side fallback in that frame instead of falling back
+        -- to ImageButton's 100x100 default (the source of the visibly oversized button).
+        local camera = Workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize
+        local shortEdge = viewport and math.min(viewport.X, viewport.Y) or 720
+        return math.clamp(math.floor(shortEdge * aim.bindSize + .5), 34, 148)
+    end
     local function updateBindSize()
-        local button, camera = aim.bindButton, Workspace.CurrentCamera
-        if not button or not camera then return end
-        -- Use an exact square in pixels based on the short screen edge.  UIAspectRatioConstraint
-        -- remains only as a guard; it can no longer inflate an 8% mobile button after a rotation.
-        local viewport = camera.ViewportSize
-        local pixels = math.clamp(math.floor(math.min(viewport.X, viewport.Y) * aim.bindSize + .5), 34, 148)
+        local button = aim.bindButton
+        if not button then return end
+        -- Exact pixel square: it remains stable through a toggle, respawn, or device rotation.
+        local pixels = bindButtonPixels()
         button.Size = UDim2.fromOffset(pixels, pixels)
     end
     local function updateBindVisual()
@@ -3416,8 +3432,9 @@ task.defer(function()
         local overlay = ensureOverlay()
         if not overlay then return end
         -- The floating Aim button deliberately uses the same Noir metallic two-stroke treatment as Desync.
+        local initialPixels = bindButtonPixels()
         local button = New("ImageButton", { Name = "AimlockButton", Parent = overlay, AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("aimlock_bind_v1", UDim2.new(.83, 0, .70, 0)),
-            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0, AutoButtonColor = false,
+            Size = UDim2.fromOffset(initialPixels, initialPixels), BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0, AutoButtonColor = false,
             Image = "", ClipsDescendants = false, ZIndex = 8 })
         corner(button, 999)
         local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
