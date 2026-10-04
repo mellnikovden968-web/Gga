@@ -2492,57 +2492,63 @@ end
 
 local tab = host.CreateTab()
 
--- Misc cursor controls alter Roblox's existing mouse/Shift Lock cursor instead of drawing a second cursor overlay.
+-- Misc cursor controls edit the real Shift Lock/crosshair ImageLabels already created by Roblox or the game.
 do
-    local cursorState = { enabled = false, template = "Default", customId = "", originalMouseIcon = nil, originalImages = {} }
+    local cursorState = { enabled = false, template = "Default", customId = "", color = C.accent, originalMouseIcon = nil, originalVisuals = {} }
     local cursorTemplates = { "Default", "Crosshair", "Dot", "Ring", "Custom Image" }
+    local cursorKeywords = { "mouselock", "shiftlock", "crosshair", "reticle", "aim", "target", "cursor" }
 
     local function assetId(value)
         local digits = tostring(value or ""):match("(%d+)")
         return digits and ("rbxassetid://" .. digits) or ""
     end
-    local function desiredCursorImage()
-        local custom = assetId(cursorState.customId)
-        if cursorState.template == "Custom Image" and custom ~= "" then return custom end
-        if cursorState.template == "Default" then return "" end
-        -- Built-in Roblox cursor resources keep the change on the native Shift Lock cursor.
-        if cursorState.template == "Crosshair" then return "rbxasset://textures/MouseLockedCursor.png" end
-        if cursorState.template == "Dot" then return "rbxasset://textures/Cursors/KeyboardMouse/ArrowCursor.png" end
-        if cursorState.template == "Ring" then return "rbxasset://textures/MouseLockedCursor.png" end
-        return ""
-    end
     local function isShiftLockVisual(instance)
         if not (instance and (instance:IsA("ImageLabel") or instance:IsA("ImageButton"))) then return false end
         local name = string.lower(instance.Name)
-        return string.find(name, "mouselock", 1, true) ~= nil or string.find(name, "shiftlock", 1, true) ~= nil
+        for _, keyword in ipairs(cursorKeywords) do
+            if string.find(name, keyword, 1, true) then return true end
+        end
+        return false
     end
     local function restoreShiftLockVisuals()
-        for instance, image in pairs(cursorState.originalImages) do
-            if instance and instance.Parent then pcall(function() instance.Image = image end) end
+        for instance, original in pairs(cursorState.originalVisuals) do
+            if instance and instance.Parent then
+                pcall(function()
+                    instance.Image = original.image
+                    instance.ImageColor3 = original.color
+                    instance.ImageTransparency = original.transparency
+                end)
+            end
         end
-        table.clear(cursorState.originalImages)
+        table.clear(cursorState.originalVisuals)
         pcall(function()
             if cursorState.originalMouseIcon ~= nil then LocalPlayer:GetMouse().Icon = cursorState.originalMouseIcon end
         end)
     end
-    local function applyToShiftLockVisual(instance, image)
-        if not isShiftLockVisual(instance) or image == "" then return end
-        if cursorState.originalImages[instance] == nil then cursorState.originalImages[instance] = instance.Image end
-        pcall(function() instance.Image = image end)
+    local function applyToShiftLockVisual(instance)
+        if not cursorState.enabled or not isShiftLockVisual(instance) then return end
+        if cursorState.originalVisuals[instance] == nil then
+            cursorState.originalVisuals[instance] = { image = instance.Image, color = instance.ImageColor3, transparency = instance.ImageTransparency }
+        end
+        local customImage = cursorState.template == "Custom Image" and assetId(cursorState.customId) or ""
+        pcall(function()
+            if customImage ~= "" then instance.Image = customImage end
+            instance.ImageColor3 = cursorState.color
+            instance.ImageTransparency = 0
+        end)
     end
     local function applyCursor()
         restoreShiftLockVisuals()
         if not cursorState.enabled then return end
-        local image = desiredCursorImage()
         pcall(function()
             local mouse = LocalPlayer:GetMouse()
             if cursorState.originalMouseIcon == nil then cursorState.originalMouseIcon = mouse.Icon end
-            if image ~= "" then mouse.Icon = image else mouse.Icon = cursorState.originalMouseIcon end
+            local customImage = cursorState.template == "Custom Image" and assetId(cursorState.customId) or ""
+            if customImage ~= "" then mouse.Icon = customImage end
         end)
-        if image == "" then return end
         for _, parent in ipairs({ CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
             if parent then
-                for _, instance in ipairs(parent:GetDescendants()) do applyToShiftLockVisual(instance, image) end
+                for _, instance in ipairs(parent:GetDescendants()) do applyToShiftLockVisual(instance) end
             end
         end
     end
@@ -2553,14 +2559,14 @@ do
     local function watchShiftLock(parent)
         if not parent then return end
         parent.DescendantAdded:Connect(function(instance)
-            if cursorState.enabled then applyToShiftLockVisual(instance, desiredCursorImage()) end
+            task.defer(function() applyToShiftLockVisual(instance) end)
         end)
     end
     watchShiftLock(CoreGui)
     local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
     watchShiftLock(playerGui)
 
-    local cursorSection = tab:AddSection("MISC \u{2022} CUSTOMIZE CURSOR", "Edits the existing Roblox Shift Lock cursor; no second overlay is created")
+    local cursorSection = tab:AddSection("MISC \u{2022} CUSTOMIZE CURSOR", "Changes the existing Shift Lock/crosshair color; no extra cursor is added")
     cursorSection:AddToggle("Enable Custom Cursor", setCursorEnabled)
     local savedTemplate = NoirPersistence.data.dropdowns["MISC \u{2022} CUSTOMIZE CURSOR::Template Cursor"]
     cursorState.template = table.find(cursorTemplates, savedTemplate) and savedTemplate or "Default"
@@ -2569,6 +2575,10 @@ do
         applyCursor()
     end)
     templateControl:SetValue(cursorState.template)
+    cursorSection:AddColorpicker("Cursor Color", C.accent, function(color)
+        cursorState.color = color
+        applyCursor()
+    end)
     cursorState.customId = tostring(NoirPersistence.data.textboxes["MISC \u{2022} CUSTOMIZE CURSOR::Custom Cursor ID"] or "")
     local customIdControl = cursorSection:AddTextBox("Custom Cursor ID", function(value)
         cursorState.customId = tostring(value or ""):sub(1, 100)
@@ -2910,6 +2920,9 @@ task.defer(function()
             if not desyncState.anchorCFrame then desyncState.enabled = false end
         else
             desyncState.anchorCFrame = nil
+            local pendingRoot, pendingCFrame = desyncState.pendingRoot, desyncState.pendingCFrame
+            desyncState.pendingRoot, desyncState.pendingCFrame = nil, nil
+            if pendingRoot and pendingRoot.Parent and pendingCFrame then pcall(function() pendingRoot.CFrame = pendingCFrame end) end
         end
         updateDesyncBindText()
     end
@@ -2944,7 +2957,10 @@ task.defer(function()
         local button = New("TextButton", { Parent = bindGui, Name = "Desync", AnchorPoint = Vector2.new(.5, .5),
             Position = NoirPersistence.GetPosition("desync_bind_v1", UDim2.new(.35, 0, .88, 0)), Size = UDim2.fromScale(desyncState.bindSize, desyncState.bindSize),
             BackgroundColor3 = C.panel, Text = "", TextColor3 = C.text, TextSize = 13, TextWrapped = true, Font = Enum.Font.Gotham, AutoButtonColor = false, ZIndex = 7 })
-        styleCircularButton(button, 64)
+        -- Keep the bind's scale-based size stable: unlike styleCircularButton it never applies a fixed pixel press-size.
+        corner(button, 999)
+        local outer = New("UIStroke", { Parent = button, Color = C.border, Thickness = 1.5, Transparency = .2 })
+        local outerGradient = New("UIGradient", { Parent = outer, Color = ColorSequence.new(C.accent, C.text), Rotation = 35 })
         local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1 })
         local dragging, moved, startInput, startPosition, dragInput = false, false, nil, nil, nil
         desyncState.bindConnections[#desyncState.bindConnections + 1] = button.InputBegan:Connect(function(input)
@@ -2977,23 +2993,21 @@ task.defer(function()
         desyncState.bindEnabled = enabled == true
         if desyncState.bindEnabled then createDesyncBindButton() else removeDesyncBindButton() end
     end
+    -- Restore before Roblox's camera step. CameraOffset is deliberately untouched, avoiding the camera jump from the first version.
+    desyncState.pendingRoot, desyncState.pendingCFrame = nil, nil
+    RunService:BindToRenderStep("NoirDesyncRestore_" .. tostring(LocalPlayer.UserId), Enum.RenderPriority.Camera.Value - 1, function()
+        local root, cframe = desyncState.pendingRoot, desyncState.pendingCFrame
+        desyncState.pendingRoot, desyncState.pendingCFrame = nil, nil
+        if root and root.Parent and cframe then pcall(function() root.CFrame = cframe end) end
+    end)
     RunService.Heartbeat:Connect(function()
         if not desyncState.enabled then return end
         local root = localRoot()
-        local humanoid = localHumanoid()
-        if not root or not humanoid then return end
+        if not root or not root.Parent then return end
         if not desyncState.anchorCFrame then desyncState.anchorCFrame = root.CFrame end
-        local localCFrame, localOffset = root.CFrame, humanoid.CameraOffset
-        local sent = pcall(function()
-            root.CFrame = desyncState.anchorCFrame
-            humanoid.CameraOffset = desyncState.anchorCFrame:ToObjectSpace(CFrame.new(localCFrame.Position)).Position
-        end)
-        if not sent then return end
-        RunService.RenderStepped:Wait()
-        pcall(function()
-            if root.Parent then root.CFrame = localCFrame end
-            if humanoid.Parent then humanoid.CameraOffset = localOffset end
-        end)
+        local localCFrame = root.CFrame
+        desyncState.pendingRoot, desyncState.pendingCFrame = root, localCFrame
+        pcall(function() root.CFrame = desyncState.anchorCFrame end)
     end)
     LocalPlayer.CharacterAdded:Connect(function(character)
         if desyncState.enabled then
