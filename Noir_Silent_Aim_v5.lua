@@ -2016,7 +2016,8 @@ task.defer(function()
     local prior = getgenv().__NoirKnifeUtilityRuntime
     if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
 
-    local runtime = { stopped = false, connections = {}, gui = nil, button = nil, dualVisual = nil, dualSource = nil, nextAction = 0 }
+    local runtime = { stopped = false, connections = {}, bindConnections = {}, gui = nil, button = nil,
+        dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil, nextAction = 0 }
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
         runtime.connections[#runtime.connections + 1] = connection
@@ -2025,6 +2026,13 @@ task.defer(function()
     local function equippedKnife()
         local character = LocalPlayer.Character
         return character and character:FindFirstChild("Knife") or nil
+    end
+    local function limbFor(character, side)
+        return character and (character:FindFirstChild(side .. "Hand") or character:FindFirstChild(side .. " Arm") or character:FindFirstChild(side .. "LowerArm")) or nil
+    end
+    local function shoulderFor(character, side)
+        local joint = character and (character:FindFirstChild(side .. "Shoulder", true) or character:FindFirstChild(side .. " Shoulder", true))
+        return joint and joint:IsA("Motor6D") and joint or nil
     end
     local function rootFor(player)
         local character = player and player.Character
@@ -2115,14 +2123,17 @@ task.defer(function()
     end
     local function destroyDualVisual()
         if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
-        runtime.dualVisual, runtime.dualSource, runtime.dualLimb = nil, nil, nil
+        if runtime.dualLeftShoulder and runtime.dualLeftShoulder.Parent then pcall(function() runtime.dualLeftShoulder.Transform = CFrame.new() end) end
+        runtime.dualVisual, runtime.dualSource, runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder = nil, nil, nil, nil, nil
     end
     local function refreshDualEffect()
         if not config.knifeDualEffect then destroyDualVisual(); return end
+        local character = LocalPlayer.Character
         local tool = equippedKnife()
         local handle = tool and tool:FindFirstChild("Handle", true)
-        if not handle or not handle:IsA("BasePart") then destroyDualVisual(); return end
-        if runtime.dualVisual and runtime.dualVisual.Parent and runtime.dualSource == handle then return end
+        local leftHand, rightHand = limbFor(character, "Left"), limbFor(character, "Right")
+        if not handle or not handle:IsA("BasePart") or not leftHand or not leftHand:IsA("BasePart") then destroyDualVisual(); return end
+        if runtime.dualVisual and runtime.dualVisual.Parent and runtime.dualSource == handle and runtime.dualLimb == leftHand then return end
         destroyDualVisual()
         local ok, visual = pcall(function()
             local clone = handle:Clone()
@@ -2131,15 +2142,22 @@ task.defer(function()
             end
             clone.Name = "NoirKnifeDualEffect"
             clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = false, false, false, false, true
-            clone.CFrame = handle.CFrame * CFrame.new(-.38, 0, 0) * CFrame.Angles(0, 0, math.rad(12))
-            clone.Parent = tool.Parent
+            local gripOffset = rightHand and rightHand.CFrame:ToObjectSpace(handle.CFrame) or CFrame.new(0, -.42, 0)
+            clone.CFrame = leftHand.CFrame * gripOffset
+            clone.Parent = character
             local weld = Instance.new("WeldConstraint")
-            weld.Part0, weld.Part1, weld.Parent = handle, clone, clone
+            weld.Part0, weld.Part1, weld.Parent = leftHand, clone, clone
             return clone
         end)
-        runtime.dualVisual, runtime.dualSource = ok and visual or nil, ok and handle or nil
+        runtime.dualVisual, runtime.dualSource, runtime.dualLimb = ok and visual or nil, ok and handle or nil, ok and leftHand or nil
+        runtime.dualLeftShoulder, runtime.dualRightShoulder = shoulderFor(character, "Left"), shoulderFor(character, "Right")
+    end
+    local function disconnectKnifeBind()
+        for _, connection in ipairs(runtime.bindConnections) do pcall(function() connection:Disconnect() end) end
+        table.clear(runtime.bindConnections)
     end
     local function destroyBind()
+        disconnectKnifeBind()
         if runtime.gui then runtime.gui:Destroy() end
         runtime.gui, runtime.button = nil, nil
         for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
@@ -2159,33 +2177,42 @@ task.defer(function()
         if typeof(parent) ~= "Instance" then parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") end
         if typeof(parent) ~= "Instance" then return end
         local gui = New("ScreenGui", { Parent = parent, Name = "NoirKnifeSheriffBind", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 84, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
-        local button = New("TextButton", { Parent = gui, Name = "KillSheriff", AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("knife_sheriff_bind_v1", UDim2.new(.68, 0, .73, 0)), Size = UDim2.fromOffset(48, 48),
-            BackgroundColor3 = Color3.fromRGB(12, 15, 18), BackgroundTransparency = .20, BorderSizePixel = 0, AutoButtonColor = false, Text = "KILL\nSHERIFF", TextColor3 = C.text, TextSize = 8, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 8 })
+        local button = New("ImageButton", { Parent = gui, Name = "KillSheriff", AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("knife_sheriff_bind_v1", UDim2.new(.68, 0, .73, 0)), Size = UDim2.fromOffset(48, 48),
+            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0, AutoButtonColor = false, Image = "", ClipsDescendants = false, ZIndex = 8 })
         local shape = New("UICorner", { Parent = button, Name = "NoirShape", CornerRadius = UDim.new(1, 0) })
-        stroke(button, C.accent, .26)
+        local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
+        local metal = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)), ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)) })
+        local outer = New("UIStroke", { Parent = button, Color = Color3.fromRGB(255, 255, 255), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+        local outerGradient = New("UIGradient", { Parent = outer, Color = metal })
+        local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+        local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner
+        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76), BackgroundTransparency = 1, Text = "Kill\nSheriff", TextColor3 = C.text, TextSize = 9, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 9 })
+        local pressScale = New("UIScale", { Parent = button, Scale = 1 })
         runtime.gui, runtime.button = gui, button
         updateBindShape()
         local dragging, moved, start, origin, dragInput = false, false, nil, nil, nil
-        runtime.connections[#runtime.connections + 1] = button.InputBegan:Connect(function(input)
+        runtime.bindConnections[#runtime.bindConnections + 1] = RunService.RenderStepped:Connect(function() if outerGradient.Parent then outerGradient.Rotation = (outerGradient.Rotation + 1) % 360 end end)
+        runtime.bindConnections[#runtime.bindConnections + 1] = button.InputBegan:Connect(function(input)
             if not isPrimaryPress(input) then return end
             dragging, moved, start, origin = true, false, input.Position, button.Position
+            TweenService:Create(pressScale, TweenInfo.new(.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = 1.035 }):Play()
         end)
-        runtime.connections[#runtime.connections + 1] = button.InputChanged:Connect(function(input)
+        runtime.bindConnections[#runtime.bindConnections + 1] = button.InputChanged:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
         end)
-        runtime.connections[#runtime.connections + 1] = UIS.InputChanged:Connect(function(input)
+        runtime.bindConnections[#runtime.bindConnections + 1] = UIS.InputChanged:Connect(function(input)
             if not dragging or input ~= dragInput then return end
             local delta = input.Position - start
             if delta.Magnitude > 7 then moved = true end
             button.Position = UDim2.new(origin.X.Scale, origin.X.Offset + delta.X, origin.Y.Scale, origin.Y.Offset + delta.Y)
         end)
-        runtime.connections[#runtime.connections + 1] = UIS.InputEnded:Connect(function(input)
-            if dragging and isPrimaryPress(input) then
-                dragging = false
-                if moved then NoirPersistence.SetPosition("knife_sheriff_bind_v1", button.Position) end
-            end
+        runtime.bindConnections[#runtime.bindConnections + 1] = UIS.InputEnded:Connect(function(input)
+            if not dragging or not isPrimaryPress(input) then return end
+            dragging = false
+            TweenService:Create(pressScale, TweenInfo.new(.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+            if moved then NoirPersistence.SetPosition("knife_sheriff_bind_v1", button.Position) end
         end)
-        runtime.connections[#runtime.connections + 1] = button.Activated:Connect(function() if not moved then killSheriff(false) end end)
+        runtime.bindConnections[#runtime.bindConnections + 1] = button.Activated:Connect(function() if not moved then killSheriff(false) end end)
     end
     function runtime:Refresh()
         refreshDualEffect()
@@ -2194,6 +2221,11 @@ task.defer(function()
     end
     function runtime:KillSheriff() return killSheriff(false) end
     function runtime:KillEveryone() return killEveryone(false) end
+    runtime.connections[#runtime.connections + 1] = RunService.RenderStepped:Connect(function()
+        if runtime.stopped or not config.knifeDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
+        local left, right = runtime.dualLeftShoulder, runtime.dualRightShoulder
+        if left and right and left.Parent and right.Parent then pcall(function() left.Transform = right.Transform end) end
+    end)
     runtime.connections[#runtime.connections + 1] = RunService.Heartbeat:Connect(function()
         if runtime.stopped then return end
         refreshDualEffect()
@@ -2277,14 +2309,20 @@ task.defer(function()
     local prior = getgenv().__NoirGunTriggerRuntime
     if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
 
-    local runtime = { stopped = false, connections = {}, dualVisual = nil, dualSource = nil, dualLimb = nil, lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
+    local runtime = { stopped = false, connections = {}, dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
+        lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
     local function equippedGun()
         local character = LocalPlayer.Character
         return character and character:FindFirstChild("Gun") or nil
     end
+    local function shoulderFor(character, side)
+        local joint = character and (character:FindFirstChild(side .. "Shoulder", true) or character:FindFirstChild(side .. " Shoulder", true))
+        return joint and joint:IsA("Motor6D") and joint or nil
+    end
     local function destroyDual()
         if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
-        runtime.dualVisual, runtime.dualSource, runtime.dualLimb = nil, nil, nil
+        if runtime.dualLeftShoulder and runtime.dualLeftShoulder.Parent then pcall(function() runtime.dualLeftShoulder.Transform = CFrame.new() end) end
+        runtime.dualVisual, runtime.dualSource, runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder = nil, nil, nil, nil, nil
     end
     local function refreshDual()
         if not config.gunDualEffect then destroyDual(); return end
@@ -2314,6 +2352,7 @@ task.defer(function()
             return clone
         end)
         runtime.dualVisual, runtime.dualSource, runtime.dualLimb = ok and visual or nil, ok and handle or nil, ok and leftHand or nil
+        runtime.dualLeftShoulder, runtime.dualRightShoulder = shoulderFor(character, "Left"), shoulderFor(character, "Right")
     end
     local function murdererTarget()
         local target = selectTarget("Murderer")
@@ -2343,6 +2382,10 @@ task.defer(function()
     end
     runtime.connections[#runtime.connections + 1] = RunService.RenderStepped:Connect(function()
         if runtime.stopped then return end
+        local left, right = runtime.dualLeftShoulder, runtime.dualRightShoulder
+        if config.gunDualEffect and runtime.dualVisual and runtime.dualVisual.Parent and left and right and left.Parent and right.Parent then
+            pcall(function() left.Transform = right.Transform end)
+        end
         local now = os.clock()
         if now >= runtime.nextVisualCheck then runtime.nextVisualCheck = now + .25; refreshDual() end
         if not config.gunTriggerBot then runtime.wasPointing = false; return end
@@ -3693,8 +3736,8 @@ task.defer(function()
         ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)),
     })
     local aimActiveGradient = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(21, 108, 66)), ColorSequenceKeypoint.new(.24, Color3.fromRGB(110, 255, 178)),
-        ColorSequenceKeypoint.new(.5, Color3.fromRGB(42, 178, 105)), ColorSequenceKeypoint.new(.76, Color3.fromRGB(176, 255, 212)), ColorSequenceKeypoint.new(1, Color3.fromRGB(19, 103, 61)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(104, 18, 32)), ColorSequenceKeypoint.new(.24, Color3.fromRGB(255, 126, 145)),
+        ColorSequenceKeypoint.new(.5, Color3.fromRGB(185, 38, 62)), ColorSequenceKeypoint.new(.76, Color3.fromRGB(255, 170, 183)), ColorSequenceKeypoint.new(1, Color3.fromRGB(112, 18, 35)),
     })
     local function bindButtonPixels()
         -- CurrentCamera can be nil for one frame while Roblox rebuilds the mobile UI.
@@ -3718,7 +3761,7 @@ task.defer(function()
         local button = aim.bindButton
         if not button then return end
         local label = button:FindFirstChild("Text")
-        if label then label.Text = aim.enabled and "Aim\nON" or "Aim\nOFF" end
+        if label then label.Text = "Aimlock" end
         if aim.bindOuterGradient then aim.bindOuterGradient.Color = aim.enabled and aimActiveGradient or aimMetallicGradient end
         if aim.bindInnerGradient then aim.bindInnerGradient.Color = aim.enabled and aimActiveGradient or aimMetallicGradient end
     end
@@ -3762,7 +3805,7 @@ task.defer(function()
         local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
         local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner; table.insert(gradientStrokes, innerGradient)
         local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76),
-            BackgroundTransparency = 1, Text = "Aim\nOFF", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 14, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 9 })
+            BackgroundTransparency = 1, Text = "Aimlock", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 11, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 9 })
         local pressScale = New("UIScale", { Parent = button, Scale = 1 })
         aim.bindOuterGradient, aim.bindInnerGradient, aim.bindPressScale = outerGradient, innerGradient, pressScale
         local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
