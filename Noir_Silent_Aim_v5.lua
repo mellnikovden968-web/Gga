@@ -2018,7 +2018,7 @@ task.defer(function()
 
     local runtime = { stopped = false, connections = {}, bindConnections = {}, gui = nil, button = nil,
         dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
-        poseBind = "NoirKnifeDualArmPose", nextAction = 0 }
+        dualOriginalC0 = nil, dualOriginalTransform = nil, poseBind = "NoirKnifeDualArmPose", nextAction = 0 }
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
         runtime.connections[#runtime.connections + 1] = connection
@@ -2124,8 +2124,12 @@ task.defer(function()
     end
     local function destroyDualVisual()
         if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
-        if runtime.dualLeftShoulder and runtime.dualLeftShoulder.Parent then pcall(function() runtime.dualLeftShoulder.Transform = CFrame.new() end) end
+        if runtime.dualLeftShoulder and runtime.dualLeftShoulder.Parent then pcall(function()
+            if runtime.dualOriginalC0 then runtime.dualLeftShoulder.C0 = runtime.dualOriginalC0 end
+            runtime.dualLeftShoulder.Transform = runtime.dualOriginalTransform or CFrame.new()
+        end) end
         runtime.dualVisual, runtime.dualSource, runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder = nil, nil, nil, nil, nil
+        runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil
     end
     local function refreshDualEffect()
         if not config.knifeDualEffect then destroyDualVisual(); return end
@@ -2152,6 +2156,8 @@ task.defer(function()
         end)
         runtime.dualVisual, runtime.dualSource, runtime.dualLimb = ok and visual or nil, ok and handle or nil, ok and leftHand or nil
         runtime.dualLeftShoulder, runtime.dualRightShoulder = shoulderFor(character, "Left"), shoulderFor(character, "Right")
+        if runtime.dualLeftShoulder then runtime.dualOriginalC0, runtime.dualOriginalTransform = runtime.dualLeftShoulder.C0, runtime.dualLeftShoulder.Transform end
+        if runtime.dualLeftShoulder then runtime.dualOriginalC0, runtime.dualOriginalTransform = runtime.dualLeftShoulder.C0, runtime.dualLeftShoulder.Transform end
     end
     local function disconnectKnifeBind()
         for _, connection in ipairs(runtime.bindConnections) do pcall(function() connection:Disconnect() end) end
@@ -2226,11 +2232,17 @@ task.defer(function()
     RunService:BindToRenderStep(runtime.poseBind, Enum.RenderPriority.Last.Value, function()
         if runtime.stopped or not config.knifeDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
         local left, right = runtime.dualLeftShoulder, runtime.dualRightShoulder
-        if left and left.Parent then
+        if left and right and left.Parent and right.Parent and left.Part0 and left.Part1 and right.Part0 and right.Part1 then
             pcall(function()
-                local pose = right and right.Parent and right.Transform or CFrame.new()
-                if pose == CFrame.new() then pose = CFrame.Angles(math.rad(-68), 0, math.rad(48)) end
-                left.Transform = pose
+                -- Solve the left Motor6D from the current WORLD CFrame of the raised right arm.
+                -- Mirroring its position around the torso puts the real second arm in the same
+                -- raised pose, rather than merely rotating a lower arm transform.
+                local source = right.Part0.CFrame:ToObjectSpace(right.Part1.CFrame)
+                local px, py, pz = source.Position.X, source.Position.Y, source.Position.Z
+                local rx, ry, rz = source:ToOrientation()
+                local mirroredWorld = left.Part0.CFrame * CFrame.new(-px, py, pz) * CFrame.Angles(rx, -ry, -rz)
+                left.Transform = CFrame.new()
+                left.C0 = left.Part0.CFrame:ToObjectSpace(mirroredWorld * left.C1)
             end)
         end
     end)
@@ -2319,7 +2331,7 @@ task.defer(function()
     if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
 
     local runtime = { stopped = false, connections = {}, dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
-        poseBind = "NoirGunDualArmPose", lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
+        dualOriginalC0 = nil, dualOriginalTransform = nil, poseBind = "NoirGunDualArmPose", lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
     local function equippedGun()
         local character = LocalPlayer.Character
         return character and character:FindFirstChild("Gun") or nil
@@ -2330,8 +2342,12 @@ task.defer(function()
     end
     local function destroyDual()
         if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
-        if runtime.dualLeftShoulder and runtime.dualLeftShoulder.Parent then pcall(function() runtime.dualLeftShoulder.Transform = CFrame.new() end) end
+        if runtime.dualLeftShoulder and runtime.dualLeftShoulder.Parent then pcall(function()
+            if runtime.dualOriginalC0 then runtime.dualLeftShoulder.C0 = runtime.dualOriginalC0 end
+            runtime.dualLeftShoulder.Transform = runtime.dualOriginalTransform or CFrame.new()
+        end) end
         runtime.dualVisual, runtime.dualSource, runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder = nil, nil, nil, nil, nil
+        runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil
     end
     local function refreshDual()
         if not config.gunDualEffect then destroyDual(); return end
@@ -2393,11 +2409,14 @@ task.defer(function()
     RunService:BindToRenderStep(runtime.poseBind, Enum.RenderPriority.Last.Value, function()
         if runtime.stopped or not config.gunDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
         local left, right = runtime.dualLeftShoulder, runtime.dualRightShoulder
-        if left and left.Parent then
+        if left and right and left.Parent and right.Parent and left.Part0 and left.Part1 and right.Part0 and right.Part1 then
             pcall(function()
-                local pose = right and right.Parent and right.Transform or CFrame.new()
-                if pose == CFrame.new() then pose = CFrame.Angles(math.rad(-68), 0, math.rad(48)) end
-                left.Transform = pose
+                local source = right.Part0.CFrame:ToObjectSpace(right.Part1.CFrame)
+                local px, py, pz = source.Position.X, source.Position.Y, source.Position.Z
+                local rx, ry, rz = source:ToOrientation()
+                local mirroredWorld = left.Part0.CFrame * CFrame.new(-px, py, pz) * CFrame.Angles(rx, -ry, -rz)
+                left.Transform = CFrame.new()
+                left.C0 = left.Part0.CFrame:ToObjectSpace(mirroredWorld * left.C1)
             end)
         end
     end)
