@@ -3237,12 +3237,25 @@ task.defer(function()
     local oldRuntime = getgenv().__NoirMiscAimlockRuntime
     if type(oldRuntime) == "table" and type(oldRuntime.Stop) == "function" then pcall(oldRuntime.Stop) end
 
+    -- Keep this separately as well as in the normal slider entry.  The explicit value is
+    -- restored before the floating button is made, so a mobile rejoin cannot briefly recreate
+    -- it at the old 11% default and leave it oversized.
+    local aimSizeStorageKey = "NoirAimlockBindSizeV2"
+    local aimSizeControlKey = "MISC \u{2022} AIMLOCK::Aimlock Bind Button Size"
+    -- V2 intentionally starts at 8% rather than inheriting the former 11% default.
+    -- Once the player changes it, the dedicated key takes priority on every later run.
+    local savedAimBindPercent = tonumber(NoirPersistence.data.sliders[aimSizeStorageKey]) or 8
+    savedAimBindPercent = math.clamp(math.floor(savedAimBindPercent + .5), 5, 25)
+    -- Feed the recovered value to AddSlider too; this prevents a stale former-default entry
+    -- from overriding the dedicated mobile-button setting during UI construction.
+    NoirPersistence.data.sliders[aimSizeControlKey] = savedAimBindPercent
+
     local aim = {
         enabled = false, wallCheck = false, fovEnabled = false, fovRadius = 250,
         smoothness = .25, smoothRate = 18, horizontalPrediction = false, prediction = .145,
         targetPart = "Head", selectedPlayer = nil, targetPlayer = nil, lastSearch = 0, searchInterval = .10,
         lastAimPos = nil, lastTarget = nil, cachedPlayer = nil, cachedCharacter = nil,
-        cachedRoot = nil, cachedHead = nil, key = "T", bindVisible = false, bindSize = .11,
+        cachedRoot = nil, cachedHead = nil, key = "T", bindVisible = false, bindSize = savedAimBindPercent / 100,
         overlay = nil, bindButton = nil, bindOuterGradient = nil, bindInnerGradient = nil, bindPressScale = nil,
         fovCircle = nil, connections = {}, bindConnections = {}, stopped = false,
     }
@@ -3361,8 +3374,11 @@ task.defer(function()
     local function updateBindSize()
         local button, camera = aim.bindButton, Workspace.CurrentCamera
         if not button or not camera then return end
+        -- Use an exact square in pixels based on the short screen edge.  UIAspectRatioConstraint
+        -- remains only as a guard; it can no longer inflate an 8% mobile button after a rotation.
         local viewport = camera.ViewportSize
-        button.Size = UDim2.new(aim.bindSize * (viewport.Y / math.max(viewport.X, 1)), 0, aim.bindSize, 0)
+        local pixels = math.clamp(math.floor(math.min(viewport.X, viewport.Y) * aim.bindSize + .5), 34, 148)
+        button.Size = UDim2.fromOffset(pixels, pixels)
     end
     local function updateBindVisual()
         local button = aim.bindButton
@@ -3477,7 +3493,16 @@ task.defer(function()
     local aimSection = tab:AddSection("MISC \u{2022} AIMLOCK", "Camera lock for Murderer or a selected player • all controls are local")
     aimSection:AddToggle("Enable Aimlock", setAimlock)
     aimSection:AddToggle("Enable Aimlock Bind Button", setBindVisible)
-    aimSection:AddSlider("Aimlock Bind Button Size", 5, 25, 11, function(value) aim.bindSize = (tonumber(value) or 11) / 100; updateBindSize() end)
+    aimSection:AddSlider("Aimlock Bind Button Size", 5, 25, savedAimBindPercent, function(value)
+        local percent = math.clamp(math.floor((tonumber(value) or savedAimBindPercent) + .5), 5, 25)
+        aim.bindSize = percent / 100
+        -- Dedicated storage makes the user's chosen value survive both an executor rerun and a full rejoin.
+        NoirPersistence.data.sliders[aimSizeStorageKey] = percent
+        NoirPersistence.data.sliders[aimSizeControlKey] = percent
+        NoirPersistence.Save()
+        if aim.bindPressScale then aim.bindPressScale.Scale = 1 end
+        updateBindSize()
+    end)
     aimSection:AddToggle("Aimlock Wall Check", function(enabled) aim.wallCheck = enabled == true end)
     aimSection:AddToggle("Aimlock FOV Check", function(enabled) aim.fovEnabled = enabled == true; updateFovCircle() end)
     aimSection:AddSlider("Aimlock FOV Radius", 50, 800, 250, function(value) aim.fovRadius = tonumber(value) or 250; updateFovCircle() end)
@@ -5990,15 +6015,17 @@ do
             if typeof(parent) ~= "Instance" then parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") end
             if typeof(parent) ~= "Instance" then return end
             local screen = New("ScreenGui", { Parent = parent, Name = "NoirOmegaMonitor", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 82, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
-            local card = New("Frame", { Parent = screen, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -20, 0, 108), Size = UDim2.fromOffset(264, 112), BackgroundColor3 = Color3.fromRGB(10, 12, 16), BackgroundTransparency = .12, BorderSizePixel = 0 })
-            corner(card, 14); stroke(card, C.accent, .22)
-            local accent = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 15), Size = UDim2.fromOffset(3, 54), BackgroundColor3 = C.accent, BorderSizePixel = 0 }); corner(accent, 2)
-            local title = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(16, 10), Size = UDim2.fromOffset(230, 20), BackgroundTransparency = 1, Text = "OMEGA • SILENT AIM", TextColor3 = C.text, TextSize = 13, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left })
+            -- Compact top-right safe zone: narrow enough to stay clear of Noir's floating binds,
+            -- raised above the action controls, and transparent enough to preserve the game view.
+            local card = New("Frame", { Parent = screen, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, 72), Size = UDim2.fromOffset(184, 78), BackgroundColor3 = Color3.fromRGB(10, 12, 16), BackgroundTransparency = .56, BorderSizePixel = 0, ClipsDescendants = true })
+            corner(card, 12); stroke(card, C.accent, .55)
+            local accent = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 11), Size = UDim2.fromOffset(2, 43), BackgroundColor3 = C.accent, BackgroundTransparency = .18, BorderSizePixel = 0 }); corner(accent, 2)
+            local title = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(13, 6), Size = UDim2.fromOffset(164, 15), BackgroundTransparency = 1, Text = "OMEGA • SILENT AIM", TextColor3 = C.text, TextSize = 10, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
             local function line(y)
-                return New("TextLabel", { Parent = card, Position = UDim2.fromOffset(16, y), Size = UDim2.fromOffset(232, 17), BackgroundTransparency = 1, Text = "", TextColor3 = C.dim, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+                return New("TextLabel", { Parent = card, Position = UDim2.fromOffset(13, y), Size = UDim2.fromOffset(164, 14), BackgroundTransparency = 1, Text = "", TextColor3 = C.dim, TextSize = 9, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
             end
             omega.monitorGui = screen
-            omega.monitorLabels = { state = line(36), config = line(56), values = line(76) }
+            omega.monitorLabels = { state = line(23), config = line(40), values = line(57) }
         end
         local function setText(label, value)
             if label and label.Text ~= value then label.Text = value end
@@ -6023,9 +6050,9 @@ do
             local summary = "Omega: " .. state .. "  |  " .. pingMilliseconds() .. " ms  |  " .. mode .. "  |  " .. omega.currentProfile .. (omega.upgrade and "  +Upgrade" or "")
             if omega.statusControl then omega.statusControl:SetValue(summary) end
             if omega.monitorLabels then
-                setText(omega.monitorLabels.state, state .. "  •  " .. mode .. (omega.upgrade and "  •  UPGRADE" or ""))
-                setText(omega.monitorLabels.config, "Ping " .. pingMilliseconds() .. " ms  •  " .. omega.currentProfile)
-                setText(omega.monitorLabels.values, "Sim " .. tostring(config.maxSimulationMs) .. "  |  Int " .. tostring(config.predictionIntervalMs) .. "  |  H/V " .. tostring(config.horizontalMultiplier) .. "/" .. tostring(config.verticalMultiplier))
+                setText(omega.monitorLabels.state, state .. " • " .. mode .. (omega.upgrade and " • UPGRADE" or ""))
+                setText(omega.monitorLabels.config, tostring(pingMilliseconds()) .. " ms • " .. omega.currentProfile)
+                setText(omega.monitorLabels.values, "S:" .. tostring(config.maxSimulationMs) .. " I:" .. tostring(config.predictionIntervalMs) .. " H/V:" .. tostring(config.horizontalMultiplier) .. "/" .. tostring(config.verticalMultiplier))
             end
         end
         local function applyOmega(force)
