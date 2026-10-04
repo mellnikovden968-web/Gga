@@ -1589,18 +1589,27 @@ function autoTuneForPing()
 end
 function leadTime(profile)
     local settings = profile == "knife" and config.knifeAim or config
+    local observedPing = settings.prioritizePing and cachedPing or (settings.manualPingMs / 1000)
     local prediction
     if settings.adaptive then
-        local ping = settings.prioritizePing and cachedPing or (settings.manualPingMs / 1000)
-        prediction = ping + settings.extraLead
+        prediction = observedPing + settings.extraLead
         if settings.predictLag then
             local samplingDelay = math.clamp(settings.predictionIntervalMs / 2000, 0, 0.05)
-            prediction = prediction + samplingDelay + math.max(0, ping - 0.10) * 0.15
+            prediction = prediction + samplingDelay + math.max(0, observedPing - 0.10) * 0.15
         end
     else
         prediction = settings.fixedLead
     end
-    return math.clamp(prediction, 0.02, settings.maxSimulationMs / 1000)
+    -- Omega's Sim figures are a remote simulation window.  The native redirect also needs
+    -- the high-ping server-arrival portion of the round trip.  Without this small extension
+    -- a 200ms profile was capped at 76ms before its multiplier was applied, consistently
+    -- leading fast targets too little.  Below 100ms this is unchanged; at higher latency it
+    -- smoothly adds up to 75ms while keeping a strict 300ms safety ceiling.
+    local simulationCap = settings.maxSimulationMs / 1000
+    if settings.adaptive then
+        simulationCap = math.min(.30, simulationCap + math.clamp(observedPing - .10, 0, .25) * .30)
+    end
+    return math.clamp(prediction, 0.02, simulationCap)
 end
 function sampleMotion(part, settings)
     settings = settings or config
@@ -3237,12 +3246,25 @@ task.defer(function()
     local oldRuntime = getgenv().__NoirMiscAimlockRuntime
     if type(oldRuntime) == "table" and type(oldRuntime.Stop) == "function" then pcall(oldRuntime.Stop) end
 
+    -- Keep this separately as well as in the normal slider entry.  The explicit value is
+    -- restored before the floating button is made, so a mobile rejoin cannot briefly recreate
+    -- it at the old 11% default and leave it oversized.
+    local aimSizeStorageKey = "NoirAimlockBindSizeV2"
+    local aimSizeControlKey = "MISC \u{2022} AIMLOCK::Aimlock Bind Button Size"
+    -- V2 intentionally starts at 8% rather than inheriting the former 11% default.
+    -- Once the player changes it, the dedicated key takes priority on every later run.
+    local savedAimBindPercent = tonumber(NoirPersistence.data.sliders[aimSizeStorageKey]) or 8
+    savedAimBindPercent = math.clamp(math.floor(savedAimBindPercent + .5), 5, 25)
+    -- Feed the recovered value to AddSlider too; this prevents a stale former-default entry
+    -- from overriding the dedicated mobile-button setting during UI construction.
+    NoirPersistence.data.sliders[aimSizeControlKey] = savedAimBindPercent
+
     local aim = {
         enabled = false, wallCheck = false, fovEnabled = false, fovRadius = 250,
         smoothness = .25, smoothRate = 18, horizontalPrediction = false, prediction = .145,
         targetPart = "Head", selectedPlayer = nil, targetPlayer = nil, lastSearch = 0, searchInterval = .10,
         lastAimPos = nil, lastTarget = nil, cachedPlayer = nil, cachedCharacter = nil,
-        cachedRoot = nil, cachedHead = nil, key = "T", bindVisible = false, bindSize = .11,
+        cachedRoot = nil, cachedHead = nil, key = "T", bindVisible = false, bindSize = savedAimBindPercent / 100,
         overlay = nil, bindButton = nil, bindOuterGradient = nil, bindInnerGradient = nil, bindPressScale = nil,
         fovCircle = nil, connections = {}, bindConnections = {}, stopped = false,
     }
@@ -3358,11 +3380,21 @@ task.defer(function()
         ColorSequenceKeypoint.new(0, Color3.fromRGB(21, 108, 66)), ColorSequenceKeypoint.new(.24, Color3.fromRGB(110, 255, 178)),
         ColorSequenceKeypoint.new(.5, Color3.fromRGB(42, 178, 105)), ColorSequenceKeypoint.new(.76, Color3.fromRGB(176, 255, 212)), ColorSequenceKeypoint.new(1, Color3.fromRGB(19, 103, 61)),
     })
+    local function bindButtonPixels()
+        -- CurrentCamera can be nil for one frame while Roblox rebuilds the mobile UI.
+        -- Retain the normal 720px short-side fallback in that frame instead of falling back
+        -- to ImageButton's 100x100 default (the source of the visibly oversized button).
+        local camera = Workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize
+        local shortEdge = viewport and math.min(viewport.X, viewport.Y) or 720
+        return math.clamp(math.floor(shortEdge * aim.bindSize + .5), 34, 148)
+    end
     local function updateBindSize()
-        local button, camera = aim.bindButton, Workspace.CurrentCamera
-        if not button or not camera then return end
-        local viewport = camera.ViewportSize
-        button.Size = UDim2.new(aim.bindSize * (viewport.Y / math.max(viewport.X, 1)), 0, aim.bindSize, 0)
+        local button = aim.bindButton
+        if not button then return end
+        -- Exact pixel square: it remains stable through a toggle, respawn, or device rotation.
+        local pixels = bindButtonPixels()
+        button.Size = UDim2.fromOffset(pixels, pixels)
     end
     local function updateBindVisual()
         local button = aim.bindButton
@@ -3400,8 +3432,9 @@ task.defer(function()
         local overlay = ensureOverlay()
         if not overlay then return end
         -- The floating Aim button deliberately uses the same Noir metallic two-stroke treatment as Desync.
+        local initialPixels = bindButtonPixels()
         local button = New("ImageButton", { Name = "AimlockButton", Parent = overlay, AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("aimlock_bind_v1", UDim2.new(.83, 0, .70, 0)),
-            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0, AutoButtonColor = false,
+            Size = UDim2.fromOffset(initialPixels, initialPixels), BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0, AutoButtonColor = false,
             Image = "", ClipsDescendants = false, ZIndex = 8 })
         corner(button, 999)
         local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
@@ -3477,7 +3510,16 @@ task.defer(function()
     local aimSection = tab:AddSection("MISC \u{2022} AIMLOCK", "Camera lock for Murderer or a selected player • all controls are local")
     aimSection:AddToggle("Enable Aimlock", setAimlock)
     aimSection:AddToggle("Enable Aimlock Bind Button", setBindVisible)
-    aimSection:AddSlider("Aimlock Bind Button Size", 5, 25, 11, function(value) aim.bindSize = (tonumber(value) or 11) / 100; updateBindSize() end)
+    aimSection:AddSlider("Aimlock Bind Button Size", 5, 25, savedAimBindPercent, function(value)
+        local percent = math.clamp(math.floor((tonumber(value) or savedAimBindPercent) + .5), 5, 25)
+        aim.bindSize = percent / 100
+        -- Dedicated storage makes the user's chosen value survive both an executor rerun and a full rejoin.
+        NoirPersistence.data.sliders[aimSizeStorageKey] = percent
+        NoirPersistence.data.sliders[aimSizeControlKey] = percent
+        NoirPersistence.Save()
+        if aim.bindPressScale then aim.bindPressScale.Scale = 1 end
+        updateBindSize()
+    end)
     aimSection:AddToggle("Aimlock Wall Check", function(enabled) aim.wallCheck = enabled == true end)
     aimSection:AddToggle("Aimlock FOV Check", function(enabled) aim.fovEnabled = enabled == true; updateFovCircle() end)
     aimSection:AddSlider("Aimlock FOV Radius", 50, 800, 250, function(value) aim.fovRadius = tonumber(value) or 250; updateFovCircle() end)
@@ -5949,8 +5991,11 @@ do
 
     -- Omega/CFG is adapted to Noir's real pistol prediction table; it never touches odh_internal_shared/MM2_GPL.
     do
-        local omega = { enabled = false, adaptive = true, locked = false, upgrade = false, monitor = false,
-            lastApply = -1e9, currentProfile = "--", classicIndex = nil, statusControl = nil }
+        local priorOmega = getgenv().__NoirOmegaRuntime
+        if type(priorOmega) == "table" and type(priorOmega.Stop) == "function" then pcall(priorOmega.Stop) end
+        local omega = { enabled = false, adaptive = true, locked = false, upgrade = false, monitor = false, stopped = false,
+            lastApply = -1e9, currentProfile = "--", classicIndex = nil, statusControl = nil,
+            monitorGui = nil, monitorLabels = nil }
         local function pingMilliseconds()
             return math.clamp(math.floor(cachedPing * 1000 + .5), 5, 1000)
         end
@@ -5970,11 +6015,62 @@ do
             end
             return classicOmegaProfile(ping)
         end
+        local function destroyOmegaMonitor()
+            if omega.monitorGui then omega.monitorGui:Destroy() end
+            omega.monitorGui, omega.monitorLabels = nil, nil
+            for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+                if parent then
+                    local stale = parent:FindFirstChild("NoirOmegaMonitor")
+                    if stale then stale:Destroy() end
+                end
+            end
+        end
+        local function createOmegaMonitor()
+            if omega.monitorGui and omega.monitorGui.Parent then return end
+            destroyOmegaMonitor()
+            local parent = guiParent
+            if typeof(parent) ~= "Instance" then parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") end
+            if typeof(parent) ~= "Instance" then return end
+            local screen = New("ScreenGui", { Parent = parent, Name = "NoirOmegaMonitor", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 82, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+            -- Compact top-right safe zone: narrow enough to stay clear of Noir's floating binds,
+            -- raised above the action controls, and transparent enough to preserve the game view.
+            local card = New("Frame", { Parent = screen, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, 72), Size = UDim2.fromOffset(184, 78), BackgroundColor3 = Color3.fromRGB(10, 12, 16), BackgroundTransparency = .56, BorderSizePixel = 0, ClipsDescendants = true })
+            corner(card, 12); stroke(card, C.accent, .55)
+            local accent = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 11), Size = UDim2.fromOffset(2, 43), BackgroundColor3 = C.accent, BackgroundTransparency = .18, BorderSizePixel = 0 }); corner(accent, 2)
+            local title = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(13, 6), Size = UDim2.fromOffset(164, 15), BackgroundTransparency = 1, Text = "OMEGA • SILENT AIM", TextColor3 = C.text, TextSize = 10, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+            local function line(y)
+                return New("TextLabel", { Parent = card, Position = UDim2.fromOffset(13, y), Size = UDim2.fromOffset(164, 14), BackgroundTransparency = 1, Text = "", TextColor3 = C.dim, TextSize = 9, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+            end
+            omega.monitorGui = screen
+            omega.monitorLabels = { state = line(23), config = line(40), values = line(57) }
+        end
+        local function setText(label, value)
+            if label and label.Text ~= value then label.Text = value end
+        end
+        local function syncOmegaControls()
+            local values = {
+                maxSimulationMs = config.maxSimulationMs, predictionIntervalMs = config.predictionIntervalMs, manualPingMs = config.manualPingMs,
+                offsetX = config.offsetX, offsetY = config.offsetY, offsetZ = config.offsetZ,
+                horizontalMultiplier = config.horizontalMultiplier, verticalMultiplier = config.verticalMultiplier,
+            }
+            for key, value in pairs(values) do
+                local control = noirMirrorControls["pistol." .. key]
+                if type(control) == "table" and type(control.SetValue) == "function" then
+                    local current = type(control.GetValue) == "function" and control:GetValue() or nil
+                    if tonumber(current) ~= tonumber(value) then pcall(control.SetValue, control, value) end
+                end
+            end
+        end
         local function updateOmegaStatus()
-            if not omega.statusControl then return end
             local state = not omega.enabled and "OFF" or omega.locked and "LOCKED" or "ON"
             local mode = omega.adaptive and "Adaptive" or "Classic"
-            omega.statusControl:SetValue("Omega: " .. state .. "  |  " .. pingMilliseconds() .. " ms  |  " .. mode .. "  |  " .. omega.currentProfile .. (omega.upgrade and "  +Upgrade" or ""))
+            local summary = "Omega: " .. state .. "  |  " .. pingMilliseconds() .. " ms  |  " .. mode .. "  |  " .. omega.currentProfile .. (omega.upgrade and "  +Upgrade" or "")
+            if omega.statusControl then omega.statusControl:SetValue(summary) end
+            if omega.monitorLabels then
+                setText(omega.monitorLabels.state, state .. " • " .. mode .. (omega.upgrade and " • UPGRADE" or ""))
+                setText(omega.monitorLabels.config, tostring(pingMilliseconds()) .. " ms • " .. omega.currentProfile)
+                setText(omega.monitorLabels.values, "S:" .. tostring(config.maxSimulationMs) .. " I:" .. tostring(config.predictionIntervalMs) .. " H/V:" .. tostring(config.horizontalMultiplier) .. "/" .. tostring(config.verticalMultiplier))
+            end
         end
         local function applyOmega(force)
             local now = os.clock()
@@ -5983,16 +6079,16 @@ do
             if not omega.enabled or omega.locked then updateOmegaStatus(); return end
             local ping = pingMilliseconds()
             local profile, name = omegaConfig(ping)
-            if omega.upgrade then
-                profile.Sim += 1; profile.H += 2; profile.V += 2
-            end
-            -- Direct Noir mapping: these are the same controls CFG maps through MM2_GPL slots 4..10.
+            if omega.upgrade then profile.Sim += 1; profile.H += 2; profile.V += 2 end
+            -- Direct Noir mapping: these are the same prediction values CFG writes through MM2_GPL slots 4..10.
             config.maxSimulationMs = profile.Sim
             config.predictionIntervalMs = profile.Interval
             config.offsetX, config.offsetY, config.offsetZ = profile.X, profile.Y, profile.Z
             config.horizontalMultiplier, config.verticalMultiplier = profile.H, profile.V
             config.manualPingMs = ping
             omega.currentProfile = name
+            -- Mirror the live pistol values into Noir's existing Pistol Prediction sliders without unnecessary saves.
+            syncOmegaControls()
             updateOmegaStatus()
         end
         local function reconfigureOmega()
@@ -6025,6 +6121,7 @@ do
         end)
         combatAim:AddToggle("Omega Monitor", function(enabled)
             omega.monitor = enabled == true
+            if omega.monitor then createOmegaMonitor() else destroyOmegaMonitor() end
             updateOmegaStatus()
         end)
         combatAim:AddButton("Omega Print Telemetry", telemetryOmega)
@@ -6032,11 +6129,18 @@ do
         combatAim:AddLabel("Omega changes pistol prediction only. Disable it to stop updates; the last applied values stay in place.")
 
         task.spawn(function()
-            while running do
+            while running and not omega.stopped do
                 if omega.enabled or omega.monitor then applyOmega(false) end
                 task.wait(.4)
             end
         end)
+        getgenv().__NoirOmegaRuntime = {
+            Stop = function()
+                omega.stopped = true
+                destroyOmegaMonitor()
+            end,
+            Sync = function() syncOmegaControls(); updateOmegaStatus() end,
+        }
     end
 
     local combatGun=tab:AddSection("GUN", "Gun targeting controls")
@@ -6166,6 +6270,8 @@ do
             local control=noirMirrorControls[entry[1]]
             if type(control)=="table" and type(control.SetValue)=="function" then pcall(control.SetValue,control,entry[2]) end
         end
+    local omegaRuntime = getgenv().__NoirOmegaRuntime
+    if type(omegaRuntime) == "table" and type(omegaRuntime.Sync) == "function" then omegaRuntime.Sync() end
     end
 end
 
