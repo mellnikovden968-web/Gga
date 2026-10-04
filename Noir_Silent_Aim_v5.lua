@@ -2494,8 +2494,8 @@ local tab = host.CreateTab()
 
 -- Misc cursor controls replace the drawing inside Roblox's existing Shift Lock/crosshair ImageLabel.
 do
-    local cursorState = { enabled = false, template = "Default", customId = "", color = C.accent, originalMouseIcon = nil, originalVisuals = {} }
-    local cursorTemplates = { "Default", "Crosshair", "Dot", "Ring", "Custom Image" }
+    local cursorState = { enabled = false, colorEnabled = false, template = "Default", customId = "", color = C.accent, originalMouseIcon = nil, originalVisuals = {} }
+    local cursorTemplates = { "Default", "Crosshair", "Dot", "Ring", "Target", "Scope", "Diamond", "Brackets", "Plus", "Custom Image" }
     local cursorKeywords = { "mouselock", "shiftlock", "crosshair", "reticle", "aim", "target", "cursor" }
 
     local function assetId(value)
@@ -2505,9 +2505,7 @@ do
     local function isShiftLockVisual(instance)
         if not (instance and (instance:IsA("ImageLabel") or instance:IsA("ImageButton"))) then return false end
         local name = string.lower(instance.Name)
-        for _, keyword in ipairs(cursorKeywords) do
-            if string.find(name, keyword, 1, true) then return true end
-        end
+        for _, keyword in ipairs(cursorKeywords) do if string.find(name, keyword, 1, true) then return true end end
         return false
     end
     local function removeTemplate(instance)
@@ -2526,27 +2524,45 @@ do
             end
         end
         table.clear(cursorState.originalVisuals)
-        pcall(function()
-            if cursorState.originalMouseIcon ~= nil then LocalPlayer:GetMouse().Icon = cursorState.originalMouseIcon end
-        end)
+        pcall(function() if cursorState.originalMouseIcon ~= nil then LocalPlayer:GetMouse().Icon = cursorState.originalMouseIcon end end)
     end
-    local function addTemplate(instance)
+    local function addTemplate(instance, drawColor)
         local z = (instance.ZIndex or 1) + 1
         local template = New("Frame", { Parent = instance, Name = "NoirShiftLockTemplate", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, Active = false, ZIndex = z })
+        local function bar(position, size)
+            return New("Frame", { Parent = template, Position = position, Size = size, BackgroundColor3 = drawColor, BorderSizePixel = 0, ZIndex = z + 1 })
+        end
+        local function dot(size, color)
+            local part = New("Frame", { Parent = template, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = size, BackgroundColor3 = color or drawColor, BorderSizePixel = 0, ZIndex = z + 2 })
+            corner(part, 999); return part
+        end
+        local function ring(scale, thickness)
+            local part = New("Frame", { Parent = template, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(scale, scale), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = z + 1 })
+            corner(part, 999); New("UIStroke", { Parent = part, Color = drawColor, Thickness = thickness or 2 }); return part
+        end
         if cursorState.template == "Crosshair" then
-            for _, spec in ipairs({
-                { UDim2.new(.5, -1, 0, 0), UDim2.new(0, 2, .38, 0) },
-                { UDim2.new(.5, -1, .62, 0), UDim2.new(0, 2, .38, 0) },
-                { UDim2.new(0, 0, .5, -1), UDim2.new(.38, 0, 0, 2) },
-                { UDim2.new(.62, 0, .5, -1), UDim2.new(.38, 0, 0, 2) },
-            }) do New("Frame", { Parent = template, Position = spec[1], Size = spec[2], BackgroundColor3 = cursorState.color, BorderSizePixel = 0, ZIndex = z + 1 }) end
-            local center = New("Frame", { Parent = template, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(5, 5), BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = z + 2 }); corner(center, 3)
+            bar(UDim2.new(.5, -1, 0, 0), UDim2.new(0, 2, .36, 0)); bar(UDim2.new(.5, -1, .64, 0), UDim2.new(0, 2, .36, 0))
+            bar(UDim2.new(0, 0, .5, -1), UDim2.new(.36, 0, 0, 2)); bar(UDim2.new(.64, 0, .5, -1), UDim2.new(.36, 0, 0, 2)); dot(UDim2.fromOffset(4, 4), C.text)
         elseif cursorState.template == "Dot" then
-            local dot = New("Frame", { Parent = template, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.34, .34), BackgroundColor3 = cursorState.color, BorderSizePixel = 0, ZIndex = z + 1 })
-            corner(dot, 999)
+            dot(UDim2.fromScale(.30, .30))
         elseif cursorState.template == "Ring" then
-            local ring = New("Frame", { Parent = template, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.74, .74), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = z + 1 })
-            corner(ring, 999); New("UIStroke", { Parent = ring, Color = cursorState.color, Thickness = 2 })
+            ring(.74, 2); dot(UDim2.fromOffset(4, 4), C.text)
+        elseif cursorState.template == "Target" then
+            ring(.74, 2); ring(.36, 1); dot(UDim2.fromOffset(4, 4), C.text)
+        elseif cursorState.template == "Scope" then
+            ring(.88, 2)
+            bar(UDim2.new(.5, -1, 0, 0), UDim2.new(0, 2, 1, 0)); bar(UDim2.new(0, 0, .5, -1), UDim2.new(1, 0, 0, 2)); dot(UDim2.fromOffset(4, 4), C.text)
+        elseif cursorState.template == "Diamond" then
+            local diamond = New("Frame", { Parent = template, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.58, .58), BackgroundTransparency = 1, BorderSizePixel = 0, Rotation = 45, ZIndex = z + 1 })
+            New("UIStroke", { Parent = diamond, Color = drawColor, Thickness = 2 }); dot(UDim2.fromOffset(4, 4), C.text)
+        elseif cursorState.template == "Brackets" then
+            local t, l = .22, .12
+            bar(UDim2.new(0, 0, 0, 0), UDim2.new(t, 0, 0, 2)); bar(UDim2.new(0, 0, 0, 0), UDim2.new(0, 2, l, 0))
+            bar(UDim2.new(1-t, 0, 0, 0), UDim2.new(t, 0, 0, 2)); bar(UDim2.new(1, -2, 0, 0), UDim2.new(0, 2, l, 0))
+            bar(UDim2.new(0, 0, 1, -2), UDim2.new(t, 0, 0, 2)); bar(UDim2.new(0, 0, 1-l, 0), UDim2.new(0, 2, l, 0))
+            bar(UDim2.new(1-t, 0, 1, -2), UDim2.new(t, 0, 0, 2)); bar(UDim2.new(1, -2, 1-l, 0), UDim2.new(0, 2, l, 0))
+        elseif cursorState.template == "Plus" then
+            bar(UDim2.new(.5, -1, .12, 0), UDim2.new(0, 2, .76, 0)); bar(UDim2.new(.12, 0, .5, -1), UDim2.new(.76, 0, 0, 2)); dot(UDim2.fromOffset(4, 4), C.text)
         end
     end
     local function applyToShiftLockVisual(instance)
@@ -2554,20 +2570,19 @@ do
         if cursorState.originalVisuals[instance] == nil then
             cursorState.originalVisuals[instance] = { image = instance.Image, color = instance.ImageColor3, transparency = instance.ImageTransparency }
         end
+        local original = cursorState.originalVisuals[instance]
+        local drawColor = cursorState.colorEnabled and cursorState.color or original.color
         removeTemplate(instance)
         local customImage = cursorState.template == "Custom Image" and assetId(cursorState.customId) or ""
         pcall(function()
             if customImage ~= "" then
-                instance.Image = customImage
-                instance.ImageColor3 = cursorState.color
-                instance.ImageTransparency = 0
+                instance.Image = customImage; instance.ImageColor3 = drawColor; instance.ImageTransparency = 0
             elseif cursorState.template == "Default" then
-                instance.ImageColor3 = cursorState.color
-                instance.ImageTransparency = 0
+                instance.ImageColor3 = drawColor; instance.ImageTransparency = original.transparency
             else
                 -- Hide only the old texture and draw the selected template inside this same Shift Lock instance.
                 instance.ImageTransparency = 1
-                addTemplate(instance)
+                addTemplate(instance, drawColor)
             end
         end)
     end
@@ -2584,10 +2599,7 @@ do
             if parent then for _, instance in ipairs(parent:GetDescendants()) do applyToShiftLockVisual(instance) end end
         end
     end
-    local function setCursorEnabled(enabled)
-        cursorState.enabled = enabled == true
-        applyCursor()
-    end
+    local function setCursorEnabled(enabled) cursorState.enabled = enabled == true; applyCursor() end
     local function watchShiftLock(parent)
         if not parent then return end
         parent.DescendantAdded:Connect(function(instance) task.defer(function() applyToShiftLockVisual(instance) end) end)
@@ -2602,6 +2614,7 @@ do
     cursorState.template = table.find(cursorTemplates, savedTemplate) and savedTemplate or "Default"
     local templateControl = cursorSection:AddDropdown("Template Cursor", cursorTemplates, function(value) cursorState.template = value; applyCursor() end)
     templateControl:SetValue(cursorState.template)
+    cursorSection:AddToggle("Enable Cursor Color", function(enabled) cursorState.colorEnabled = enabled == true; applyCursor() end)
     cursorSection:AddColorpicker("Cursor Color", C.accent, function(color) cursorState.color = color; applyCursor() end)
     cursorState.customId = tostring(NoirPersistence.data.textboxes["MISC \u{2022} CUSTOMIZE CURSOR::Custom Cursor ID"] or "")
     local customIdControl = cursorSection:AddTextBox("Custom Cursor ID", function(value)
@@ -2930,12 +2943,24 @@ task.defer(function()
         bindButton = nil,
         bindSize = .105,
         bindConnections = {},
+        bindOuterGradient = nil,
+        bindInnerGradient = nil,
     }
-
+    local desyncToggleControl, syncingDesyncToggle = nil, false
+    local monochromeGradient = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)),
+        ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)),
+    })
+    local rubyGradient = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(104, 18, 32)), ColorSequenceKeypoint.new(.24, Color3.fromRGB(255, 126, 145)),
+        ColorSequenceKeypoint.new(.5, Color3.fromRGB(185, 38, 62)), ColorSequenceKeypoint.new(.76, Color3.fromRGB(255, 170, 183)), ColorSequenceKeypoint.new(1, Color3.fromRGB(112, 18, 35)),
+    })
     local function updateDesyncBindText()
         local button = desyncState.bindButton
         local label = button and button:FindFirstChild("Text")
-        if label then label.Text = desyncState.enabled and "Desync\nON" or "Desync\nOFF" end
+        if label then label.Text = "Desync" end
+        if desyncState.bindOuterGradient then desyncState.bindOuterGradient.Color = desyncState.enabled and rubyGradient or monochromeGradient end
+        if desyncState.bindInnerGradient then desyncState.bindInnerGradient.Color = desyncState.enabled and rubyGradient or monochromeGradient end
     end
     local function setDesync(enabled)
         desyncState.enabled = enabled == true
@@ -2950,6 +2975,11 @@ task.defer(function()
             if pendingRoot and pendingRoot.Parent and pendingCFrame then pcall(function() pendingRoot.CFrame = pendingCFrame end) end
         end
         updateDesyncBindText()
+        if desyncToggleControl and not syncingDesyncToggle then
+            syncingDesyncToggle = true
+            desyncToggleControl(desyncState.enabled)
+            syncingDesyncToggle = false
+        end
     end
     local function disconnectDesyncBind()
         for _, connection in ipairs(desyncState.bindConnections) do pcall(function() connection:Disconnect() end) end
@@ -2987,13 +3017,11 @@ task.defer(function()
         corner(button, 999)
         local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
         local outer = New("UIStroke", { Parent = button, Color = Color3.fromRGB(255, 255, 255), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
-        local outerGradient = New("UIGradient", { Parent = outer, Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)),
-            ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)),
-        }) })
+        local outerGradient = New("UIGradient", { Parent = outer, Color = monochromeGradient })
         table.insert(gradientStrokes, outerGradient)
         local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
         local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner; table.insert(gradientStrokes, innerGradient)
+        desyncState.bindOuterGradient, desyncState.bindInnerGradient = outerGradient, innerGradient
         local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76),
             BackgroundTransparency = 1, Text = "Desync\nOFF", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 14, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 8 })
         local pressScale = New("UIScale", { Parent = button, Scale = 1 })
@@ -3059,7 +3087,9 @@ task.defer(function()
     end)
 
     local desyncMods = tab:AddSection("MISC \u{2022} DESYNC", "Keeps the server-facing character position at the activation point")
-    desyncMods:AddToggle("Desync", setDesync)
+    desyncToggleControl = desyncMods:AddToggle("Desync", function(enabled)
+        if not syncingDesyncToggle then setDesync(enabled) end
+    end)
     desyncMods:AddToggle("Enable Desync Bind Button", setDesyncBindButton)
     desyncMods:AddSlider("Desync Bind Button Size", 5, 25, desyncState.bindSize * 100, function(value)
         desyncState.bindSize = (tonumber(value) or 10.5) / 100
