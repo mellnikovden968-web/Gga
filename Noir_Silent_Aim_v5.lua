@@ -2492,7 +2492,7 @@ end
 
 local tab = host.CreateTab()
 
--- Misc cursor controls edit the real Shift Lock/crosshair ImageLabels already created by Roblox or the game.
+-- Misc cursor controls replace the drawing inside Roblox's existing Shift Lock/crosshair ImageLabel.
 do
     local cursorState = { enabled = false, template = "Default", customId = "", color = C.accent, originalMouseIcon = nil, originalVisuals = {} }
     local cursorTemplates = { "Default", "Crosshair", "Dot", "Ring", "Custom Image" }
@@ -2510,10 +2510,15 @@ do
         end
         return false
     end
+    local function removeTemplate(instance)
+        local template = instance and instance:FindFirstChild("NoirShiftLockTemplate")
+        if template then template:Destroy() end
+    end
     local function restoreShiftLockVisuals()
         for instance, original in pairs(cursorState.originalVisuals) do
             if instance and instance.Parent then
                 pcall(function()
+                    removeTemplate(instance)
                     instance.Image = original.image
                     instance.ImageColor3 = original.color
                     instance.ImageTransparency = original.transparency
@@ -2525,16 +2530,45 @@ do
             if cursorState.originalMouseIcon ~= nil then LocalPlayer:GetMouse().Icon = cursorState.originalMouseIcon end
         end)
     end
+    local function addTemplate(instance)
+        local z = (instance.ZIndex or 1) + 1
+        local template = New("Frame", { Parent = instance, Name = "NoirShiftLockTemplate", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, Active = false, ZIndex = z })
+        if cursorState.template == "Crosshair" then
+            for _, spec in ipairs({
+                { UDim2.new(.5, -1, 0, 0), UDim2.new(0, 2, .38, 0) },
+                { UDim2.new(.5, -1, .62, 0), UDim2.new(0, 2, .38, 0) },
+                { UDim2.new(0, 0, .5, -1), UDim2.new(.38, 0, 0, 2) },
+                { UDim2.new(.62, 0, .5, -1), UDim2.new(.38, 0, 0, 2) },
+            }) do New("Frame", { Parent = template, Position = spec[1], Size = spec[2], BackgroundColor3 = cursorState.color, BorderSizePixel = 0, ZIndex = z + 1 }) end
+            local center = New("Frame", { Parent = template, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(5, 5), BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = z + 2 }); corner(center, 3)
+        elseif cursorState.template == "Dot" then
+            local dot = New("Frame", { Parent = template, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.34, .34), BackgroundColor3 = cursorState.color, BorderSizePixel = 0, ZIndex = z + 1 })
+            corner(dot, 999)
+        elseif cursorState.template == "Ring" then
+            local ring = New("Frame", { Parent = template, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.74, .74), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = z + 1 })
+            corner(ring, 999); New("UIStroke", { Parent = ring, Color = cursorState.color, Thickness = 2 })
+        end
+    end
     local function applyToShiftLockVisual(instance)
         if not cursorState.enabled or not isShiftLockVisual(instance) then return end
         if cursorState.originalVisuals[instance] == nil then
             cursorState.originalVisuals[instance] = { image = instance.Image, color = instance.ImageColor3, transparency = instance.ImageTransparency }
         end
+        removeTemplate(instance)
         local customImage = cursorState.template == "Custom Image" and assetId(cursorState.customId) or ""
         pcall(function()
-            if customImage ~= "" then instance.Image = customImage end
-            instance.ImageColor3 = cursorState.color
-            instance.ImageTransparency = 0
+            if customImage ~= "" then
+                instance.Image = customImage
+                instance.ImageColor3 = cursorState.color
+                instance.ImageTransparency = 0
+            elseif cursorState.template == "Default" then
+                instance.ImageColor3 = cursorState.color
+                instance.ImageTransparency = 0
+            else
+                -- Hide only the old texture and draw the selected template inside this same Shift Lock instance.
+                instance.ImageTransparency = 1
+                addTemplate(instance)
+            end
         end)
     end
     local function applyCursor()
@@ -2547,9 +2581,7 @@ do
             if customImage ~= "" then mouse.Icon = customImage end
         end)
         for _, parent in ipairs({ CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
-            if parent then
-                for _, instance in ipairs(parent:GetDescendants()) do applyToShiftLockVisual(instance) end
-            end
+            if parent then for _, instance in ipairs(parent:GetDescendants()) do applyToShiftLockVisual(instance) end end
         end
     end
     local function setCursorEnabled(enabled)
@@ -2558,33 +2590,24 @@ do
     end
     local function watchShiftLock(parent)
         if not parent then return end
-        parent.DescendantAdded:Connect(function(instance)
-            task.defer(function() applyToShiftLockVisual(instance) end)
-        end)
+        parent.DescendantAdded:Connect(function(instance) task.defer(function() applyToShiftLockVisual(instance) end) end)
     end
     watchShiftLock(CoreGui)
     local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
     watchShiftLock(playerGui)
 
-    local cursorSection = tab:AddSection("MISC \u{2022} CUSTOMIZE CURSOR", "Changes the existing Shift Lock/crosshair color; no extra cursor is added")
+    local cursorSection = tab:AddSection("MISC \u{2022} CUSTOMIZE CURSOR", "Replaces the drawing inside the existing Shift Lock/crosshair; no second cursor is added")
     cursorSection:AddToggle("Enable Custom Cursor", setCursorEnabled)
     local savedTemplate = NoirPersistence.data.dropdowns["MISC \u{2022} CUSTOMIZE CURSOR::Template Cursor"]
     cursorState.template = table.find(cursorTemplates, savedTemplate) and savedTemplate or "Default"
-    local templateControl = cursorSection:AddDropdown("Template Cursor", cursorTemplates, function(value)
-        cursorState.template = value
-        applyCursor()
-    end)
+    local templateControl = cursorSection:AddDropdown("Template Cursor", cursorTemplates, function(value) cursorState.template = value; applyCursor() end)
     templateControl:SetValue(cursorState.template)
-    cursorSection:AddColorpicker("Cursor Color", C.accent, function(color)
-        cursorState.color = color
-        applyCursor()
-    end)
+    cursorSection:AddColorpicker("Cursor Color", C.accent, function(color) cursorState.color = color; applyCursor() end)
     cursorState.customId = tostring(NoirPersistence.data.textboxes["MISC \u{2022} CUSTOMIZE CURSOR::Custom Cursor ID"] or "")
     local customIdControl = cursorSection:AddTextBox("Custom Cursor ID", function(value)
         cursorState.customId = tostring(value or ""):sub(1, 100)
         NoirPersistence.data.textboxes["MISC \u{2022} CUSTOMIZE CURSOR::Custom Cursor ID"] = cursorState.customId
-        NoirPersistence.Save()
-        applyCursor()
+        NoirPersistence.Save(); applyCursor()
     end)
     customIdControl:SetValue(cursorState.customId)
 end
@@ -2910,7 +2933,9 @@ task.defer(function()
     }
 
     local function updateDesyncBindText()
-        if desyncState.bindButton then desyncState.bindButton.Text = desyncState.enabled and "Desync\nON" or "Desync\nOFF" end
+        local button = desyncState.bindButton
+        local label = button and button:FindFirstChild("Text")
+        if label then label.Text = desyncState.enabled and "Desync\nON" or "Desync\nOFF" end
     end
     local function setDesync(enabled)
         desyncState.enabled = enabled == true
@@ -2954,18 +2979,32 @@ task.defer(function()
         local parent = guiParent
         if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
         local bindGui = New("ScreenGui", { Parent = parent, Name = "NoirDesyncBindButton", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 83, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
-        local button = New("TextButton", { Parent = bindGui, Name = "Desync", AnchorPoint = Vector2.new(.5, .5),
+        local button = New("ImageButton", { Parent = bindGui, Name = "Desync", AnchorPoint = Vector2.new(.5, .5),
             Position = NoirPersistence.GetPosition("desync_bind_v1", UDim2.new(.35, 0, .88, 0)), Size = UDim2.fromScale(desyncState.bindSize, desyncState.bindSize),
-            BackgroundColor3 = C.panel, Text = "", TextColor3 = C.text, TextSize = 13, TextWrapped = true, Font = Enum.Font.Gotham, AutoButtonColor = false, ZIndex = 7 })
-        -- Keep the bind's scale-based size stable: unlike styleCircularButton it never applies a fixed pixel press-size.
+            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0,
+            Image = "", AutoButtonColor = false, ClipsDescendants = false, ZIndex = 7 })
+        -- Same circular body, double metallic stroke and centered label as Grab Gun.
         corner(button, 999)
-        local outer = New("UIStroke", { Parent = button, Color = C.border, Thickness = 1.5, Transparency = .2 })
-        local outerGradient = New("UIGradient", { Parent = outer, Color = ColorSequence.new(C.accent, C.text), Rotation = 35 })
-        local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1 })
+        local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
+        local outer = New("UIStroke", { Parent = button, Color = Color3.fromRGB(255, 255, 255), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+        local outerGradient = New("UIGradient", { Parent = outer, Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)),
+            ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)),
+        }) })
+        table.insert(gradientStrokes, outerGradient)
+        local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+        local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner; table.insert(gradientStrokes, innerGradient)
+        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76),
+            BackgroundTransparency = 1, Text = "Desync\nOFF", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 14, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 8 })
+        local pressScale = New("UIScale", { Parent = button, Scale = 1 })
         local dragging, moved, startInput, startPosition, dragInput = false, false, nil, nil, nil
+        desyncState.bindConnections[#desyncState.bindConnections + 1] = RunService.RenderStepped:Connect(function()
+            if outerGradient.Parent then outerGradient.Rotation = (outerGradient.Rotation + 1) % 360 end
+        end)
         desyncState.bindConnections[#desyncState.bindConnections + 1] = button.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                 dragging, moved, startInput, startPosition = true, false, input.Position, button.Position
+                TweenService:Create(pressScale, TweenInfo.new(.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = 1.035 }):Play()
             end
         end)
         desyncState.bindConnections[#desyncState.bindConnections + 1] = button.InputChanged:Connect(function(input)
@@ -2978,13 +3017,15 @@ task.defer(function()
             button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
         end)
         desyncState.bindConnections[#desyncState.bindConnections + 1] = UIS.InputEnded:Connect(function(input)
-            if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
-                dragging = false
+            if not dragging or not (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then return end
+            dragging = false
+            TweenService:Create(pressScale, TweenInfo.new(.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+            if moved then
                 NoirPersistence.SetPosition("desync_bind_v1", button.Position)
+            else
+                -- Touch InputEnded is reliable on mobile; use it directly instead of a second Activated callback.
+                setDesync(not desyncState.enabled)
             end
-        end)
-        desyncState.bindConnections[#desyncState.bindConnections + 1] = button.Activated:Connect(function()
-            if not moved then setDesync(not desyncState.enabled) end
         end)
         desyncState.bindGui, desyncState.bindButton = bindGui, button
         updateDesyncBindSize(); updateDesyncBindText()
