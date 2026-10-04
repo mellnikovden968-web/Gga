@@ -2732,8 +2732,22 @@ do
         if not loader or type(writefile) ~= "function" then cursorState.bundleCache[cursorState.template] = ""; return "" end
         local path = ASSETS_FOLDER .. "/" .. bundle.file
         if not fileExists(path) then
+            -- Delta does not expose HttpService:Base64Decode on every mobile build, so decode locally.
             local decoded
-            local ok = pcall(function() decoded = HttpService:Base64Decode(bundle.data) end)
+            local ok = pcall(function()
+                local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+                decoded = bundle.data:gsub("[^" .. alphabet .. "=]", ""):gsub(".", function(character)
+                    if character == "=" then return "" end
+                    local bits, position = "", alphabet:find(character, 1, true) - 1
+                    for bit = 6, 1, -1 do bits = bits .. (position % 2 ^ bit - position % 2 ^ (bit - 1) > 0 and "1" or "0") end
+                    return bits
+                end):gsub("%d%d%d?%d?%d?%d?%d?%d?", function(bits)
+                    if #bits ~= 8 then return "" end
+                    local byte = 0
+                    for bit = 1, 8 do byte = byte + (bits:sub(bit, bit) == "1" and 2 ^ (8 - bit) or 0) end
+                    return string.char(byte)
+                end)
+            end)
             if not ok or type(decoded) ~= "string" then cursorState.bundleCache[cursorState.template] = ""; return "" end
             ensureStorageFolders()
             if not pcall(writefile, path, decoded) then cursorState.bundleCache[cursorState.template] = ""; return "" end
