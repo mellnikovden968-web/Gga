@@ -3283,7 +3283,7 @@ task.defer(function()
         lastAimPos = nil, lastTarget = nil, cachedPlayer = nil, cachedCharacter = nil,
         cachedRoot = nil, cachedHead = nil, key = "T", bindVisible = false, bindSize = .11,
         overlay = nil, bindButton = nil, bindOuterGradient = nil, bindInnerGradient = nil, bindPressScale = nil,
-        fovCircle = nil, connections = {}, stopped = false,
+        fovCircle = nil, connections = {}, bindConnections = {}, stopped = false,
     }
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
