@@ -2953,7 +2953,7 @@ task.defer(function()
         optimizeCoins = false, removeChroma = false, removePets = false, removeCoins = false, removeCorpses = false,
         partOriginals = {}, effectOriginals = {}, postOriginals = {},
         coinOriginals = {}, hiddenPets = {}, hiddenCoins = {}, hiddenCorpses = {}, chromaOriginals = {}, perfConnection = nil,
-        perfToken = 0, autoScanToken = 0, originalGlobalShadows = Lighting.GlobalShadows,
+        perfToken = 0, autoScanToken = 0, ragdollModelCache = {}, originalGlobalShadows = Lighting.GlobalShadows,
         savedQuality = nil, savedMeshDetail = nil, savedDecoration = nil,
     }
     local function setProperty(instance, property, value)
@@ -3112,6 +3112,40 @@ task.defer(function()
         end)
     end
     local petWords, coinWords, corpseWords = { "pet", "companion", "minion", "familiar" }, { "coin", "currency", "token" }, { "corpse", "ragdoll", "deadbody", "body" }
+    local avatarPartNames = {
+        ["head"] = true, ["torso"] = true, ["uppertorso"] = true, ["lowertorso"] = true,
+        ["left arm"] = true, ["right arm"] = true, ["left leg"] = true, ["right leg"] = true,
+        ["leftarm"] = true, ["rightarm"] = true, ["leftleg"] = true, ["rightleg"] = true,
+        ["lefthand"] = true, ["righthand"] = true, ["leftfoot"] = true, ["rightfoot"] = true,
+        ["leftupperarm"] = true, ["rightupperarm"] = true, ["leftlowerarm"] = true, ["rightlowerarm"] = true,
+        ["leftupperleg"] = true, ["rightupperleg"] = true, ["leftlowerleg"] = true, ["rightlowerleg"] = true,
+    }
+    local function isDetachedCorpsePart(part)
+        if not part:IsA("BasePart") or part.Anchored or not avatarPartNames[string.lower(part.Name or "")] then return false end
+        local model = part:FindFirstAncestorOfClass("Model")
+        local owner = model and Players:GetPlayerFromCharacter(model)
+        local humanoid = model and model:FindFirstChildWhichIsA("Humanoid")
+        -- Never hide a living player character. Dead player limbs that MM2 has detached are still safely caught.
+        if owner and owner.Character == model and humanoid and humanoid.Health > 0 then return false end
+        return true
+    end
+    local function isHumanoidlessRagdoll(model)
+        if not model then return false end
+        local cached = state.ragdollModelCache[model]
+        if cached ~= nil then return cached end
+        local result = false
+        if not model:FindFirstChildWhichIsA("Humanoid") and model:FindFirstChild("HumanoidRootPart") then
+            local limbs = 0
+            for _, descendant in ipairs(model:GetDescendants()) do
+                if descendant:IsA("BasePart") and avatarPartNames[string.lower(descendant.Name or "")] then
+                    limbs += 1
+                    if limbs >= 3 then result = true; break end
+                end
+            end
+        end
+        state.ragdollModelCache[model] = result
+        return result
+    end
     local function applyAutoVisuals(instance)
         if state.optimizeCoins and matchesNamedVisual(instance, coinWords) then applyCoinOptimization(instance) end
         if state.removePets and matchesNamedVisual(instance, petWords) then setHidden(instance, state.hiddenPets, true) end
@@ -3124,7 +3158,14 @@ task.defer(function()
             elseif instance:IsA("BasePart") then
                 local model = instance:FindFirstAncestorOfClass("Model")
                 local humanoid = model and model:FindFirstChildWhichIsA("Humanoid")
-                if humanoid and humanoid.Health <= 0 then setHidden(instance, state.hiddenCorpses, true) end
+                if humanoid and humanoid.Health <= 0 then
+                    setHidden(instance, state.hiddenCorpses, true)
+                elseif isHumanoidlessRagdoll(model) then
+                    setHidden(model, state.hiddenCorpses, true, true)
+                elseif isDetachedCorpsePart(instance) then
+                    -- MM2 can split a dead avatar into separate unanchored Head/Torso/limb parts with no Model/Humanoid.
+                    setHidden(instance, state.hiddenCorpses, true)
+                end
             elseif matchesNamedVisual(instance, corpseWords) then
                 setHidden(instance, state.hiddenCorpses, true)
             end
@@ -3151,7 +3192,11 @@ task.defer(function()
             end
         end)
     end
-    Workspace.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
+    Workspace.DescendantAdded:Connect(function(instance)
+        local model = instance:FindFirstAncestorOfClass("Model")
+        if model then state.ragdollModelCache[model] = nil end
+        task.defer(applyAutoVisuals, instance)
+    end)
     Lighting.DescendantAdded:Connect(function(instance) task.defer(applyAutoVisuals, instance) end)
     local corpseHumanoidConnections = {}
     local function hideDeadModel(model)
@@ -8982,7 +9027,7 @@ local isJumpKeyPressed = false
 local Camera = workspace.CurrentCamera
 local wallDetectionCooldown = 0
 local lastWallhopAt = 0
-local WALLHOP_COOLDOWN = 0.55
+local WALLHOP_COOLDOWN = 2.5
 
 local wallRaycastParams = RaycastParams.new()
 wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
