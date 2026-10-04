@@ -2150,31 +2150,52 @@ local function getDroppedGunPart()
     local drop = Workspace:FindFirstChild("GunDrop", true)
     if not drop then return nil end
     if drop:IsA("BasePart") then return drop end
+    -- Prefer the actual part carrying the touch receiver instead of an arbitrary decoration in a GunDrop model.
+    local transmitter = drop:FindFirstChildWhichIsA("TouchTransmitter", true)
+    if transmitter and transmitter.Parent and transmitter.Parent:IsA("BasePart") then return transmitter.Parent end
+    local handle = drop:FindFirstChild("Handle", true)
+    if handle and handle:IsA("BasePart") then return handle end
     return drop:FindFirstChildWhichIsA("BasePart", true)
 end
 
 local function touchDroppedGun()
-    local root = localRoot()
-    local drop = getDroppedGunPart()
+    local root, drop = localRoot(), getDroppedGunPart()
     if not root or not drop then return false end
-    if type(firetouchinterest) ~= "function" then
-        if os.clock() - gunUtilityState.touchNoticeAt > 5 then
-            gunUtilityState.touchNoticeAt = os.clock()
-            notify("Gun pickup requires firetouchinterest support", 3)
+    local original = root.CFrame
+    local touched = false
+    local ok = pcall(function()
+        -- MM2's pickup touch often ignores a remote-only firetouchinterest call. Briefly overlap the real drop,
+        -- then fire the touch several times so both Delta touch implementations and normal local contact work.
+        root.CFrame = drop.CFrame
+        task.wait(.08)
+        for _ = 1, 3 do
+            if type(firetouchinterest) == "function" then
+                firetouchinterest(root, drop, 0)
+                firetouchinterest(root, drop, 1)
+            end
+            task.wait(.12)
+            if hasGunInInventory() then touched = true; break end
+            if not (root.Parent and drop.Parent) then break end
+            root.CFrame = drop.CFrame
         end
-        return false
-    end
-    return pcall(function()
-        firetouchinterest(root, drop, 0)
-        firetouchinterest(root, drop, 1)
     end)
+    if root and root.Parent then pcall(function() root.CFrame = original end) end
+    return ok and (touched or hasGunInInventory())
 end
 
 local function grabDroppedGun()
     if hasGunInInventory() then return true end
-    if not touchDroppedGun() then return false end
-    task.wait(0.5)
-    return hasGunInInventory()
+    if gunUtilityState.pickupBusy then return false end
+    gunUtilityState.pickupBusy = true
+    local success = touchDroppedGun()
+    -- Replication of a picked-up tool may arrive shortly after the touch connection fires.
+    local deadline = os.clock() + .9
+    while not success and os.clock() < deadline do
+        task.wait(.06)
+        success = hasGunInInventory()
+    end
+    gunUtilityState.pickupBusy = false
+    return success
 end
 
 local function requestGrabGun()
@@ -2200,8 +2221,9 @@ local function setGunAura(enabled)
         while running and gunUtilityState.auraEnabled and gunUtilityState.auraToken == token do
             if not hasGunInInventory() then
                 local root, drop = localRoot(), getDroppedGunPart()
-                if root and drop and (root.Position - drop.Position).Magnitude <= gunUtilityState.auraRange then
-                    touchDroppedGun()
+                if root and drop and not gunUtilityState.pickupBusy and (root.Position - drop.Position).Magnitude <= gunUtilityState.auraRange then
+                    -- Aura uses the same verified pickup path as the Grab Gun button, not a one-shot touch pulse.
+                    grabDroppedGun()
                 end
             end
             task.wait(0.18)
