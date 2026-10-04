@@ -912,6 +912,7 @@ local config = {
     },
     knifeEnabled = false,
     knifeWallCheck = false,
+    knifePiercer = false,
     knifePrioritizeSheriff = false,
     knifeAutoThrow = false,
     knifeRadius = 15,
@@ -1407,11 +1408,11 @@ function targetVisible(part, forceWallCheck)
     return result == nil or result.Instance:IsDescendantOf(part.Parent)
 end
 
--- MM2 validates the actual ray sent by the Gun remote.  When a world part is between
--- the muzzle and the selected player, Piercer Bullet moves only that outgoing ray origin
--- to the target side of the obstruction; unobstructed shots retain the normal muzzle origin.
-local function piercerShotOrigin(origin, aim, part)
-    if not config.piercerBullet or not origin or not aim or not part then return origin end
+-- The ranged Gun and KnifeThrown remotes validate the outgoing ray. When a world part
+-- is between the source and selected player, a Piercer toggle sends only that ray from
+-- the target side of the obstruction; unobstructed shots retain the normal source.
+local function piercerShotOrigin(origin, aim, part, enabled)
+    if not enabled or not origin or not aim or not part then return origin end
     local direction = aim - origin
     if direction.Magnitude <= 0.01 then return origin end
     local character = LocalPlayer.Character
@@ -1423,7 +1424,7 @@ local function piercerShotOrigin(origin, aim, part)
 end
 
 function knifeRemote(remote, args)
-    if not config.knifeEnabled or args.n < 2 then return false end
+    if not (config.knifeEnabled or config.knifePiercer) or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if remote.Name ~= "KnifeThrown" then return false end
     if typeof(args[1]) ~= "CFrame" or typeof(args[2]) ~= "CFrame" then return false end
@@ -1486,7 +1487,7 @@ function redirect(remote, args)
         -- Piercer Bullet keeps the gun redirect active and deliberately bypasses only the local gun wall gate.
         useWallCheck = config.wallCheck and not config.piercerBullet
     elseif knifeRemote(remote, args) then
-        part = knifeTargetPart(); useWallCheck = config.knifeWallCheck; isKnife = true
+        part = knifeTargetPart(); useWallCheck = config.knifeWallCheck and not config.knifePiercer; isKnife = true
     else
         return
     end
@@ -1496,8 +1497,9 @@ function redirect(remote, args)
     if isKnife then
         local origin = args[1].Position
         local aim = calculateKnifeAim(part, origin)
-        if config.alignDirection and (aim - origin).Magnitude > 0.01 then
-            args[1] = CFrame.lookAt(origin, aim)
+        local shotOrigin = piercerShotOrigin(origin, aim, part, config.knifePiercer)
+        if (config.alignDirection or shotOrigin ~= origin) and (aim - shotOrigin).Magnitude > 0.01 then
+            args[1] = CFrame.lookAt(shotOrigin, aim)
         end
         args[2] = CFrame.new(aim)
         redirected = redirected + 1
@@ -1508,7 +1510,7 @@ function redirect(remote, args)
     local firstType, secondType = typeof(args[1]), typeof(args[2])
     if firstType == "CFrame" then
         local origin = args[1].Position
-        local shotOrigin = piercerShotOrigin(origin, aim, part)
+        local shotOrigin = piercerShotOrigin(origin, aim, part, config.piercerBullet)
         if (config.alignDirection or shotOrigin ~= origin) and (aim - shotOrigin).Magnitude > 0.01 then
             args[1] = CFrame.lookAt(shotOrigin, aim)
         end
@@ -1521,7 +1523,7 @@ function redirect(remote, args)
         end
     elseif firstType == "Vector3" then
         local origin = args[1]
-        local shotOrigin = piercerShotOrigin(origin, aim, part)
+        local shotOrigin = piercerShotOrigin(origin, aim, part, config.piercerBullet)
         args[1] = shotOrigin
         if secondType == "Vector3" then
             if args[2].Magnitude <= 1.5 and (aim - shotOrigin).Magnitude > 0.01 then
@@ -1595,6 +1597,14 @@ function setPiercerBullet(value)
     if config.piercerBullet and not installHook() then
         config.piercerBullet = false
         notify("Piercer Bullet requires hook support", 4)
+    end
+end
+
+function setKnifePiercer(value)
+    config.knifePiercer = value == true
+    if config.knifePiercer and not installHook() then
+        config.knifePiercer = false
+        notify("Piercer Knife Throw requires hook support", 4)
     end
 end
 
@@ -1755,7 +1765,7 @@ function fireGunAt(player)
         end
         local aim=calculateAim(part)
         local origin=handle.Position
-        local shotOrigin=piercerShotOrigin(origin,aim,part)
+        local shotOrigin=piercerShotOrigin(origin,aim,part,config.piercerBullet)
         buttonShotActive = true
         buttonShotTarget = player
         success=pcall(function() remote:FireServer(CFrame.lookAt(shotOrigin,aim),CFrame.new(aim)) end)
@@ -2047,7 +2057,7 @@ function exportRevertConfig()
             ignoreFriends = config.ignoreFriends, maxDistance = config.maxDistance,
             adaptive = config.adaptive, fixedLead = config.fixedLead, extraLead = config.extraLead,
             alignDirection = config.alignDirection,
-            knifeWallCheck = config.knifeWallCheck,
+            knifeWallCheck = config.knifeWallCheck, knifePiercer = config.knifePiercer,
             knifePrioritizeSheriff = config.knifePrioritizeSheriff, knifeAutoThrow = config.knifeAutoThrow,
             knifeAim = {
                 adaptive = config.knifeAim.adaptive,
@@ -2099,10 +2109,10 @@ function applyRevertConfig(data)
             if typeof(noir[key]) == "number" then config[key] = noir[key] end
         end
         for _, key in ipairs({ "autoFire", "wallCheck", "piercerBullet", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
-                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow" }) do
+                               "knifeWallCheck", "knifePiercer", "knifePrioritizeSheriff", "knifeAutoThrow" }) do
             if typeof(noir[key]) == "boolean" then config[key] = noir[key] end
         end
-        if config.piercerBullet then task.defer(installHook) end
+        if config.piercerBullet or config.knifePiercer then task.defer(installHook) end
         local knifeAim = noir.knifeAim
         if typeof(knifeAim) == "table" then
             for _, key in ipairs({ "fixedLead", "extraLead", "maxSimulationMs", "predictionIntervalMs", "manualPingMs", "offsetX", "offsetY", "offsetZ", "horizontalMultiplier", "verticalMultiplier" }) do
@@ -2176,40 +2186,68 @@ local function hasGunInInventory()
     return playerHasTool(LocalPlayer, "Gun") ~= nil
 end
 
+-- A dropped MM2 gun is not always a single part named GunDrop. Scan every GunDrop
+-- container and rank the physical touch receiver before Handle/decorative fallbacks.
+local function getDroppedGunParts()
+    local candidates, seen = {}, {}
+    local function add(part, priority)
+        if not part or not part:IsA("BasePart") or seen[part] then return end
+        seen[part] = true
+        candidates[#candidates + 1] = { part = part, priority = priority }
+    end
+    local function scan(drop)
+        if drop:IsA("BasePart") then
+            local ownTouch = drop:FindFirstChildWhichIsA("TouchTransmitter")
+            add(drop, ownTouch and 1 or (drop.Name == "Handle" and 2 or 3))
+        end
+        for _, child in ipairs(drop:GetDescendants()) do
+            if child:IsA("TouchTransmitter") and child.Parent and child.Parent:IsA("BasePart") then
+                add(child.Parent, 1)
+            elseif child:IsA("BasePart") and child.Name == "Handle" then
+                add(child, 2)
+            elseif child:IsA("BasePart") and child.Name == "GunDrop" then
+                add(child, 3)
+            elseif child:IsA("BasePart") then
+                add(child, 4)
+            end
+        end
+    end
+    -- Descendant scanning covers models, folders and reparented GunDrop instances.
+    for _, instance in ipairs(Workspace:GetDescendants()) do
+        if instance.Name == "GunDrop" then scan(instance) end
+    end
+    table.sort(candidates, function(a, b) return a.priority < b.priority end)
+    local parts = table.create(#candidates)
+    for index, candidate in ipairs(candidates) do parts[index] = candidate.part end
+    return parts
+end
+
 local function getDroppedGunPart()
-    local drop = Workspace:FindFirstChild("GunDrop", true)
-    if not drop then return nil end
-    if drop:IsA("BasePart") then return drop end
-    -- Prefer the actual part carrying the touch receiver instead of an arbitrary decoration in a GunDrop model.
-    local transmitter = drop:FindFirstChildWhichIsA("TouchTransmitter", true)
-    if transmitter and transmitter.Parent and transmitter.Parent:IsA("BasePart") then return transmitter.Parent end
-    local handle = drop:FindFirstChild("Handle", true)
-    if handle and handle:IsA("BasePart") then return handle end
-    return drop:FindFirstChildWhichIsA("BasePart", true)
+    return getDroppedGunParts()[1]
 end
 
 local function touchDroppedGun()
-    local root, drop = localRoot(), getDroppedGunPart()
-    if not root or not drop then return false end
-    local original = root.CFrame
+    local root = localRoot()
+    local drops = getDroppedGunParts()
+    if not root or #drops == 0 or type(firetouchinterest) ~= "function" then return false end
     local touched = false
     local ok = pcall(function()
-        -- MM2's pickup touch often ignores a remote-only firetouchinterest call. Briefly overlap the real drop,
-        -- then fire the touch several times so both Delta touch implementations and normal local contact work.
-        root.CFrame = drop.CFrame
-        task.wait(.08)
-        for _ = 1, 3 do
-            if type(firetouchinterest) == "function" then
-                firetouchinterest(root, drop, 0)
-                firetouchinterest(root, drop, 1)
+        -- Do not move the player. Send three real begin/end touch pairs to every likely
+        -- GunDrop hitbox, with a short yield between pulses for Delta/client touch handling.
+        for attempt = 1, 3 do
+            for _, drop in ipairs(drops) do
+                if root.Parent and drop.Parent then
+                    firetouchinterest(root, drop, 0)
+                    task.wait(.035)
+                    firetouchinterest(root, drop, 1)
+                    task.wait(.045)
+                    if hasGunInInventory() then touched = true; break end
+                end
             end
-            task.wait(.12)
-            if hasGunInInventory() then touched = true; break end
-            if not (root.Parent and drop.Parent) then break end
-            root.CFrame = drop.CFrame
+            if touched then break end
+            task.wait(.075)
         end
     end)
-    if root and root.Parent then pcall(function() root.CFrame = original end) end
     return ok and (touched or hasGunInInventory())
 end
 
@@ -4684,6 +4722,8 @@ do
     end
     combatKnife:AddSlider("Knife Throw Aura", 1, 40, config.knifeRadius, function(v) config.knifeRadius = tonumber(v) or config.knifeRadius end)
     combatKnife:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck=v==true end)
+    combatKnife:AddToggle("Piercer Knife Throw", setKnifePiercer)
+    combatKnife:AddLabel("Sends KnifeThrown from the target side only when a wall blocks its path.")
     combatKnife:AddToggle("Prioritize Sheriff", function(v)
         config.knifePrioritizeSheriff=v==true
     end)
