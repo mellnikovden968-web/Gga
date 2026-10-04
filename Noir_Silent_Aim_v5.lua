@@ -865,8 +865,8 @@ function host.CreateTab()
                 local red, green, blue = tonumber(savedColor[1]), tonumber(savedColor[2]), tonumber(savedColor[3])
                 if red and green and blue then colour = Color3.new(math.clamp(red, 0, 1), math.clamp(green, 0, 1), math.clamp(blue, 0, 1)) end
             end
-            local swatch = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(92, 34),
-                BackgroundColor3 = colour, Text = "  PICK", TextColor3 = C.text, TextSize = 11, Font = Enum.Font.GothamBold, AutoButtonColor = false })
+            local swatch = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(98, 34),
+                BackgroundColor3 = colour, Text = "COLOR  •  EDIT", TextColor3 = C.text, TextSize = 10, Font = Enum.Font.GothamBold, AutoButtonColor = false })
             corner(swatch, 10); stroke(swatch)
             local popup, inputChanged, inputEnded
             local function saveColor()
@@ -889,18 +889,22 @@ function host.CreateTab()
                 closePicker()
                 local hue, saturation, value = colour:ToHSV()
                 popup = New("Frame", { Parent = gui, Name = "NoirColorPicker", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0),
-                    BackgroundTransparency = .32, BorderSizePixel = 0, Active = true, ZIndex = 70 })
-                local dialog = New("Frame", { Parent = popup, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(324, 310),
+                    BackgroundTransparency = .38, BorderSizePixel = 0, Active = true, ZIndex = 70 })
+                local dialog = New("Frame", { Parent = popup, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(394, 367),
                     BackgroundColor3 = C.panel, BorderSizePixel = 0, Active = true, ZIndex = 71 })
                 corner(dialog, 16); stroke(dialog, C.border, .2)
-                New("TextLabel", { Parent = dialog, Position = UDim2.fromOffset(18, 14), Size = UDim2.fromOffset(220, 24), BackgroundTransparency = 1,
+                New("TextLabel", { Parent = dialog, Position = UDim2.fromOffset(18, 13), Size = UDim2.fromOffset(170, 24), BackgroundTransparency = 1,
                     Text = label, TextColor3 = C.text, TextSize = 17, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 72 })
-                local closeButton = New("TextButton", { Parent = dialog, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 12), Size = UDim2.fromOffset(34, 30),
-                    BackgroundColor3 = C.surface, Text = "×", TextColor3 = C.text, TextSize = 23, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 72 })
+                local preview = New("Frame", { Parent = dialog, Position = UDim2.fromOffset(222, 12), Size = UDim2.fromOffset(108, 28), BackgroundColor3 = colour, BorderSizePixel = 0, ZIndex = 72 })
+                corner(preview, 9); stroke(preview, C.border, .35)
+                local closeButton = New("TextButton", { Parent = dialog, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 11), Size = UDim2.fromOffset(32, 30),
+                    BackgroundColor3 = C.surface, Text = "×", TextColor3 = C.text, TextSize = 22, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 73 })
                 corner(closeButton, 9); stroke(closeButton, C.border, .45)
-                local spectrum = New("Frame", { Parent = dialog, Position = UDim2.fromOffset(18, 52), Size = UDim2.fromOffset(288, 178),
+                New("TextLabel", { Parent = dialog, Position = UDim2.fromOffset(18, 46), Size = UDim2.fromOffset(120, 16), BackgroundTransparency = 1,
+                    Text = "COLOR BOX", TextColor3 = C.dim, TextSize = 10, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 72 })
+                local spectrum = New("Frame", { Parent = dialog, Position = UDim2.fromOffset(18, 65), Size = UDim2.fromOffset(358, 155),
                     BackgroundColor3 = Color3.fromHSV(hue, 1, 1), BorderSizePixel = 0, Active = true, ZIndex = 72 })
-                corner(spectrum, 10); stroke(spectrum, C.border, .35)
+                corner(spectrum, 10); stroke(spectrum, C.border, .28)
                 local whiteBlend = New("Frame", { Parent = spectrum, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 73 })
                 corner(whiteBlend, 10)
                 New("UIGradient", { Parent = whiteBlend, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) }) })
@@ -910,39 +914,65 @@ function host.CreateTab()
                 local spectrumKnob = New("Frame", { Parent = spectrum, AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(16, 16),
                     BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 75 })
                 corner(spectrumKnob, 8); New("UIStroke", { Parent = spectrumKnob, Color = C.text, Thickness = 2 })
-                local hueBar = New("Frame", { Parent = dialog, Position = UDim2.fromOffset(18, 244), Size = UDim2.fromOffset(224, 24), BackgroundColor3 = Color3.fromRGB(255, 0, 0),
+                local hueBar = New("Frame", { Parent = dialog, Position = UDim2.fromOffset(18, 235), Size = UDim2.fromOffset(358, 15), BackgroundColor3 = Color3.fromRGB(255, 0, 0),
                     BorderSizePixel = 0, Active = true, ZIndex = 72 })
-                corner(hueBar, 8); stroke(hueBar, C.border, .35)
+                corner(hueBar, 8); stroke(hueBar, C.border, .28)
                 New("UIGradient", { Parent = hueBar, Color = ColorSequence.new({
                     ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)), ColorSequenceKeypoint.new(.166, Color3.fromRGB(255, 255, 0)),
                     ColorSequenceKeypoint.new(.333, Color3.fromRGB(0, 255, 0)), ColorSequenceKeypoint.new(.5, Color3.fromRGB(0, 255, 255)),
                     ColorSequenceKeypoint.new(.666, Color3.fromRGB(0, 0, 255)), ColorSequenceKeypoint.new(.833, Color3.fromRGB(255, 0, 255)),
                     ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
                 }) })
-                local hueKnob = New("Frame", { Parent = hueBar, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(hue, .5), Size = UDim2.fromOffset(10, 32),
-                    BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 75 })
+                local hueKnob = New("Frame", { Parent = hueBar, AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(11, 22),
+                    BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = 75 })
                 corner(hueKnob, 5); New("UIStroke", { Parent = hueKnob, Color = Color3.new(0, 0, 0), Thickness = 1 })
-                local preview = New("Frame", { Parent = dialog, Position = UDim2.fromOffset(254, 244), Size = UDim2.fromOffset(52, 24), BackgroundColor3 = colour, BorderSizePixel = 0, ZIndex = 72 })
-                corner(preview, 8); stroke(preview, C.border, .35)
-                local hex = New("TextLabel", { Parent = dialog, Position = UDim2.fromOffset(18, 275), Size = UDim2.new(1, -36, 0, 20), BackgroundTransparency = 1,
-                    TextColor3 = C.dim, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 72 })
-                local function setHSV(newHue, newSaturation, newValue)
-                    hue, saturation, value = math.clamp(newHue, 0, 1), math.clamp(newSaturation, 0, 1), math.clamp(newValue, 0, 1)
+                New("TextLabel", { Parent = dialog, Position = UDim2.fromOffset(18, 263), Size = UDim2.fromOffset(40, 18), BackgroundTransparency = 1,
+                    Text = "HEX", TextColor3 = C.dim, TextSize = 10, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 72 })
+                local hexInput = New("TextBox", { Parent = dialog, Position = UDim2.fromOffset(62, 257), Size = UDim2.fromOffset(314, 30), BackgroundColor3 = C.surface,
+                    Text = "", PlaceholderText = "#FFFFFF", TextColor3 = C.text, TextSize = 13, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false, ZIndex = 72 })
+                corner(hexInput, 8); stroke(hexInput, C.border, .42)
+                local channelInputs = {}
+                local channelLabels = { "R", "G", "B" }
+                local channelColors = { Color3.fromRGB(239, 72, 72), Color3.fromRGB(82, 204, 112), Color3.fromRGB(84, 150, 255) }
+                for index = 1, 3 do
+                    local x = 18 + (index - 1) * 121
+                    New("TextLabel", { Parent = dialog, Position = UDim2.fromOffset(x, 301), Size = UDim2.fromOffset(20, 18), BackgroundTransparency = 1,
+                        Text = channelLabels[index], TextColor3 = channelColors[index], TextSize = 12, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 72 })
+                    local field = New("TextBox", { Parent = dialog, Position = UDim2.fromOffset(x + 22, 295), Size = UDim2.fromOffset(94, 30), BackgroundColor3 = C.surface,
+                        Text = "0", PlaceholderText = "0", TextColor3 = C.text, TextSize = 13, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false, ZIndex = 72 })
+                    corner(field, 8); stroke(field, channelColors[index], .55)
+                    channelInputs[index] = field
+                end
+                New("TextLabel", { Parent = dialog, Position = UDim2.fromOffset(18, 335), Size = UDim2.new(1, -36, 0, 16), BackgroundTransparency = 1,
+                    Text = "Drag the box / hue bar, or enter HEX and RGB values", TextColor3 = C.dim, TextSize = 11, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 72 })
+                local function setHSV(nextHue, nextSaturation, nextValue, persist)
+                    hue = math.clamp(nextHue, 0, 1)
+                    saturation = math.clamp(nextSaturation, 0, 1)
+                    value = math.clamp(nextValue, 0, 1)
                     local selected = Color3.fromHSV(hue, saturation, value)
                     spectrum.BackgroundColor3 = Color3.fromHSV(hue, 1, 1)
                     spectrumKnob.Position = UDim2.fromScale(saturation, 1 - value)
                     hueKnob.Position = UDim2.fromScale(hue, .5)
                     preview.BackgroundColor3 = selected
-                    hex.Text = string.format("#%02X%02X%02X", math.floor(selected.R * 255 + .5), math.floor(selected.G * 255 + .5), math.floor(selected.B * 255 + .5))
-                    setColor(selected, true)
+                    hexInput.Text = string.format("#%02X%02X%02X", math.floor(selected.R * 255 + .5), math.floor(selected.G * 255 + .5), math.floor(selected.B * 255 + .5))
+                    channelInputs[1].Text = tostring(math.floor(selected.R * 255 + .5))
+                    channelInputs[2].Text = tostring(math.floor(selected.G * 255 + .5))
+                    channelInputs[3].Text = tostring(math.floor(selected.B * 255 + .5))
+                    setColor(selected, persist)
+                end
+                local function setRGB(red, green, blue, persist)
+                    local selected = Color3.fromRGB(math.clamp(math.floor((tonumber(red) or 0) + .5), 0, 255),
+                        math.clamp(math.floor((tonumber(green) or 0) + .5), 0, 255), math.clamp(math.floor((tonumber(blue) or 0) + .5), 0, 255))
+                    local nextHue, nextSaturation, nextValue = selected:ToHSV()
+                    setHSV(nextHue, nextSaturation, nextValue, persist)
                 end
                 local function updateSpectrum(position)
                     local size, origin = spectrum.AbsoluteSize, spectrum.AbsolutePosition
-                    setHSV(hue, math.clamp((position.X - origin.X) / math.max(1, size.X), 0, 1), 1 - math.clamp((position.Y - origin.Y) / math.max(1, size.Y), 0, 1))
+                    setHSV(hue, math.clamp((position.X - origin.X) / math.max(1, size.X), 0, 1), 1 - math.clamp((position.Y - origin.Y) / math.max(1, size.Y), 0, 1), true)
                 end
                 local function updateHue(position)
                     local size, origin = hueBar.AbsoluteSize, hueBar.AbsolutePosition
-                    setHSV(math.clamp((position.X - origin.X) / math.max(1, size.X), 0, 1), saturation, value)
+                    setHSV(math.clamp((position.X - origin.X) / math.max(1, size.X), 0, 1), saturation, value, true)
                 end
                 local dragMode = nil
                 spectrum.InputBegan:Connect(function(input)
@@ -951,9 +981,25 @@ function host.CreateTab()
                 hueBar.InputBegan:Connect(function(input)
                     if isPrimaryPress(input) then dragMode = "hue"; updateHue(input.Position) end
                 end)
+                hexInput.FocusLost:Connect(function()
+                    local valueText = tostring(hexInput.Text or ""):gsub("%s", ""):gsub("#", "")
+                    local redHex, greenHex, blueHex = valueText:match("^(%x%x)(%x%x)(%x%x)$")
+                    if redHex and greenHex and blueHex then
+                        setRGB(tonumber(redHex, 16), tonumber(greenHex, 16), tonumber(blueHex, 16), true)
+                    else
+                        setHSV(hue, saturation, value, false)
+                    end
+                end)
+                for index, field in ipairs(channelInputs) do
+                    field.FocusLost:Connect(function()
+                        local red = tonumber(channelInputs[1].Text) or math.floor(colour.R * 255 + .5)
+                        local green = tonumber(channelInputs[2].Text) or math.floor(colour.G * 255 + .5)
+                        local blue = tonumber(channelInputs[3].Text) or math.floor(colour.B * 255 + .5)
+                        setRGB(red, green, blue, true)
+                    end)
+                end
                 inputChanged = UIS.InputChanged:Connect(function(input)
-                    if not dragMode then return end
-                    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+                    if dragMode and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
                         if dragMode == "spectrum" then updateSpectrum(input.Position) else updateHue(input.Position) end
                     end
                 end)
@@ -961,7 +1007,7 @@ function host.CreateTab()
                     if isPrimaryPress(input) then dragMode = nil end
                 end)
                 closeButton.Activated:Connect(closePicker)
-                setHSV(hue, saturation, value)
+                setHSV(hue, saturation, value, false)
             end
             swatch.Activated:Connect(openPicker)
             setColor(colour, false)
@@ -2597,14 +2643,16 @@ local tab = host.CreateTab()
 -- Misc cursor controls replace the image inside Roblox's existing Shift Lock/crosshair ImageLabel.
 -- Presets deliberately use full Roblox image assets; no generated bars, dots, rings, or other geometry is added.
 do
-    local cursorState = { enabled = false, colorEnabled = false, template = "Default", customId = "", color = C.accent, originalMouseIcon = nil, originalVisuals = {} }
-    local cursorTemplates = { "Default", "Lightning Rift", "Gothic Spear", "Gothic Wings", "Clover Sigil", "Rune Wheel", "Custom" }
+    local cursorState = { enabled = false, colorEnabled = false, template = "Default", customId = "", color = C.accent, artworkScale = 1.35, originalMouseIcon = nil, originalVisuals = {} }
+    -- Every preset below is a complete Roblox image decal. Small/blank-canvas assets were intentionally excluded.
+    local cursorTemplates = { "Default", "Crimson Rift", "Gothic Spear", "Gothic Wings", "Shadow Sigil", "Fallen Crest", "Demon Aura", "Custom" }
     local cursorTemplateImages = {
-        ["Lightning Rift"] = "rbxassetid://113579261557161",
+        ["Crimson Rift"] = "rbxassetid://113579261557161",
         ["Gothic Spear"] = "rbxassetid://77559278786615",
         ["Gothic Wings"] = "rbxassetid://73847458193538",
-        ["Clover Sigil"] = "rbxassetid://127783577360669",
-        ["Rune Wheel"] = "rbxassetid://85845549967191",
+        ["Shadow Sigil"] = "rbxassetid://130499812243487",
+        ["Fallen Crest"] = "rbxassetid://118516581702648",
+        ["Demon Aura"] = "rbxassetid://99913624572213",
     }
     local cursorKeywords = { "mouselock", "shiftlock", "crosshair", "reticle", "aim", "target", "cursor" }
 
@@ -2625,6 +2673,8 @@ do
                     instance.Image = original.image
                     instance.ImageColor3 = original.color
                     instance.ImageTransparency = original.transparency
+                    instance.Size = original.size
+                    instance.ScaleType = original.scaleType
                 end)
             end
         end
@@ -2638,7 +2688,10 @@ do
     local function applyToShiftLockVisual(instance)
         if not cursorState.enabled or not isShiftLockVisual(instance) then return end
         if cursorState.originalVisuals[instance] == nil then
-            cursorState.originalVisuals[instance] = { image = instance.Image, color = instance.ImageColor3, transparency = instance.ImageTransparency }
+            cursorState.originalVisuals[instance] = {
+                image = instance.Image, color = instance.ImageColor3, transparency = instance.ImageTransparency,
+                size = instance.Size, scaleType = instance.ScaleType,
+            }
         end
         local original = cursorState.originalVisuals[instance]
         local selectedImage = selectedCursorImage()
@@ -2648,6 +2701,15 @@ do
                 instance.Image = selectedImage
                 instance.ImageColor3 = cursorState.colorEnabled and cursorState.color or Color3.new(1, 1, 1)
                 instance.ImageTransparency = 0
+                instance.ScaleType = Enum.ScaleType.Stretch
+                -- Preserve the true center of the mobile Shift Lock marker and enlarge only that centered target.
+                if math.abs(instance.AnchorPoint.X - .5) < .01 and math.abs(instance.AnchorPoint.Y - .5) < .01 then
+                    local scaleAmount = math.clamp(tonumber(cursorState.artworkScale) or 1.35, .75, 2)
+                    instance.Size = UDim2.new(original.size.X.Scale * scaleAmount, math.floor(original.size.X.Offset * scaleAmount + .5),
+                        original.size.Y.Scale * scaleAmount, math.floor(original.size.Y.Offset * scaleAmount + .5))
+                else
+                    instance.Size = original.size
+                end
             else
                 instance.Image = original.image
                 instance.ImageColor3 = cursorState.colorEnabled and cursorState.color or original.color
@@ -2687,6 +2749,10 @@ do
     templateControl:SetValue(cursorState.template)
     cursorSection:AddToggle("Enable Cursor Color", function(enabled) cursorState.colorEnabled = enabled == true; applyCursor() end)
     cursorSection:AddColorpicker("Cursor Color", C.accent, function(color) cursorState.color = color; applyCursor() end)
+    cursorSection:AddSlider("Cursor Artwork Scale", 75, 200, 135, function(value)
+        cursorState.artworkScale = (tonumber(value) or 135) / 100
+        applyCursor()
+    end)
     cursorState.customId = tostring(NoirPersistence.data.textboxes["MISC \u{2022} CUSTOMIZE CURSOR::Custom Cursor ID"] or "")
     local customIdControl = cursorSection:AddTextBox("Custom Cursor ID", function(value)
         cursorState.customId = tostring(value or ""):sub(1, 100)
