@@ -22,6 +22,64 @@ local function isPrimaryPress(input)
         or input.UserInputType == Enum.UserInputType.Touch
 end
 
+local STORAGE_ROOT = "Noir Hub"
+local ASSETS_FOLDER = STORAGE_ROOT .. "/assets"
+local CONFIGS_FOLDER = STORAGE_ROOT .. "/configs"
+local PRESETS_FOLDER = STORAGE_ROOT .. "/presets"
+local LEGACY_STORAGE_ROOT = "NOIR.CONFIG"
+
+local function ensureFolder(path)
+    if type(makefolder) ~= "function" then return end
+    if type(isfolder) == "function" then
+        local ok, exists = pcall(isfolder, path)
+        if ok and exists then return end
+    end
+    pcall(makefolder, path)
+end
+
+local function ensureStorageFolders()
+    ensureFolder(STORAGE_ROOT)
+    ensureFolder(ASSETS_FOLDER)
+    ensureFolder(CONFIGS_FOLDER)
+    ensureFolder(PRESETS_FOLDER)
+end
+
+local function fileExists(path)
+    if type(isfile) ~= "function" then return false end
+    local ok, exists = pcall(isfile, path)
+    return ok and exists == true
+end
+
+local function copyLegacyFile(source, destination)
+    if type(readfile) ~= "function" or type(writefile) ~= "function" then return end
+    if not fileExists(source) or fileExists(destination) then return end
+    local ok, contents = pcall(readfile, source)
+    if ok then pcall(writefile, destination, contents) end
+end
+
+local function migrateLegacyStorage()
+    copyLegacyFile(LEGACY_STORAGE_ROOT .. "/autosave.json", CONFIGS_FOLDER .. "/autosave.json")
+    for _, name in ipairs({
+        "ODH_FEAnimations_settings.json",
+        "ODH_BJP_settings.json",
+        "ODH_InventoryUnlimiter_settings.json",
+        "ODH_Pm-Wallhop_settings.json",
+    }) do
+        copyLegacyFile(name, CONFIGS_FOLDER .. "/" .. name)
+    end
+    if type(listfiles) ~= "function" or type(readfile) ~= "function" or type(writefile) ~= "function" then return end
+    local ok, files = pcall(listfiles, LEGACY_STORAGE_ROOT)
+    if not ok or type(files) ~= "table" then return end
+    for _, source in ipairs(files) do
+        local normalized = tostring(source):gsub("\\", "/")
+        local name = normalized:match("([^/]+%.preset)$")
+        if name then copyLegacyFile(source, PRESETS_FOLDER .. "/" .. name) end
+    end
+end
+
+ensureStorageFolders()
+migrateLegacyStorage()
+
 local guiParent = CoreGui
 if type(gethui) == "function" then local ok,v=pcall(gethui); if ok and typeof(v)=="Instance" then guiParent=v end end
 pcall(function() local old=guiParent:FindFirstChild("NoirSilentAimUI"); if old then old:Destroy() end end)
@@ -29,18 +87,14 @@ pcall(function() local old=guiParent:FindFirstChild("NoirSilentAimUI"); if old t
 local NoirPersistence = {
     data = { toggles = {}, sliders = {}, dropdowns = {}, textboxes = {}, keybinds = {}, positions = {} },
     token = 0,
-    path = "NOIR.CONFIG/autosave.json",
+    path = CONFIGS_FOLDER .. "/autosave.json",
     safeLegacy = {
         Enabled=true, ["Wall Check"]=true, ["Show Shoot Murder Button"]=true,
         ["Lock Shoot Murder Button"]=true, ["Knife Silent Aim"]=true, ["Knife Wall Check"]=true,
         ["Prioritize Sheriff"]=true, ["Enable WalkSpeed"]=true, ["Enable JumpPower"]=true,
         ["Show Round Timer"]=true, ["Instant Role Detection"]=true, ["Auto Notify Roles"]=true,
-        ["Auto Grab Gun"]=true, ["Auto Grab Gun Safety Check"]=true, ["Gun Aura"]=true,
-        ["Auto Notify on Dropped Gun"]=true, ["Gun Pickup Notify"]=true, ["Touch Fling"]=true,
-        ["Auto Fling Sheriff / Hero"]=true, ["Auto Fling Murderer"]=true, ["Fling All"]=true,
-        ["Anti Fling"]=true, ["Auto Fire"]=true, ["Show FOV"]=true, ["Ignore Dead"]=true,
-        ["Ignore Friends"]=true, ["ESP Name"]=true, ["ESP Distance"]=true, ["ESP Health"]=true,
-        ["ESP Role"]=true, ["ESP Tracer"]=true, ["ESP Skeleton"]=true, ["Anti AFK"]=true,
+        ["Auto Fire"]=true, ["Show FOV"]=true, ["Ignore Dead"]=true,
+        ["Ignore Friends"]=true, ["Anti AFK"]=true,
     },
 }
 do
@@ -61,7 +115,7 @@ function NoirPersistence.Save()
     task.delay(.35, function()
         if token ~= NoirPersistence.token then return end
         pcall(function()
-            if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder("NOIR.CONFIG") then makefolder("NOIR.CONFIG") end
+            ensureStorageFolders()
             writefile(NoirPersistence.path, HttpService:JSONEncode(NoirPersistence.data))
         end)
     end)
@@ -158,6 +212,7 @@ do
         { "aim",    16898613777, Vector2.new(967, 759), "Combat" },
         { "world",  16898613509, Vector2.new(771, 563), "World" },
         { "visual", 16898613353, Vector2.new(771, 563), "Visuals" },
+        { "emotes", 16898613777, Vector2.new(967, 759), "Emotes" },
     }
     for i, d in ipairs(navDefs) do
         local b = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(16, 116 + (i - 1) * 52), Size = UDim2.fromOffset(208, 46),
@@ -170,7 +225,23 @@ do
             BackgroundTransparency = 1, Text = d[4], TextColor3 = C.dim, TextSize = 15, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
         local bar = New("Frame", { Parent = b, Position = UDim2.fromOffset(0, 12), Size = UDim2.fromOffset(3, 22), BackgroundColor3 = C.accent, BackgroundTransparency = 1 })
         corner(bar, 2)
-        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, label = lbl, bar = bar }
+        local glyphs = nil
+        if d[1] == "emotes" then
+            -- A clear person-shaped icon for Emotes instead of the Combat crossed-swords sprite.
+            ic.Visible = false
+            glyphs = {}
+            local function glyphPart(position, size, rounded)
+                local part = New("Frame", { Parent = b, Position = position, Size = size, BackgroundColor3 = C.dim, BorderSizePixel = 0 })
+                if rounded then corner(part, rounded) end
+                glyphs[#glyphs + 1] = part
+            end
+            glyphPart(UDim2.fromOffset(20, 8), UDim2.fromOffset(10, 10), 5)
+            glyphPart(UDim2.fromOffset(21, 18), UDim2.fromOffset(8, 10), 3)
+            glyphPart(UDim2.fromOffset(15, 20), UDim2.fromOffset(20, 4), 2)
+            glyphPart(UDim2.fromOffset(19, 27), UDim2.fromOffset(4, 8), 2)
+            glyphPart(UDim2.fromOffset(27, 27), UDim2.fromOffset(4, 8), 2)
+        end
+        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, label = lbl, bar = bar, glyphs = glyphs }
     end
 end
 local status = New("Frame", { Parent = sidebar, Position = UDim2.fromOffset(16, 596), Size = UDim2.fromOffset(208, 84), BackgroundColor3 = C.panel, BackgroundTransparency = .18 })
@@ -200,8 +271,9 @@ do
             for i = 1, 8 do c = c + (x:sub(i, i) == "1" and 2 ^ (8 - i) or 0) end
             return string.char(c)
         end)
-        pcall(writefile, "NOIR_CREATOR.jpg", decoded)
-        local ok, asset = pcall(customAsset, "NOIR_CREATOR.jpg")
+        local imagePath = ASSETS_FOLDER .. "/NOIR_CREATOR.jpg"
+        pcall(writefile, imagePath, decoded)
+        local ok, asset = pcall(customAsset, imagePath)
         if ok then creatorImage = asset end
     end
 end
@@ -364,6 +436,13 @@ for i = 1, 2 do
         BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
     New("UIListLayout", { Parent = worldCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
 end
+local emotesContent = content:Clone(); emotesContent.Name = "EmotesContent"; emotesContent.Parent = win; emotesContent.Visible = false; emotesContent:ClearAllChildren()
+local emotesCols = {}
+for i = 1, 2 do
+    emotesCols[i] = New("Frame", { Parent = emotesContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
+        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
+    New("UIListLayout", { Parent = emotesCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+end
 
 local dashboard = New("Frame", { Parent = win, Position = content.Position, Size = content.Size, BackgroundTransparency = 1 })
 local profile = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 0), Size = UDim2.fromOffset(430, 168), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
@@ -402,7 +481,7 @@ local infoCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(
 corner(infoCard, 18); stroke(infoCard, C.border, .5)
 text(infoCard, "QUICK START", 18, UDim2.fromOffset(24, 22))
 text(infoCard, "Open Main for player tools, World for gun & fling tools, Visuals for ESP.", 14, UDim2.fromOffset(25, 54), true)
-text(infoCard, "Settings are saved automatically to NOIR.CONFIG.", 14, UDim2.fromOffset(25, 78), true)
+text(infoCard, "Settings are saved automatically to Noir Hub/configs.", 14, UDim2.fromOffset(25, 78), true)
 local frameCounter, lastFps = 0, os.clock()
 RunService.RenderStepped:Connect(function()
     frameCounter += 1
@@ -421,7 +500,7 @@ end)
 local activePage = "home"
 local selectPage
 do
-    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent }
+    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent, emotes = emotesContent }
     local pageBasePosition = content.Position
     local pageTransitionId = 0
     local function pageScaleFor(object)
@@ -474,6 +553,9 @@ do
             local data = navIcons[name]
             if data then
                 TweenService:Create(data.icon, TweenInfo.new(.2), { ImageColor3 = active and C.accent or C.dim }):Play()
+                if data.glyphs then
+                    for _, glyph in ipairs(data.glyphs) do TweenService:Create(glyph, TweenInfo.new(.2), { BackgroundColor3 = active and C.accent or C.dim }):Play() end
+                end
                 TweenService:Create(data.label, TweenInfo.new(.2), { TextColor3 = active and C.text or C.dim }):Play()
                 TweenService:Create(data.bar, TweenInfo.new(.2), { BackgroundTransparency = active and 0 or 1 }):Play()
             end
@@ -483,7 +565,7 @@ end
 for name, b in pairs(navButtons) do b.MouseButton1Click:Connect(function() if activePage == name then selectPage("home") else selectPage(name) end end) end
 selectPage("home")
 
-local sectionCount, mainSectionCount, worldSectionCount, visualSectionCount, configSectionCount = 0, 0, 0, 0, 0
+local sectionCount, mainSectionCount, worldSectionCount, visualSectionCount, emotesSectionCount, configSectionCount = 0, 0, 0, 0, 0, 0
 local sectionPanels, controls = {}, {}
 function refreshCanvas()
     task.defer(function()
@@ -492,11 +574,17 @@ function refreshCanvas()
         visualContent.CanvasSize = UDim2.fromOffset(0, math.max(visualCols[1].AbsoluteSize.Y, visualCols[2].AbsoluteSize.Y) + 165)
         mainContent.CanvasSize = UDim2.fromOffset(0, math.max(mainCols[1].AbsoluteSize.Y, mainCols[2].AbsoluteSize.Y) + 165)
         worldContent.CanvasSize = UDim2.fromOffset(0, math.max(worldCols[1].AbsoluteSize.Y, worldCols[2].AbsoluteSize.Y) + 130)
+        local embeddedEmotes = emotesContent:FindFirstChild("NoirEmotesNative") or emotesContent:FindFirstChild("NoirEmbeddedEmotesCanvas")
+        if embeddedEmotes then
+            emotesContent.CanvasSize = UDim2.fromOffset(0, embeddedEmotes.Position.Y.Offset + embeddedEmotes.Size.Y.Offset + 16)
+        else
+            emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(emotesCols[1].AbsoluteSize.Y, emotesCols[2].AbsoluteSize.Y) + 165)
+        end
     end)
 end
 search:GetPropertyChangedSignal("Text"):Connect(function()
     local q = string.lower(search.Text or "")
-    local counts = { main = 0, aim = 0, world = 0, visual = 0 }
+    local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0 }
     for _, entry in ipairs(sectionPanels) do
         local hay = entry.name
         for _, d in ipairs(entry.panel:GetDescendants()) do
@@ -507,7 +595,7 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
         if match then counts[entry.page] = (counts[entry.page] or 0) + 1 end
     end
     if q ~= "" and activePage ~= "home" and (counts[activePage] or 0) == 0 then
-        for _, page in ipairs({ "main", "aim", "world", "visual" }) do if counts[page] > 0 then selectPage(page) break end end
+        for _, page in ipairs({ "main", "aim", "world", "visual", "emotes" }) do if counts[page] > 0 then selectPage(page) break end end
     end
     refreshCanvas()
 end)
@@ -575,10 +663,12 @@ function host.CreateTab()
         local isVisual = name == "Visuals" or name == "Object ESP" or string.find(name, "VISUAL", 1, true) == 1
         local isMain = string.sub(name, 1, 5) == "MAIN "
         local isWorld = string.sub(name, 1, 6) == "WORLD "
+        local isEmotes = string.sub(name, 1, 7) == "EMOTES "
         local col, page = nil, "aim"
         if isVisual then visualSectionCount += 1; col = visualCols[(visualSectionCount - 1) % 2 + 1]; page = "visual"
         elseif isMain then mainSectionCount += 1; col = mainCols[(mainSectionCount - 1) % 2 + 1]; page = "main"
         elseif isWorld then worldSectionCount += 1; col = worldCols[(worldSectionCount - 1) % 2 + 1]; page = "world"
+        elseif isEmotes then emotesSectionCount += 1; col = emotesCols[(emotesSectionCount - 1) % 2 + 1]; page = "emotes"
         else sectionCount += 1; col = cols[(sectionCount - 1) % 2 + 1] end
         local panel = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
             BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
@@ -586,7 +676,7 @@ function host.CreateTab()
         local tick = New("Frame", { Parent = panel, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
         corner(tick, 2)
         table.insert(sectionPanels, { panel = panel, page = page, name = string.lower(name .. " " .. (description or "")) })
-        local shownName = name:gsub("^MAIN \u{2022} ", ""):gsub("^WORLD \u{2022} ", ""):gsub("^VISUAL \u{2022} ", "")
+        local shownName = name:gsub("^MAIN \u{2022} ", ""):gsub("^WORLD \u{2022} ", ""):gsub("^VISUAL \u{2022} ", ""):gsub("^EMOTES \u{2022} ", "")
         text(panel, shownName, 18, UDim2.fromOffset(24, 16))
         if description and description ~= "" then text(panel, description, 12, UDim2.fromOffset(24, 44), true) end
         local holder = New("Frame", { Parent = panel, Position = UDim2.fromOffset(20, description ~= "" and 74 or 57), Size = UDim2.new(1, -40, 0, 0),
@@ -712,6 +802,7 @@ function host.CreateTab()
             function ctl:SetValue(v) set(v) end
             function ctl:Select(v) set(v) end
             function ctl:Refresh(newValues, selected) values = newValues or {}; idx = 1; set(selected or values[1]) end
+            function ctl:ChangeItems(newValues) values = newValues or {}; idx = 1; set(values[1]) end
             return ctl
         end
         function api:AddTextBox(label, callback)
@@ -789,13 +880,13 @@ local config = {
     autoFireKey = "None",
     shotMethod = "Remote",
     wallCheck = false,
+    piercerBullet = false,
     ignoreDead = true,
     ignoreFriends = false,
     maxDistance = 0,
     adaptive = true,
     fixedLead = 0.075,
     extraLead = 0.02,
-    maxLead = 0.18,
     targetPart = "HumanoidRootPart",
     alignDirection = true,
     prioritizePing = true,
@@ -810,7 +901,6 @@ local config = {
         adaptive = true,
         fixedLead = 0.075,
         extraLead = 0.02,
-        maxLead = 0.18,
         prioritizePing = true,
         predictJump = false,
         predictLag = true,
@@ -824,14 +914,9 @@ local config = {
     knifeWallCheck = false,
     knifePrioritizeSheriff = false,
     knifeAutoThrow = false,
+    -- Preserve the prior always-on behavior while allowing the thrown-knife touch aura to be disabled independently.
+    knifeThrownAura = true,
     knifeRadius = 15,
-    espOutline = false, espOutlineMurderer = false, espOutlineSheriff = false,
-    espChams = false, espChamsMurderer = false, espChamsSheriff = false,
-    espBox = false, espBoxMurderer = false, espBoxSheriff = false,
-    espName = false, espDistance = false, espHealth = false, espRole = false,
-    espTracer = false, espSkeleton = false,
-    outlineDroppedGun = false, outlineTraps = false, outlineThrowingKnives = false, outlineCoins = false,
-    boxDroppedGun = false, boxTraps = false, boxThrowingKnives = false, boxCoins = false,
     showShootButton = false,
     lockShootButton = false,
     selectedPlayer = nil,
@@ -845,7 +930,7 @@ local running = true
 local shootButton, shootGui, shootBusy = nil, nil, false
 local buttonShotActive, buttonShotTarget = false, nil
 local presetName = "default"
-local PRESET_FOLDER = "NOIR.CONFIG"
+local PRESET_FOLDER = PRESETS_FOLDER
 local revertControls, revertToggleStates, syncRevertControls = {}, {}, nil
 local noirMirrorControls = {}
 local presetDropdown
@@ -924,13 +1009,6 @@ function distanceTo(player)
     return math.huge
 end
 
-local ESP_INACTIVE_COLOR = Color3.fromRGB(150, 154, 162)
-function roleColor(role)
-    if role == "murderer" then return Color3.fromRGB(255, 55, 65) end
-    if role == "sheriff" then return Color3.fromRGB(55, 145, 255) end
-    if role == "hero" then return Color3.fromRGB(255, 220, 45) end
-    return Color3.fromRGB(65, 235, 105)
-end
 local function playerIsInLobby(player)
     if not player then return true end
     local teamName = player.Team and string.lower(tostring(player.Team.Name)) or ""
@@ -974,23 +1052,6 @@ local function playerIsInLobby(player)
     end
     return false
 end
-function playerESPInactive(player)
-    local character = player and player.Character
-    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then return true end
-    if roundState == "starting" then return false end
-    return roundState ~= "playing" or playerIsInLobby(player)
-end
-function playerESPColor(player, role)
-    return playerESPInactive(player) and ESP_INACTIVE_COLOR or roleColor(role)
-end
-function espPlayerRole(player)
-    local cached = player and roleCache[player.UserId]
-    if cached == "murderer" or cached == "sheriff" or cached == "hero" or cached == "innocent" then return cached end
-    if playerHasTool(player, "Knife") then return "murderer" end
-    if playerHasTool(player, "Gun") then return "sheriff" end
-    return "innocent"
-end
 function setTarget(player)
     if not validTarget(player) then player = nil end
     if murderer ~= player then
@@ -1011,7 +1072,6 @@ end
 function consumeData(data)
     if typeof(data) ~= "table" then return false end
     local foundMurderer, foundSheriff, foundHero
-    local rolesChanged = false
     for _, player in ipairs(getPlayers()) do
         local info = data[player.Name] or data[tostring(player.UserId)]
         if typeof(info) == "table" then
@@ -1024,7 +1084,6 @@ function consumeData(data)
             elseif normalized == "hero" then resolved = "hero"; foundHero = player
             else resolved = "innocent" end
             if roleCache[player.UserId] ~= resolved then
-                rolesChanged = true
                 roleCache[player.UserId] = resolved
                 if autoNotifyRoles and resolved ~= "innocent" and announcedRoles[player.UserId] ~= resolved then
                     announcedRoles[player.UserId] = resolved
@@ -1037,16 +1096,13 @@ function consumeData(data)
             if normalized == "murderer" then foundMurderer = player
             elseif normalized == "sheriff" then foundSheriff = player
             elseif normalized == "hero" then foundHero = player end
-            if roleCache[player.UserId] ~= resolved then roleCache[player.UserId] = resolved; rolesChanged = true end
+            if roleCache[player.UserId] ~= resolved then roleCache[player.UserId] = resolved end
         end
     end
     sheriff = foundSheriff or sheriff
     hero = foundHero or hero
     if foundMurderer then
         setTarget(foundMurderer)
-    end
-    if rolesChanged then
-        if type(refreshESP) == "function" then refreshESP() end
     end
     return foundMurderer ~= nil
 end
@@ -1080,466 +1136,6 @@ function updatePing()
             if measured > 0 and measured < 2 then cachedPing = cachedPing * 0.7 + measured * 0.3 end
         end
     end)
-end
-
-local ESP_OUTLINE_NAME = "NoirESPOutline"
-local ESP_BOX_NAME = "NoirESPBox"
-local espTracers = {}
-local espRefs = {}
-local Drawing = (typeof(Drawing) == "table") and Drawing or nil
-
-function clearESPCharacter(character)
-    if not character then return end
-    local outline = character:FindFirstChild(ESP_OUTLINE_NAME)
-    if outline then outline:Destroy() end
-    for _, item in ipairs(character:GetDescendants()) do
-        if item.Name == ESP_BOX_NAME or item.Name == "NoirESPRole" or item.Name == "NoirESPBar" then item:Destroy() end
-    end
-end
-function makeBillboard(root, role)
-    local box = Instance.new("BillboardGui")
-    box.Name = ESP_BOX_NAME
-    box.Adornee = root
-    box.AlwaysOnTop = true
-    box.LightInfluence = 0
-    box.Size = UDim2.fromOffset(96, 132)
-    box.StudsOffset = Vector3.new(0, 2.4, 0)
-    box.Parent = root
-    local frame = Instance.new("Frame")
-    frame.BackgroundTransparency = 1
-    frame.Size = UDim2.fromScale(1, 1)
-    frame.Parent = box
-    local line = Instance.new("UIStroke")
-    line.Color = roleColor(role)
-    line.Thickness = 1.6
-    line.Transparency = 0
-    line.Parent = frame
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
-    local barBg = Instance.new("Frame")
-    barBg.Name = "NoirESPBar"
-    barBg.AnchorPoint = Vector2.new(0, 1)
-    barBg.Position = UDim2.new(0, -6, 1, 0)
-    barBg.Size = UDim2.new(0, 4, 1, 0)
-    barBg.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    barBg.BorderSizePixel = 0
-    barBg.Parent = frame
-    local bar = Instance.new("Frame")
-    bar.AnchorPoint = Vector2.new(0, 1)
-    bar.Position = UDim2.new(0, 0, 1, 0)
-    bar.Size = UDim2.fromScale(1, 1)
-    bar.BackgroundColor3 = Color3.fromRGB(65, 235, 105)
-    bar.BorderSizePixel = 0
-    bar.Parent = barBg
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "NoirESPName"
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.AnchorPoint = Vector2.new(.5, 1)
-    nameLabel.Position = UDim2.new(.5, 0, 0, -2)
-    nameLabel.Size = UDim2.new(1, 120, 0, 16)
-    nameLabel.Font = Enum.Font.GothamSemibold
-    nameLabel.TextSize = 13
-    nameLabel.TextColor3 = Color3.new(1, 1, 1)
-    nameLabel.TextStrokeTransparency = .3
-    nameLabel.Text = ""
-    nameLabel.Parent = frame
-    local infoLabel = Instance.new("TextLabel")
-    infoLabel.Name = "NoirESPRole"
-    infoLabel.BackgroundTransparency = 1
-    infoLabel.AnchorPoint = Vector2.new(.5, 0)
-    infoLabel.Position = UDim2.new(.5, 0, 1, 2)
-    infoLabel.Size = UDim2.new(1, 120, 0, 15)
-    infoLabel.Font = Enum.Font.Gotham
-    infoLabel.TextSize = 12
-    infoLabel.TextColor3 = roleColor(role)
-    infoLabel.TextStrokeTransparency = .3
-    infoLabel.Text = ""
-    infoLabel.Parent = frame
-    return box, nameLabel, infoLabel, bar, line
-end
-function applyESPPlayer(player)
-    if player == LocalPlayer then return end
-    local character = player.Character
-    if not character then espRefs[player] = nil return end
-    clearESPCharacter(character)
-    espRefs[player] = nil
-    local role = espPlayerRole(player)
-    local displayColor = playerESPColor(player, role)
-    local outlineWanted = config.espOutline or (config.espOutlineMurderer and role == "murderer") or (config.espOutlineSheriff and role == "sheriff")
-    local chamsWanted = config.espChams or (config.espChamsMurderer and role == "murderer") or (config.espChamsSheriff and role == "sheriff")
-    local boxWanted = config.espBox or (config.espBoxMurderer and role == "murderer") or (config.espBoxSheriff and role == "sheriff")
-    local textWanted = config.espName or config.espDistance or config.espHealth or config.espRole
-    local highlight
-    local boxStroke
-    if outlineWanted or chamsWanted then
-        highlight = Instance.new("Highlight")
-        highlight.Name = ESP_OUTLINE_NAME
-        highlight.Adornee = character
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.FillTransparency = chamsWanted and .45 or 1
-        highlight.FillColor = displayColor
-        highlight.OutlineTransparency = outlineWanted and 0 or 1
-        highlight.OutlineColor = displayColor
-        highlight.Parent = character
-    end
-    if boxWanted or textWanted then
-        local root = character:FindFirstChild("HumanoidRootPart")
-        if root then
-            local box, nameLabel, infoLabel, bar, line = makeBillboard(root, role)
-            boxStroke = line
-            if not boxWanted then
-                local frame = box:FindFirstChildOfClass("Frame")
-                if frame then local s = frame:FindFirstChildOfClass("UIStroke"); if s then s.Transparency = 1 end end
-            end
-            if not config.espHealth and bar then bar.Parent.Visible = false end
-            nameLabel.Visible = config.espName
-            nameLabel.Text = player.Name
-            infoLabel.Visible = config.espDistance or config.espRole
-            infoLabel.TextColor3 = displayColor
-            espRefs[player] = { char = character, info = infoLabel, bar = bar, humanoid = character:FindFirstChildWhichIsA("Humanoid"), highlight = highlight, boxStroke = boxStroke }
-        end
-    end
-    if not espRefs[player] then
-        espRefs[player] = { char = character, info = nil, bar = nil, humanoid = character:FindFirstChildWhichIsA("Humanoid"), highlight = highlight, boxStroke = boxStroke }
-    end
-end
-function refreshESP()
-    for _, player in ipairs(getPlayers()) do applyESPPlayer(player) end
-end
-function bindESPPlayer(player)
-    if player == LocalPlayer then return end
-    player.CharacterAdded:Connect(function() task.wait(0.4); applyESPPlayer(player) end)
-    if player.Character then applyESPPlayer(player) end
-end
-for _, player in ipairs(getPlayers()) do bindESPPlayer(player) end
-Players.PlayerAdded:Connect(bindESPPlayer)
-
-task.spawn(function()
-    while running do
-        for _, player in ipairs(getPlayers()) do
-            if player ~= LocalPlayer then
-                local character = player.Character
-                local refs = espRefs[player]
-                if character and (not refs or refs.char ~= character) then
-                    applyESPPlayer(player)
-                    refs = espRefs[player]
-                end
-                if character and refs and refs.char == character then
-                    local role = espPlayerRole(player)
-                    local color = playerESPColor(player, role)
-                    if refs.highlight then
-                        refs.highlight.FillColor = color
-                        refs.highlight.OutlineColor = color
-                    end
-                    if refs.boxStroke then refs.boxStroke.Color = color end
-                    if refs.info then refs.info.TextColor3 = color end
-                end
-            end
-        end
-        task.wait(.15)
-    end
-end)
-
-local R15_BONES = {
-    {"Head","UpperTorso"}, {"UpperTorso","LowerTorso"},
-    {"UpperTorso","LeftUpperArm"}, {"LeftUpperArm","LeftLowerArm"}, {"LeftLowerArm","LeftHand"},
-    {"UpperTorso","RightUpperArm"}, {"RightUpperArm","RightLowerArm"}, {"RightLowerArm","RightHand"},
-    {"LowerTorso","LeftUpperLeg"}, {"LeftUpperLeg","LeftLowerLeg"}, {"LeftLowerLeg","LeftFoot"},
-    {"LowerTorso","RightUpperLeg"}, {"RightUpperLeg","RightLowerLeg"}, {"RightLowerLeg","RightFoot"},
-}
-local R6_BONES = {
-    {"Head","Torso"}, {"Torso","Left Arm"}, {"Torso","Right Arm"}, {"Torso","Left Leg"}, {"Torso","Right Leg"},
-}
-local skeletonCache = {}
-
-local roleFallbackCache = {}
-local function espRoleFast(player)
-    local cached = roleCache[player.UserId]
-    if cached then return cached end
-    local now = os.clock()
-    local entry = roleFallbackCache[player.UserId]
-    if entry and now - entry.t < 0.5 then return entry.role end
-    local role = espPlayerRole(player)
-    roleFallbackCache[player.UserId] = { role = role, t = now }
-    return role
-end
-
-local function newLine()
-    if not Drawing then return nil end
-    local line = Drawing.new("Line")
-    line.Thickness = 1.4
-    line.Transparency = 1
-    line.Visible = false
-    return line
-end
-
-local function hideAllESP()
-    for _, line in pairs(espTracers) do line.Visible = false end
-    for _, set in pairs(skeletonCache) do
-        local lines = set.lines
-        for i = 1, #lines do lines[i].Visible = false end
-    end
-end
-
-RunService.RenderStepped:Connect(function(dt)
-    local wantTracer = config.espTracer
-    local wantSkeleton = config.espSkeleton and Drawing
-    if not wantTracer and not wantSkeleton then hideAllESP() return end
-    local cam = Workspace.CurrentCamera
-    if not cam then return end
-    local players = getPlayers()
-    local viewport = cam.ViewportSize
-    local bottom = Vector2.new(viewport.X / 2, viewport.Y)
-    for i = 1, #players do
-        local player = players[i]
-        if player ~= LocalPlayer then
-            local character = player.Character
-            local role = character and espRoleFast(player) or "innocent"
-            local displayColor = playerESPColor(player, role)
-            if wantTracer then
-                local tracer = espTracers[player]
-                if not tracer then tracer = newLine(); espTracers[player] = tracer end
-                if tracer then
-                    local root = character and character:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local pos = cam:WorldToViewportPoint(root.Position)
-                        tracer.From = bottom
-                        tracer.To = Vector2.new(pos.X, pos.Y)
-                        tracer.Color = displayColor
-                        tracer.Visible = pos.Z > 0
-                    else
-                        tracer.Visible = false
-                    end
-                end
-            else
-                local tracer = espTracers[player]
-                if tracer then tracer.Visible = false end
-            end
-            if wantSkeleton and character then
-                local set = skeletonCache[player]
-                if not set or set.char ~= character then
-                    if set and set.lines then
-                        for b = 1, #set.lines do if set.lines[b] then set.lines[b]:Remove() end end
-                    end
-                    local bones = character:FindFirstChild("UpperTorso") and R15_BONES or R6_BONES
-                    set = { char = character, bones = bones, parts = {}, lines = {} }
-                    for b = 1, #bones do
-                        set.parts[b] = { character:FindFirstChild(bones[b][1]), character:FindFirstChild(bones[b][2]) }
-                        set.lines[b] = newLine()
-                    end
-                    skeletonCache[player] = set
-                end
-                local parts, lines = set.parts, set.lines
-                for b = 1, #lines do
-                    local line = lines[b]
-                    if line then
-                        local pair = parts[b]
-                        local a, b2 = pair[1], pair[2]
-                        if a and b2 then
-                            local pa = cam:WorldToViewportPoint(a.Position)
-                            local pb = cam:WorldToViewportPoint(b2.Position)
-                            line.From = Vector2.new(pa.X, pa.Y)
-                            line.To = Vector2.new(pb.X, pb.Y)
-                            line.Color = displayColor
-                            line.Visible = pa.Z > 0 and pb.Z > 0
-                        else
-                            line.Visible = false
-                        end
-                    end
-                end
-            elseif skeletonCache[player] then
-                local lines = skeletonCache[player].lines
-                for b = 1, #lines do if lines[b] then lines[b].Visible = false end end
-            end
-        end
-    end
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    local set = skeletonCache[player]
-    if set then
-        for b = 1, #set.lines do if set.lines[b] then set.lines[b]:Remove() end end
-        skeletonCache[player] = nil
-    end
-    local tracer = espTracers[player]
-    if tracer then tracer:Remove(); espTracers[player] = nil end
-    espRefs[player] = nil
-    roleFallbackCache[player.UserId] = nil
-end)
-
-local espTextAccum = 0
-RunService.RenderStepped:Connect(function(dt)
-    if not (config.espDistance or config.espRole or config.espHealth) then return end
-    espTextAccum += dt
-    if espTextAccum < 0.08 then return end
-    espTextAccum = 0
-    local players = getPlayers()
-    local showRole, showDist, showHealth = config.espRole, config.espDistance, config.espHealth
-    for i = 1, #players do
-        local player = players[i]
-        if player ~= LocalPlayer then
-            local refs = espRefs[player]
-            if refs and refs.char == player.Character then
-                if refs.info and (showRole or showDist) then
-                    local roleText = showRole and string.upper(espRoleFast(player)) or nil
-                    local distText = showDist and (tostring(math.floor(distanceTo(player))) .. "m") or nil
-                    if roleText and distText then refs.info.Text = roleText .. " | " .. distText
-                    elseif roleText then refs.info.Text = roleText
-                    else refs.info.Text = distText or "" end
-                end
-                if showHealth and refs.bar then
-                    local hum = refs.humanoid
-                    if not hum or hum.Parent ~= refs.char then hum = refs.char:FindFirstChildWhichIsA("Humanoid"); refs.humanoid = hum end
-                    if hum then
-                        local ratio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
-                        refs.bar.Size = UDim2.fromScale(1, ratio)
-                        refs.bar.BackgroundColor3 = playerESPInactive(player)
-                            and ESP_INACTIVE_COLOR
-                            or Color3.fromRGB(255 * (1 - ratio), 235 * ratio, 60)
-                    end
-                end
-            end
-        end
-    end
-end)
-
-function objectKind(instance)
-    local name = string.lower(instance.Name)
-    if string.find(name, "coin", 1, true) then return "coin" end
-    if string.find(name, "trap", 1, true) then return "trap" end
-    if name == "gundrop" or name == "gun" or string.find(name, "droppedgun", 1, true) or string.find(name, "gun_drop", 1, true) then return "gun" end
-    if string.find(name, "knife", 1, true) and (string.find(name, "throw", 1, true) or not instance:FindFirstAncestorOfClass("Tool")) then return "knife" end
-end
-function objectPart(instance)
-    if instance:IsA("BasePart") then return instance end
-    if instance:IsA("Model") then return instance.PrimaryPart or instance:FindFirstChildWhichIsA("BasePart", true) end
-    if instance:IsA("Tool") then return instance:FindFirstChildWhichIsA("BasePart", true) end
-end
-function objectEnabled(kind, box)
-    if box then
-        return kind == "coin" and config.boxCoins or kind == "trap" and config.boxTraps or kind == "gun" and config.boxDroppedGun or kind == "knife" and config.boxThrowingKnives
-    end
-    return kind == "coin" and config.outlineCoins or kind == "trap" and config.outlineTraps or kind == "gun" and config.outlineDroppedGun or kind == "knife" and config.outlineThrowingKnives
-end
-function objectColor(kind)
-    if kind == "gun" then return Color3.fromRGB(70, 170, 255) end
-    if kind == "coin" then return Color3.fromRGB(255, 220, 50) end
-    return Color3.fromRGB(100, 255, 150)
-end
-
-local objectESPRegistry = {}
-function objectESPAnyEnabled()
-    return config.outlineDroppedGun or config.outlineTraps or config.outlineThrowingKnives or config.outlineCoins
-        or config.boxDroppedGun or config.boxTraps or config.boxThrowingKnives or config.boxCoins
-end
-function objectESPClearAll()
-    for inst, entry in pairs(objectESPRegistry) do
-        if entry.outline then entry.outline:Destroy() end
-        if entry.box then entry.box:Destroy() end
-    end
-    table.clear(objectESPRegistry)
-end
-function addObjectESP(instance)
-    local kind = objectKind(instance)
-    if not kind then return end
-    local part = objectPart(instance)
-    if not part then return end
-    if Players:GetPlayerFromCharacter(instance:FindFirstAncestorOfClass("Model")) then return end
-    local entry = objectESPRegistry[instance]
-    if not entry then entry = {}; objectESPRegistry[instance] = entry end
-    if objectEnabled(kind, false) then
-        if not entry.outline then
-            local h = Instance.new("Highlight")
-            h.Name = "NoirObjectOutline"; h.Adornee = instance; h.FillTransparency = 1
-            h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; h.Parent = instance
-            entry.outline = h
-        end
-        entry.outline.OutlineColor = objectColor(kind)
-        entry.outline.OutlineTransparency = 0
-    elseif entry.outline then
-        entry.outline:Destroy(); entry.outline = nil
-    end
-    if objectEnabled(kind, true) then
-        if not entry.box then
-            local box = Instance.new("SelectionBox")
-            box.Name = "NoirObjectBox"; box.Adornee = part; box.SurfaceTransparency = 1
-            box.LineThickness = .04; box.Parent = part
-            entry.box = box
-        end
-        entry.box.Color3 = objectColor(kind)
-    elseif entry.box then
-        entry.box:Destroy(); entry.box = nil
-    end
-end
-function removeObjectESP(instance)
-    local entry = objectESPRegistry[instance]
-    if entry then
-        if entry.outline then entry.outline:Destroy() end
-        if entry.box then entry.box:Destroy() end
-        objectESPRegistry[instance] = nil
-    end
-end
-function refreshObjectESP()
-    if not objectESPAnyEnabled() then objectESPClearAll() return end
-    local seen = {}
-    for _, instance in ipairs(Workspace:GetDescendants()) do
-        if objectKind(instance) then addObjectESP(instance); seen[instance] = true end
-    end
-    for inst in pairs(objectESPRegistry) do
-        if not seen[inst] then removeObjectESP(inst) end
-    end
-end
-
-local trackedGuns = {}
-function isGunName(name)
-    local n = string.lower(name)
-    return n == "gundrop" or n == "gun" or string.find(n, "droppedgun", 1, true) or string.find(n, "gun_drop", 1, true)
-end
-function trackGun(instance)
-    if instance:IsA("BasePart") or instance:IsA("Tool") or instance:IsA("Model") then trackedGuns[instance] = true end
-end
-local function gunPickupPart(container)
-    local fallback
-    local function inspect(part)
-        if not fallback then fallback = part end
-        if part:FindFirstChild("TouchInterest") or part:FindFirstChild("TouchTransmitter")
-            or part:FindFirstChildOfClass("TouchTransmitter") then
-            return part
-        end
-    end
-    if container:IsA("BasePart") then return inspect(container) or fallback end
-    for _, child in ipairs(container:GetDescendants()) do
-        if child:IsA("BasePart") then
-            local pickup = inspect(child)
-            if pickup then return pickup end
-        end
-    end
-    return fallback
-end
-function findTrackedGun()
-    for inst in pairs(trackedGuns) do
-        if inst.Parent then
-            local ownerModel = inst:FindFirstAncestorOfClass("Model")
-            if not Players:GetPlayerFromCharacter(ownerModel) then
-                local part = gunPickupPart(inst)
-                if part then return part end
-            end
-        else
-            trackedGuns[inst] = nil
-        end
-    end
-end
-
-Workspace.DescendantAdded:Connect(function(instance)
-    if isGunName(instance.Name) then trackGun(instance) end
-    if objectESPAnyEnabled() then addObjectESP(instance) end
-end)
-Workspace.DescendantRemoving:Connect(function(instance)
-    trackedGuns[instance] = nil
-    removeObjectESP(instance)
-end)
-
-for _, inst in ipairs(Workspace:GetDescendants()) do
-    if isGunName(inst.Name) then trackGun(inst) end
 end
 
 function getAimPart(player)
@@ -1704,7 +1300,7 @@ function autoTuneForPing()
     local now = os.clock()
     if now - lastAutoTune < 0.4 then return end
     lastAutoTune = now
-    local pingMs = math.clamp(math.floor(cachedPing * 1000 + 0.5), 5, 350)
+    local pingMs = math.clamp(math.floor(cachedPing * 1000 + 0.5), 5, 1000)
     syncAutoPing(config, "manualPingMs", pingMs)
     syncAutoPing(config.knifeAim, "knifeManualPingMs", pingMs)
 end
@@ -1721,7 +1317,7 @@ function leadTime(profile)
     else
         prediction = settings.fixedLead
     end
-    return math.clamp(prediction, 0.02, math.min(settings.maxLead, settings.maxSimulationMs / 1000))
+    return math.clamp(prediction, 0.02, settings.maxSimulationMs / 1000)
 end
 function sampleMotion(part, settings)
     settings = settings or config
@@ -1813,6 +1409,21 @@ function targetVisible(part, forceWallCheck)
     return result == nil or result.Instance:IsDescendantOf(part.Parent)
 end
 
+-- The ranged Gun and KnifeThrown remotes validate the outgoing ray. When a world part
+-- is between the source and selected player, a Piercer toggle sends only that ray from
+-- the target side of the obstruction; unobstructed shots retain the normal source.
+local function piercerShotOrigin(origin, aim, part, enabled)
+    if not enabled or not origin or not aim or not part then return origin end
+    local direction = aim - origin
+    if direction.Magnitude <= 0.01 then return origin end
+    local character = LocalPlayer.Character
+    wallCheckParams.FilterDescendantsInstances = character and { character } or {}
+    local result = Workspace:Raycast(origin, direction, wallCheckParams)
+    if not result or result.Instance:IsDescendantOf(part.Parent) then return origin end
+    local spacing = math.clamp(part.Size.Magnitude * 0.75, 2.5, 4.5)
+    return aim - direction.Unit * spacing
+end
+
 function knifeRemote(remote, args)
     if not config.knifeEnabled or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
@@ -1841,7 +1452,7 @@ local function remoteBelongsToLocalGun(remote)
     return (characterGun and remote:IsDescendantOf(characterGun)) or (backpackGun and remote:IsDescendantOf(backpackGun))
 end
 function shotRemote(remote, args)
-    if not (config.enabled or buttonShotActive) or args.n < 2 then return false end
+    if not (config.enabled or config.piercerBullet or buttonShotActive) or args.n < 2 then return false end
     if typeof(remote) ~= "Instance" or not remote:IsA("RemoteEvent") then return false end
     if not remoteBelongsToLocalGun(remote) then return false end
     local first, second = args[1], args[2]
@@ -1874,7 +1485,8 @@ function redirect(remote, args)
         if not buttonShotActive and config.aimKey ~= "None" and not aimHeld then return end
         if config.shotMethod == "CFrame" and not hasCFrameArgument(args) then return end
         part = (buttonShotActive and buttonShotTarget and getAimPart(buttonShotTarget)) or targetPart()
-        useWallCheck = config.wallCheck
+        -- Piercer Bullet keeps the gun redirect active and deliberately bypasses only the local gun wall gate.
+        useWallCheck = config.wallCheck and not config.piercerBullet
     elseif knifeRemote(remote, args) then
         part = knifeTargetPart(); useWallCheck = config.knifeWallCheck; isKnife = true
     else
@@ -1898,8 +1510,9 @@ function redirect(remote, args)
     local firstType, secondType = typeof(args[1]), typeof(args[2])
     if firstType == "CFrame" then
         local origin = args[1].Position
-        if config.alignDirection and (aim - origin).Magnitude > 0.01 then
-            args[1] = CFrame.lookAt(origin, aim)
+        local shotOrigin = piercerShotOrigin(origin, aim, part, config.piercerBullet)
+        if (config.alignDirection or shotOrigin ~= origin) and (aim - shotOrigin).Magnitude > 0.01 then
+            args[1] = CFrame.lookAt(shotOrigin, aim)
         end
         if secondType == "CFrame" then
             args[2] = CFrame.new(aim)
@@ -1910,9 +1523,11 @@ function redirect(remote, args)
         end
     elseif firstType == "Vector3" then
         local origin = args[1]
+        local shotOrigin = piercerShotOrigin(origin, aim, part, config.piercerBullet)
+        args[1] = shotOrigin
         if secondType == "Vector3" then
-            if args[2].Magnitude <= 1.5 and (aim - origin).Magnitude > 0.01 then
-                args[2] = (aim - origin).Unit
+            if args[2].Magnitude <= 1.5 and (aim - shotOrigin).Magnitude > 0.01 then
+                args[2] = (aim - shotOrigin).Unit
             else
                 args[2] = aim
             end
@@ -1974,6 +1589,14 @@ function toggle(value)
         notify("Enabled", 2)
     else
         notify("Disabled", 2)
+    end
+end
+
+function setPiercerBullet(value)
+    config.piercerBullet = value == true
+    if config.piercerBullet and not installHook() then
+        config.piercerBullet = false
+        notify("Piercer Bullet requires hook support", 4)
     end
 end
 
@@ -2047,7 +1670,7 @@ do
     end
 
     local function step()
-        if not config.knifeEnabled or next(active) == nil then stopStep() return end
+        if not config.knifeEnabled or not config.knifeThrownAura or next(active) == nil then stopStep() return end
         local now = os.clock()
         local radius = config.knifeRadius
         for knife, data in pairs(active) do
@@ -2071,7 +1694,7 @@ do
     end
 
     local function track(knife)
-        if active[knife] or not config.knifeEnabled then return end
+        if active[knife] or not config.knifeEnabled or not config.knifeThrownAura then return end
         local isKnife = knife.Name == "ThrowingKnife" or knife:HasTag("ThrowingKnife")
             or knife:FindFirstChild("HandleLink") ~= nil or knife:FindFirstChild("BladePosition") ~= nil
         if not isKnife then return end
@@ -2115,12 +1738,12 @@ function fireGunAt(player)
         local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
         local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
         if not part or not character or not humanoid then return end
-        if config.wallCheck and not targetVisible(part) then return end
+        if config.wallCheck and not config.piercerBullet and not targetVisible(part) then return end
         local autoEquipped = false
         local gun = character:FindFirstChild("Gun")
         if not gun and backpack then
             gun = backpack:FindFirstChild("Gun")
-            if gun then humanoid:EquipTool(gun); autoEquipped = true; task.wait(0.12) end
+            if gun then humanoid:EquipTool(gun); autoEquipped = true; task.wait(0.10) end
         end
         if not gun or not gun:IsA("Tool") then
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
@@ -2134,12 +1757,13 @@ function fireGunAt(player)
         end
         local aim=calculateAim(part)
         local origin=handle.Position
+        local shotOrigin=piercerShotOrigin(origin,aim,part,config.piercerBullet)
         buttonShotActive = true
         buttonShotTarget = player
-        success=pcall(function() remote:FireServer(CFrame.lookAt(origin,aim),CFrame.new(aim)) end)
-        task.wait(0.16)
+        success=pcall(function() remote:FireServer(CFrame.lookAt(shotOrigin,aim),CFrame.new(aim)) end)
+        task.wait(0.10)
         if autoEquipped and humanoid.Parent then
-            task.wait(0.08)
+            task.wait(0.05)
             humanoid:UnequipTools()
         end
     end)
@@ -2160,7 +1784,7 @@ task.spawn(function()
             local player = selectTarget()
             if player and inFOV(player) then
                 local part = getAimPart(player)
-                if part and (not config.wallCheck or targetVisible(part)) then fireGunAt(player) end
+                if part and (config.piercerBullet or not config.wallCheck or targetVisible(part)) then fireGunAt(player) end
             end
         end
         task.wait(0.03)
@@ -2345,14 +1969,7 @@ end
 
 local utility = {
     walkEnabled = false, walkSpeed = 16, jumpEnabled = false, jumpPower = 50,
-    autoGrab = false, grabSafety = true, gunAura = false, gunAuraRange = 10,
-    notifyDropped = false, notifyPickup = false,
-    touchFling = false, touchPower = 100,
-    antiFling = false, flingAll = false,
-    autoFlingSheriff = false, autoFlingMurderer = false,
-    flingDuration = 2, flingPower = 1,
-    antiAfk = false, selectedPlayer = nil, roundTimer = false,
-    chatSpam = false, chatMessage = "", chatDelay = 3,
+    antiAfk = false,
 }
 
 function applyCharacterMods()
@@ -2367,224 +1984,6 @@ applyCharacterMods()
 function findSheriff()
     if validTarget(sheriff) then return sheriff end
     return findByGun()
-end
-
-function playerNameList()
-    local list = { "None" }
-    for _, player in ipairs(getPlayers()) do
-        if player ~= LocalPlayer then list[#list + 1] = player.Name end
-    end
-    table.sort(list, function(a, b) return a == "None" or (b ~= "None" and string.lower(a) < string.lower(b)) end)
-    return list
-end
-
-local lastGunDeepScan = 0
-local pickupRemoteCache
-function findPickupRemote()
-    if pickupRemoteCache and pickupRemoteCache.Parent then return pickupRemoteCache end
-    pickupRemoteCache = nil
-    for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
-        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
-            local n = string.lower(remote.Name)
-            if (string.find(n, "gun", 1, true) and (string.find(n, "pickup", 1, true) or string.find(n, "grab", 1, true) or string.find(n, "get", 1, true))) or n == "pickupgun" then
-                pickupRemoteCache = remote
-                break
-            end
-        end
-    end
-    return pickupRemoteCache
-end
-function findDroppedGun()
-    local tracked = findTrackedGun()
-    if tracked then return tracked end
-    local now = os.clock()
-    if now - lastGunDeepScan < 1 then return nil end
-    lastGunDeepScan = now
-    local direct = Workspace:FindFirstChild("GunDrop", true)
-    if direct then
-        local part = gunPickupPart(direct)
-        if part then return part end
-    end
-end
-
-local function localHasGun()
-    return playerHasTool(LocalPlayer, "Gun") ~= nil
-end
-local function localIsMurderer()
-    return murderer == LocalPlayer
-        or roleCache[LocalPlayer.UserId] == "murderer"
-        or playerHasTool(LocalPlayer, "Knife") ~= nil
-end
-local function gunRoundActive()
-    local humanoid = localHumanoid()
-    if not humanoid or humanoid.Health <= 0 then return false end
-    if roundState ~= "starting" and roundState ~= "playing" then return false end
-    return true
-end
-
-function grabGun(silent)
-    if not gunRoundActive() then
-        if not silent then notify("Gun pickup is unavailable in the lobby", 2.5) end
-        return false
-    end
-    if localHasGun() then return true end
-    if utility.grabSafety and localIsMurderer() then
-        if not silent then notify("Pickup blocked by Safety Check", 2.5) end
-        return false
-    end
-    local gun = findDroppedGun()
-    if not gun then
-        if not silent then notify("Dropped gun not found", 2) end
-        return false
-    end
-    local root = localRoot()
-    if not root then return false end
-    local part = gun:IsA("BasePart") and gun or gun:FindFirstChildWhichIsA("BasePart", true)
-    if not part or not part.Parent then return false end
-
-    local attempted = false
-    if type(firetouchinterest) == "function" then
-        local ok = pcall(function()
-            firetouchinterest(root, part, 0)
-            task.wait(.05)
-            firetouchinterest(root, part, 1)
-        end)
-        attempted = ok or attempted
-    end
-    pcall(function() part.CFrame = root.CFrame end)
-
-    local pickupRemote = findPickupRemote()
-    if pickupRemote then
-        local ok = pcall(function()
-            if pickupRemote:IsA("RemoteFunction") then
-                pickupRemote:InvokeServer(part)
-            else
-                pickupRemote:FireServer(part)
-            end
-        end)
-        attempted = ok or attempted
-    end
-
-    local pickedUp = localHasGun()
-    if not pickedUp and not silent and not attempted then notify("Gun pickup failed", 3) end
-    return pickedUp or attempted
-end
-
-function nearestPlayer(maxDistance)
-    local root = localRoot(); if not root then return nil end
-    local best, bestDistance
-    for _, player in ipairs(getPlayers()) do
-        if player ~= LocalPlayer and validTarget(player) then
-            local targetRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-            if targetRoot then
-                local d = (targetRoot.Position - root.Position).Magnitude
-                if (not maxDistance or d <= maxDistance) and (not bestDistance or d < bestDistance) then best, bestDistance = player, d end
-            end
-        end
-    end
-    return best
-end
-
-local flingBusy = false
-local flingBodyVelocity, flingOldPosition
-local flingDestroyHeight = Workspace.FallenPartsDestroyHeight
-function cleanupFling(root, humanoid, character)
-    if flingBodyVelocity then pcall(function() flingBodyVelocity:Destroy() end); flingBodyVelocity = nil end
-    if root and root.Parent then
-        pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
-    end
-    if humanoid then
-        pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true) end)
-        pcall(function() Workspace.CurrentCamera.CameraSubject = humanoid end)
-    end
-    pcall(function() Workspace.FallenPartsDestroyHeight = flingDestroyHeight end)
-    if flingOldPosition and root and root.Parent then
-        for _ = 1, 12 do
-            pcall(function()
-                root.CFrame = flingOldPosition * CFrame.new(0, .5, 0)
-                if character.PrimaryPart then character:SetPrimaryPartCFrame(root.CFrame) end
-            end)
-            pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
-            if (root.Position - flingOldPosition.Position).Magnitude < 20 then break end
-            RunService.Heartbeat:Wait()
-        end
-    end
-    flingBusy = false
-end
-function flingPlayer(target)
-    if flingBusy or not target or target == LocalPlayer or not validTarget(target) then return false end
-    local character = LocalPlayer.Character
-    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-    local root = humanoid and humanoid.RootPart or localRoot()
-    local targetCharacter = target.Character
-    local targetHumanoid = targetCharacter and targetCharacter:FindFirstChildWhichIsA("Humanoid")
-    local targetRoot = targetHumanoid and targetHumanoid.RootPart or (targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart"))
-    local targetHead = targetCharacter and targetCharacter:FindFirstChild("Head")
-    local accessory = targetCharacter and targetCharacter:FindFirstChildOfClass("Accessory")
-    local handle = accessory and accessory:FindFirstChild("Handle")
-    local targetPart = targetRoot or targetHead or handle
-    if not character or not humanoid or not root or not targetPart then return false end
-    if targetHumanoid and targetHumanoid.Sit then notify(target.Name .. " is sitting", 2); return false end
-    flingBusy = true
-    flingOldPosition = root.CFrame
-    pcall(function() Workspace.CurrentCamera.CameraSubject = targetPart end)
-    pcall(function() Workspace.FallenPartsDestroyHeight = 0 / 0 end)
-    pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false) end)
-    flingBodyVelocity = Instance.new("BodyVelocity")
-    flingBodyVelocity.Velocity = Vector3.zero
-    flingBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-    flingBodyVelocity.Parent = root
-    local power = math.clamp(utility.flingPower or 1, 1, 3)
-    local multiplier = power == 1 and 1 or power == 2 and 1.5 or 2
-    local started = os.clock()
-    local duration = math.clamp(utility.flingDuration or 2, 1, 5)
-    local angle = 0
-    while os.clock() - started < duration and targetPart.Parent and humanoid.Health > 0 do
-        angle += 100
-        local speed = targetPart.AssemblyLinearVelocity.Magnitude
-        local move = targetHumanoid and targetHumanoid.MoveDirection or Vector3.zero
-        local offset = move * (speed < 50 and speed / 1.25 or 1)
-        local y = ((math.floor((os.clock() - started) * 24) % 2) == 0) and 1.5 or -1.5
-        local z = speed >= 50 and (targetHumanoid and targetHumanoid.WalkSpeed or 16) or 0
-        local cf = CFrame.new(targetPart.Position) * CFrame.new(offset.X, y, offset.Z + z) * CFrame.Angles(math.rad(angle), 0, 0)
-        pcall(function()
-            root.CFrame = cf
-            if character.PrimaryPart then character:SetPrimaryPartCFrame(cf) end
-            root.AssemblyLinearVelocity = Vector3.new(9e7 * multiplier, 9e8 * multiplier, 9e7 * multiplier)
-            root.AssemblyAngularVelocity = Vector3.new(9e8 * multiplier, 9e8 * multiplier, 9e8 * multiplier)
-        end)
-        RunService.Heartbeat:Wait()
-    end
-    cleanupFling(root, humanoid, character)
-    return true
-end
-
-function applyAntiFling()
-    local root = localRoot()
-    if not root then return end
-    local speed = root.AssemblyLinearVelocity.Magnitude
-    if speed > 150 then
-        pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
-    end
-end
-
-function sendChat(message)
-    if type(message) ~= "string" or message == "" then return false end
-    local sent = false
-    local legacy = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-    if legacy then
-        local say = legacy:FindFirstChild("SayMessageRequest")
-        if say and say:IsA("RemoteEvent") then pcall(function() say:FireServer(message, "All") end); sent = true end
-    end
-    if not sent then
-        pcall(function()
-            local textChat = game:GetService("TextChatService")
-            local channels = textChat:FindFirstChild("TextChannels")
-            local general = channels and channels:FindFirstChild("RBXGeneral")
-            if general then general:SendAsync(message); sent = true end
-        end)
-    end
-    return sent
 end
 
 function showMurdererChance()
@@ -2609,72 +2008,9 @@ do
 end
 
 task.spawn(function()
-    local hadDrop = false
-    local lastGunScan = 0
     while running do
         if utility.walkEnabled or utility.jumpEnabled then applyCharacterMods() end
-        if utility.autoGrab or utility.gunAura or utility.notifyDropped or utility.notifyPickup then
-            local now = os.clock()
-            if now - lastGunScan >= 0.5 then
-                lastGunScan = now
-                local active = gunRoundActive()
-                if not active then
-                    hadDrop = false
-                else
-                    local gun = findDroppedGun()
-                    local root = localRoot()
-                    local closeEnough = gun and root and (root.Position - gun.Position).Magnitude <= (utility.gunAuraRange or 10)
-                    local shouldGrab = gun and not localHasGun() and (utility.autoGrab or (utility.gunAura and closeEnough))
-                    if shouldGrab then grabGun(true) end
-                    if utility.notifyDropped and gun and not hadDrop then notify("Dropped gun detected", 3) end
-                    if utility.notifyPickup and not gun and hadDrop then notify("Gun picked up", 3) end
-                    hadDrop = gun ~= nil
-                end
-            end
-        end
-        if utility.touchFling then
-            local root = localRoot()
-            if root then
-                local old = root.AssemblyLinearVelocity
-                pcall(function() root.AssemblyLinearVelocity = old * utility.touchPower + Vector3.new(0, utility.touchPower, 0) end)
-                RunService.RenderStepped:Wait()
-                if root.Parent then pcall(function() root.AssemblyLinearVelocity = old end) end
-            end
-        end
-        if utility.antiFling then
-            applyAntiFling()
-            for _, player in ipairs(getPlayers()) do
-                if player ~= LocalPlayer and player.Character then
-                    for _, part in ipairs(player.Character:GetChildren()) do
-                        if part:IsA("BasePart") then part.CanCollide = false end
-                    end
-                end
-            end
-        end
-        if utility.autoFlingSheriff and not flingBusy then
-            local p = findSheriff(); if p then flingPlayer(p) end
-        end
-        if utility.autoFlingMurderer and not flingBusy then
-            local p = validTarget(murderer) and murderer or findByKnife(); if p then flingPlayer(p) end
-        end
-        if utility.flingAll and not flingBusy then
-            for _, player in ipairs(getPlayers()) do
-                if not utility.flingAll then break end
-                if player ~= LocalPlayer then flingPlayer(player) end
-            end
-        end
         task.wait(.15)
-    end
-end)
-
-task.spawn(function()
-    while running do
-        if utility.chatSpam and utility.chatMessage ~= "" then
-            sendChat(utility.chatMessage)
-            task.wait(math.clamp(utility.chatDelay or 3, 1, 60))
-        else
-            task.wait(0.5)
-        end
     end
 end)
 
@@ -2683,12 +2019,7 @@ function cleanPresetName(name)
     return name ~= "" and name or "default"
 end
 function ensurePresetFolder()
-    if type(makefolder) ~= "function" then return end
-    if type(isfolder) == "function" then
-        local ok, exists = pcall(isfolder, PRESET_FOLDER)
-        if ok and exists then return end
-    end
-    pcall(makefolder, PRESET_FOLDER)
+    ensureStorageFolders()
 end
 function xorPreset(data)
     local output = table.create(#data)
@@ -2714,17 +2045,17 @@ function exportRevertConfig()
         },
         noir = {
             targetMode = config.targetMode, hitPart = config.hitPart, fovSize = config.fovSize,
-            shotMethod = config.shotMethod, autoFire = config.autoFire, wallCheck = config.wallCheck, ignoreDead = config.ignoreDead,
+            shotMethod = config.shotMethod, autoFire = config.autoFire, wallCheck = config.wallCheck, piercerBullet = config.piercerBullet, ignoreDead = config.ignoreDead,
             ignoreFriends = config.ignoreFriends, maxDistance = config.maxDistance,
             adaptive = config.adaptive, fixedLead = config.fixedLead, extraLead = config.extraLead,
-            maxLead = config.maxLead, alignDirection = config.alignDirection,
+            alignDirection = config.alignDirection,
             knifeWallCheck = config.knifeWallCheck,
             knifePrioritizeSheriff = config.knifePrioritizeSheriff, knifeAutoThrow = config.knifeAutoThrow,
+            knifeThrownAura = config.knifeThrownAura,
             knifeAim = {
                 adaptive = config.knifeAim.adaptive,
                 fixedLead = config.knifeAim.fixedLead,
                 extraLead = config.knifeAim.extraLead,
-                maxLead = config.knifeAim.maxLead,
                 prioritizePing = config.knifeAim.prioritizePing,
                 predictJump = config.knifeAim.predictJump,
                 predictLag = config.knifeAim.predictLag,
@@ -2767,16 +2098,17 @@ function applyRevertConfig(data)
         if noir.shotMethod == "Remote" or noir.shotMethod == "CFrame" then
             config.shotMethod = noir.shotMethod
         end
-        for _, key in ipairs({ "fovSize", "maxDistance", "fixedLead", "extraLead", "maxLead" }) do
+        for _, key in ipairs({ "fovSize", "maxDistance", "fixedLead", "extraLead" }) do
             if typeof(noir[key]) == "number" then config[key] = noir[key] end
         end
-        for _, key in ipairs({ "autoFire", "wallCheck", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
-                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow" }) do
+        for _, key in ipairs({ "autoFire", "wallCheck", "piercerBullet", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
+                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow", "knifeThrownAura" }) do
             if typeof(noir[key]) == "boolean" then config[key] = noir[key] end
         end
+        if config.piercerBullet then task.defer(installHook) end
         local knifeAim = noir.knifeAim
         if typeof(knifeAim) == "table" then
-            for _, key in ipairs({ "fixedLead", "extraLead", "maxLead", "maxSimulationMs", "predictionIntervalMs", "manualPingMs", "offsetX", "offsetY", "offsetZ", "horizontalMultiplier", "verticalMultiplier" }) do
+            for _, key in ipairs({ "fixedLead", "extraLead", "maxSimulationMs", "predictionIntervalMs", "manualPingMs", "offsetX", "offsetY", "offsetZ", "horizontalMultiplier", "verticalMultiplier" }) do
                 if typeof(knifeAim[key]) == "number" then config.knifeAim[key] = knifeAim[key] end
             end
             for _, key in ipairs({ "adaptive", "prioritizePing", "predictJump", "predictLag" }) do
@@ -2828,7 +2160,2499 @@ presetNames = function()
     return names
 end
 
+-- Fresh installs use the false state below; explicit user choices are restored from autosave.
+local autoGGState = { enabled = false, token = 0 }
+local gunUtilityState = {
+    auraEnabled = false,
+    auraRange = 25,
+    droppedGunNotify = false,
+    gunPickupNotify = false,
+    bindEnabled = false,
+    bindButtonSize = 0.11,
+    touchNoticeAt = 0,
+    bindGui = nil,
+    bindButton = nil,
+    bindConnections = {}
+}
+
+local function hasGunInInventory()
+    return playerHasTool(LocalPlayer, "Gun") ~= nil
+end
+
+-- A dropped MM2 gun is not always a single part named GunDrop. Scan every GunDrop
+-- container and rank the physical touch receiver before Handle/decorative fallbacks.
+local function getDroppedGunParts()
+    local candidates, seen = {}, {}
+    local function add(part, priority)
+        if not part or not part:IsA("BasePart") or seen[part] then return end
+        seen[part] = true
+        candidates[#candidates + 1] = { part = part, priority = priority }
+    end
+    local function scan(drop)
+        if drop:IsA("BasePart") then
+            local ownTouch = drop:FindFirstChildWhichIsA("TouchTransmitter")
+            add(drop, ownTouch and 1 or (drop.Name == "Handle" and 2 or 3))
+        end
+        for _, child in ipairs(drop:GetDescendants()) do
+            if child:IsA("TouchTransmitter") and child.Parent and child.Parent:IsA("BasePart") then
+                add(child.Parent, 1)
+            elseif child:IsA("BasePart") and child.Name == "Handle" then
+                add(child, 2)
+            elseif child:IsA("BasePart") and child.Name == "GunDrop" then
+                add(child, 3)
+            elseif child:IsA("BasePart") then
+                add(child, 4)
+            end
+        end
+    end
+    -- Descendant scanning covers models, folders and reparented GunDrop instances.
+    for _, instance in ipairs(Workspace:GetDescendants()) do
+        if instance.Name == "GunDrop" then scan(instance) end
+    end
+    table.sort(candidates, function(a, b) return a.priority < b.priority end)
+    local parts = table.create(#candidates)
+    for index, candidate in ipairs(candidates) do parts[index] = candidate.part end
+    return parts
+end
+
+local function getDroppedGunPart()
+    return getDroppedGunParts()[1]
+end
+
+local function touchDroppedGun()
+    local root = localRoot()
+    local drops = getDroppedGunParts()
+    if not root or #drops == 0 or type(firetouchinterest) ~= "function" then return false end
+    local touched = false
+    local ok = pcall(function()
+        -- Do not move the player. Send three real begin/end touch pairs to every likely
+        -- GunDrop hitbox, with a short yield between pulses for Delta/client touch handling.
+        for attempt = 1, 3 do
+            for _, drop in ipairs(drops) do
+                if root.Parent and drop.Parent then
+                    firetouchinterest(root, drop, 0)
+                    task.wait(.035)
+                    firetouchinterest(root, drop, 1)
+                    task.wait(.045)
+                    if hasGunInInventory() then touched = true; break end
+                end
+            end
+            if touched then break end
+            task.wait(.075)
+        end
+    end)
+    return ok and (touched or hasGunInInventory())
+end
+
+local function grabDroppedGun()
+    if hasGunInInventory() then return true end
+    if gunUtilityState.pickupBusy then return false end
+    gunUtilityState.pickupBusy = true
+    local success = touchDroppedGun()
+    -- Replication of a picked-up tool may arrive shortly after the touch connection fires.
+    local deadline = os.clock() + .9
+    while not success and os.clock() < deadline do
+        task.wait(.06)
+        success = hasGunInInventory()
+    end
+    gunUtilityState.pickupBusy = false
+    return success
+end
+
+local function requestGrabGun()
+    task.spawn(function()
+        if hasGunInInventory() then
+            notify("You already have the Gun", 3)
+        elseif not getDroppedGunPart() then
+            notify("No dropped Gun found", 3)
+        elseif grabDroppedGun() then
+            notify("Gun picked up", 3)
+        else
+            notify("Gun pickup failed", 3)
+        end
+    end)
+end
+
+local function setGunAura(enabled)
+    gunUtilityState.auraEnabled = enabled == true
+    gunUtilityState.auraToken = (gunUtilityState.auraToken or 0) + 1
+    local token = gunUtilityState.auraToken
+    if not gunUtilityState.auraEnabled then return end
+    task.spawn(function()
+        while running and gunUtilityState.auraEnabled and gunUtilityState.auraToken == token do
+            if not hasGunInInventory() then
+                local root, drop = localRoot(), getDroppedGunPart()
+                if root and drop and not gunUtilityState.pickupBusy and (root.Position - drop.Position).Magnitude <= gunUtilityState.auraRange then
+                    -- Aura uses the same verified pickup path as the Grab Gun button, not a one-shot touch pulse.
+                    grabDroppedGun()
+                end
+            end
+            task.wait(0.18)
+        end
+    end)
+end
+
+local function disconnectGrabGunBind()
+    for _, connection in ipairs(gunUtilityState.bindConnections) do
+        pcall(function() connection:Disconnect() end)
+    end
+    table.clear(gunUtilityState.bindConnections)
+end
+
+local function removeGrabGunBindButton()
+    disconnectGrabGunBind()
+    if gunUtilityState.bindGui then gunUtilityState.bindGui:Destroy() end
+    gunUtilityState.bindGui, gunUtilityState.bindButton = nil, nil
+    for _, parent in ipairs({guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
+        if typeof(parent) == "Instance" then
+            local stale = parent:FindFirstChild("NoirGrabGunBindButton")
+            if stale then stale:Destroy() end
+        end
+    end
+end
+
+local function updateGrabGunBindButtonSize()
+    local button = gunUtilityState.bindButton
+    local camera = Workspace.CurrentCamera
+    if not button or not camera then return end
+    local screen = camera.ViewportSize
+    local heightScale = gunUtilityState.bindButtonSize
+    button.Size = UDim2.new(heightScale * (screen.Y / math.max(screen.X, 1)), 0, heightScale, 0)
+end
+
+local function createGrabGunBindButton()
+    if gunUtilityState.bindButton then return end
+    removeGrabGunBindButton()
+    local parent = guiParent
+    if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
+    local bindGui = Instance.new("ScreenGui")
+    bindGui.Name = "NoirGrabGunBindButton"
+    bindGui.ResetOnSpawn = false
+    bindGui.IgnoreGuiInset = true
+    bindGui.DisplayOrder = 81
+    bindGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    bindGui.Parent = parent
+
+    local button = Instance.new("ImageButton")
+    button.Name = "GrabGun"
+    button.AnchorPoint = Vector2.new(.5, .5)
+    button.Position = NoirPersistence.GetPosition("grab_gun_bind_v1", UDim2.new(.10, 0, .88, 0))
+    button.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+    button.BackgroundTransparency = .28
+    button.BorderSizePixel = 0
+    button.Image = ""
+    button.AutoButtonColor = false
+    button.ClipsDescendants = false
+    button.ZIndex = 5
+    button.Parent = bindGui
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(1, 0)
+    buttonCorner.Parent = button
+    local aspect = Instance.new("UIAspectRatioConstraint")
+    aspect.AspectRatio = 1
+    aspect.AspectType = Enum.AspectType.ScaleWithParentSize
+    aspect.Parent = button
+    local outerStroke = Instance.new("UIStroke")
+    outerStroke.Color = Color3.fromRGB(255, 255, 255)
+    outerStroke.Thickness = 2
+    outerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    outerStroke.Parent = button
+    local outerGradient = Instance.new("UIGradient")
+    outerGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)),
+        ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)),
+        ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)),
+        ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52))
+    })
+    outerGradient.Parent = outerStroke
+    local innerStroke = Instance.new("UIStroke")
+    innerStroke.Color = Color3.fromRGB(105, 105, 112)
+    innerStroke.Transparency = .5
+    innerStroke.Thickness = 1
+    innerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    innerStroke.Parent = button
+    local innerGradient = outerGradient:Clone()
+    innerGradient.Rotation = 180
+    innerGradient.Parent = innerStroke
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Name = "Text"
+    textLabel.AnchorPoint = Vector2.new(.5, .5)
+    textLabel.Position = UDim2.fromScale(.5, .5)
+    textLabel.Size = UDim2.fromScale(.76, .76)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = "Grab Gun"
+    textLabel.TextColor3 = Color3.fromRGB(245, 245, 248)
+    textLabel.TextSize = 17
+    textLabel.TextWrapped = true
+    textLabel.Font = Enum.Font.Gotham
+    textLabel.ZIndex = 6
+    textLabel.Parent = button
+
+    local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = button.InputBegan:Connect(function(input)
+        if not isPrimaryPress(input) then return end
+        dragging, moved = true, false
+        dragStart, startPosition = input.Position, button.Position
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = button.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = UIS.InputChanged:Connect(function(input)
+        if not dragging or input ~= dragInput then return end
+        local delta = input.Position - dragStart
+        if delta.Magnitude > 7 then moved = true end
+        button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = UIS.InputEnded:Connect(function(input)
+        if not dragging or not isPrimaryPress(input) then return end
+        dragging = false
+        NoirPersistence.SetPosition("grab_gun_bind_v1", button.Position)
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = button.Activated:Connect(function()
+        if not moved then requestGrabGun() end
+    end)
+    gunUtilityState.bindConnections[#gunUtilityState.bindConnections + 1] = RunService.RenderStepped:Connect(function()
+        if outerGradient.Parent then outerGradient.Rotation = (outerGradient.Rotation + 1) % 360 end
+    end)
+    gunUtilityState.bindGui, gunUtilityState.bindButton = bindGui, button
+    updateGrabGunBindButtonSize()
+end
+
+local function setGrabGunBindButton(enabled)
+    gunUtilityState.bindEnabled = enabled == true
+    if gunUtilityState.bindEnabled then createGrabGunBindButton() else removeGrabGunBindButton() end
+end
+
+removeGrabGunBindButton()
+
+task.spawn(function()
+    local previousDrop, previouslyHadGun = nil, hasGunInInventory()
+    while running do
+        local drop = getDroppedGunPart()
+        if drop ~= previousDrop then
+            if drop and gunUtilityState.droppedGunNotify then
+                notify("Dropped Gun detected", 4)
+            end
+            previousDrop = drop
+        end
+        local hasGun = hasGunInInventory()
+        if hasGun and not previouslyHadGun and gunUtilityState.gunPickupNotify then
+            notify("Gun picked up", 3)
+        end
+        previouslyHadGun = hasGun
+        task.wait(.25)
+    end
+end)
+
+local function setAutoGG(enabled)
+    autoGGState.enabled = enabled == true
+    autoGGState.token += 1
+    local token = autoGGState.token
+    if not autoGGState.enabled then return end
+    task.spawn(function()
+        while running and autoGGState.enabled and autoGGState.token == token do
+            if LocalPlayer.Character and not hasGunInInventory() and getDroppedGunPart() then
+                grabDroppedGun()
+            end
+            task.wait(0.5)
+        end
+    end)
+end
+
 local tab = host.CreateTab()
+
+-- Main universal utilities: all state stays in this scope while the connections retain only what they need.
+do
+    local universalState = {
+        infiniteJump = false,
+        invisible = false,
+        invisibleOriginals = {},
+        invisibleCharacter = nil,
+        invisibleHumanoid = nil,
+        invisibleRoot = nil,
+        invisibleBindEnabled = false,
+        invisibleBindGui = nil,
+        invisibleBindButton = nil,
+        invisibleBindSize = .105,
+        invisibleBindConnections = {},
+    }
+
+    local function disconnectAll(list)
+        for _, connection in ipairs(list) do pcall(function() connection:Disconnect() end) end
+        table.clear(list)
+    end
+
+    -- Integrated from the supplied invisibility method: a short down-frame desync while the toggle is active.
+    local function restoreInvisible()
+        for instance, transparency in pairs(universalState.invisibleOriginals) do
+            if instance and instance.Parent then pcall(function() instance.Transparency = transparency end) end
+        end
+        table.clear(universalState.invisibleOriginals)
+    end
+
+    local function setupInvisibleCharacter(character)
+        universalState.invisibleCharacter = character or LocalPlayer.Character
+        local current = universalState.invisibleCharacter
+        universalState.invisibleHumanoid = current and current:FindFirstChildWhichIsA("Humanoid") or nil
+        universalState.invisibleRoot = current and current:FindFirstChild("HumanoidRootPart") or nil
+        table.clear(universalState.invisibleOriginals)
+        if not current then return end
+        for _, instance in ipairs(current:GetDescendants()) do
+            -- Keep already-hidden parts such as HumanoidRootPart hidden; only fade visible body/accessory parts.
+            if instance:IsA("BasePart") and instance.Transparency == 0 then
+                universalState.invisibleOriginals[instance] = instance.Transparency
+            end
+        end
+    end
+
+    local function setInvisibleTransparency(value)
+        for instance in pairs(universalState.invisibleOriginals) do
+            if instance and instance.Parent then pcall(function() instance.Transparency = value end) end
+        end
+    end
+
+    local function applyInvisible()
+        restoreInvisible()
+        if not universalState.invisible then return end
+        setupInvisibleCharacter(LocalPlayer.Character)
+        -- The supplied script uses half-transparency before the desync pass.
+        setInvisibleTransparency(.5)
+    end
+
+    local function setInvisible(enabled)
+        universalState.invisible = enabled == true
+        applyInvisible()
+        updateInvisibleBindText()
+    end
+
+    RunService.Heartbeat:Connect(function()
+        if not universalState.invisible then return end
+        local root, humanoid = universalState.invisibleRoot, universalState.invisibleHumanoid
+        if not (root and root.Parent and humanoid and humanoid.Parent) then
+            setupInvisibleCharacter(LocalPlayer.Character)
+            root, humanoid = universalState.invisibleRoot, universalState.invisibleHumanoid
+        end
+        if not (root and humanoid) then return end
+        local originalCFrame, originalOffset = root.CFrame, humanoid.CameraOffset
+        local downCFrame = originalCFrame * CFrame.new(0, -200000, 0)
+        local ok = pcall(function()
+            root.CFrame = downCFrame
+            humanoid.CameraOffset = downCFrame:ToObjectSpace(CFrame.new(originalCFrame.Position)).Position
+        end)
+        if not ok then return end
+        RunService.RenderStepped:Wait()
+        pcall(function()
+            if root.Parent then root.CFrame = originalCFrame end
+            if humanoid.Parent then humanoid.CameraOffset = originalOffset end
+        end)
+    end)
+
+    local function updateInvisibleBindText()
+        local button = universalState.invisibleBindButton
+        if not button then return end
+        local label = button:FindFirstChild("Text")
+        if label then label.Text = universalState.invisible and "Invisible\nON" or "Invisible\nOFF" end
+    end
+
+    local function setInvisible(enabled)
+        universalState.invisible = enabled == true
+        applyInvisible()
+        updateInvisibleBindText()
+    end
+
+    local function removeInvisibleBindButton()
+        disconnectAll(universalState.invisibleBindConnections)
+        if universalState.invisibleBindGui then universalState.invisibleBindGui:Destroy() end
+        universalState.invisibleBindGui, universalState.invisibleBindButton = nil, nil
+        for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+            if typeof(parent) == "Instance" then
+                local stale = parent:FindFirstChild("NoirInvisibleBindButton")
+                if stale then stale:Destroy() end
+            end
+        end
+    end
+
+    local function updateInvisibleBindButtonSize()
+        local button, camera = universalState.invisibleBindButton, Workspace.CurrentCamera
+        if not button or not camera then return end
+        local screen = camera.ViewportSize
+        local heightScale = universalState.invisibleBindSize
+        button.Size = UDim2.new(heightScale * (screen.Y / math.max(screen.X, 1)), 0, heightScale, 0)
+    end
+
+    local function createInvisibleBindButton()
+        if universalState.invisibleBindButton then return end
+        removeInvisibleBindButton()
+        local parent = guiParent
+        if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
+        local bindGui = Instance.new("ScreenGui")
+        bindGui.Name, bindGui.ResetOnSpawn, bindGui.IgnoreGuiInset, bindGui.DisplayOrder = "NoirInvisibleBindButton", false, true, 82
+        bindGui.Parent = parent
+
+        local button = Instance.new("ImageButton")
+        button.Name = "Invisible"
+        button.AnchorPoint = Vector2.new(.5, .5)
+        button.Position = NoirPersistence.GetPosition("invisible_bind_v1", UDim2.new(.24, 0, .88, 0))
+        button.Size = UDim2.new(universalState.invisibleBindSize, 0, universalState.invisibleBindSize, 0)
+        button.BackgroundColor3, button.BackgroundTransparency, button.BorderSizePixel = Color3.fromRGB(8, 8, 10), .28, 0
+        button.Image, button.AutoButtonColor, button.ZIndex = "", false, 5
+        button.Parent = bindGui
+        local round = Instance.new("UICorner"); round.CornerRadius = UDim.new(1, 0); round.Parent = button
+        local aspect = Instance.new("UIAspectRatioConstraint"); aspect.AspectRatio = 1; aspect.Parent = button
+        local outerStroke = Instance.new("UIStroke")
+        outerStroke.Color, outerStroke.Thickness, outerStroke.ApplyStrokeMode, outerStroke.Parent = Color3.fromRGB(255, 255, 255), 2, Enum.ApplyStrokeMode.Border, button
+        local outerGradient = Instance.new("UIGradient")
+        outerGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(35,35,40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250,250,252)),
+            ColorSequenceKeypoint.new(.48, Color3.fromRGB(70,70,78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255,255,255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(45,45,52)),
+        })
+        outerGradient.Parent = outerStroke
+        local innerStroke = Instance.new("UIStroke")
+        innerStroke.Color, innerStroke.Transparency, innerStroke.Thickness, innerStroke.Parent = Color3.fromRGB(105,105,112), .5, 1, button
+        local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = innerStroke
+        local label = Instance.new("TextLabel")
+        label.Name, label.AnchorPoint, label.Position, label.Size = "Text", Vector2.new(.5,.5), UDim2.fromScale(.5,.5), UDim2.fromScale(.76,.76)
+        label.BackgroundTransparency, label.TextColor3, label.TextSize, label.TextWrapped, label.Font, label.ZIndex = 1, Color3.fromRGB(245,245,248), 14, true, Enum.Font.Gotham, 6
+        label.Parent = button
+
+        local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = button.InputBegan:Connect(function(input)
+            if not isPrimaryPress(input) then return end
+            dragging, moved, dragStart, startPosition = true, false, input.Position, button.Position
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = button.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = UIS.InputChanged:Connect(function(input)
+            if not dragging or input ~= dragInput then return end
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 7 then moved = true end
+            button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = UIS.InputEnded:Connect(function(input)
+            if not dragging or not isPrimaryPress(input) then return end
+            dragging = false
+            NoirPersistence.SetPosition("invisible_bind_v1", button.Position)
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = button.Activated:Connect(function()
+            if not moved then setInvisible(not universalState.invisible) end
+        end)
+        universalState.invisibleBindConnections[#universalState.invisibleBindConnections + 1] = RunService.RenderStepped:Connect(function()
+            if outerGradient.Parent then outerGradient.Rotation = (outerGradient.Rotation + 1) % 360 end
+        end)
+        universalState.invisibleBindGui, universalState.invisibleBindButton = bindGui, button
+        updateInvisibleBindButtonSize()
+        updateInvisibleBindText()
+    end
+
+    local function setInvisibleBindButton(enabled)
+        universalState.invisibleBindEnabled = enabled == true
+        if universalState.invisibleBindEnabled then createInvisibleBindButton() else removeInvisibleBindButton() end
+    end
+
+
+
+    -- Adapted AntiFling core from the supplied FlingGui: other characters' collision parts are locally disabled while active.
+    universalState.antiFling = false
+    universalState.antiFlingTracked = {}
+    universalState.antiFlingPartSignals = {}
+    universalState.antiFlingNextPart = nil
+
+    local function antiFlingClearPart(part)
+        local signal = universalState.antiFlingPartSignals[part]
+        if signal then pcall(function() signal:Disconnect() end) end
+        universalState.antiFlingPartSignals[part] = nil
+        universalState.antiFlingTracked[part] = nil
+    end
+
+    local function antiFlingTrackPart(part)
+        if not (part and part:IsA("BasePart")) or universalState.antiFlingTracked[part] ~= nil then return end
+        universalState.antiFlingTracked[part] = part.CanCollide
+        universalState.antiFlingPartSignals[part] = part:GetPropertyChangedSignal("CanCollide"):Connect(function()
+            if universalState.antiFling and part.Parent and part.CanCollide then part.CanCollide = false end
+        end)
+        if universalState.antiFling and part.CanCollide then part.CanCollide = false end
+    end
+
+    local function antiFlingSeedCharacter(character)
+        if not character then return end
+        for _, instance in ipairs(character:GetDescendants()) do
+            if instance:IsA("BasePart") then antiFlingTrackPart(instance) end
+        end
+        character.DescendantAdded:Connect(function(instance)
+            if instance:IsA("BasePart") then antiFlingTrackPart(instance) end
+        end)
+        character.DescendantRemoving:Connect(function(instance)
+            if instance:IsA("BasePart") then antiFlingClearPart(instance) end
+        end)
+    end
+
+    local function antiFlingHookPlayer(player)
+        if player == LocalPlayer then return end
+        if player.Character then antiFlingSeedCharacter(player.Character) end
+        player.CharacterAdded:Connect(antiFlingSeedCharacter)
+        player.CharacterRemoving:Connect(function(character)
+            for _, instance in ipairs(character:GetDescendants()) do antiFlingClearPart(instance) end
+        end)
+    end
+
+    local function setAntiFling(enabled)
+        universalState.antiFling = enabled == true
+        if universalState.antiFling then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then antiFlingSeedCharacter(player.Character) end
+            end
+            for part in pairs(universalState.antiFlingTracked) do
+                if part and part.Parent and part.CanCollide then part.CanCollide = false end
+            end
+        else
+            -- Restore the CanCollide values that were present before AntiFling was enabled.
+            for part, originalCanCollide in pairs(universalState.antiFlingTracked) do
+                if part and part.Parent then pcall(function() part.CanCollide = originalCanCollide end) end
+            end
+        end
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do antiFlingHookPlayer(player) end
+    Players.PlayerAdded:Connect(antiFlingHookPlayer)
+    Players.PlayerRemoving:Connect(function(player)
+        if player.Character then
+            for _, instance in ipairs(player.Character:GetDescendants()) do antiFlingClearPart(instance) end
+        end
+    end)
+    local antiFlingStep = RunService.PreSimulation or RunService.Stepped
+    antiFlingStep:Connect(function()
+        if not universalState.antiFling then return end
+        local quota, cursor = 256, universalState.antiFlingNextPart
+        if cursor and universalState.antiFlingTracked[cursor] == nil then cursor = nil end
+        while quota > 0 do
+            cursor = next(universalState.antiFlingTracked, cursor)
+            if not cursor then universalState.antiFlingNextPart = nil; break end
+            if cursor.Parent then
+                if cursor.CanCollide then cursor.CanCollide = false end
+                universalState.antiFlingNextPart = cursor
+            else
+                antiFlingClearPart(cursor)
+                universalState.antiFlingNextPart = nil
+            end
+            quota = quota - 1
+        end
+    end)
+
+
+    UIS.JumpRequest:Connect(function()
+        if not universalState.infiniteJump then return end
+        local humanoid = localHumanoid()
+        if humanoid and humanoid.Health > 0 then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end)
+    LocalPlayer.CharacterAdded:Connect(function(character)
+        task.wait(1)
+        setupInvisibleCharacter(character)
+        if universalState.invisible then setInvisibleTransparency(.5) end
+    end)
+
+    local universalMods = tab:AddSection("MAIN \u{2022} UNIVERSAL", "Movement and survival utilities")
+    universalMods:AddToggle("Infinite Jump", function(enabled) universalState.infiniteJump = enabled == true end)
+    universalMods:AddToggle("AntiFling", setAntiFling)
+
+    local invisibleMods = tab:AddSection("MAIN \u{2022} INVISIBLE", "Desync invisibility and floating bind button")
+    invisibleMods:AddToggle("Invisible", setInvisible)
+    invisibleMods:AddToggle("Enable Invisible Bind Button", setInvisibleBindButton)
+    invisibleMods:AddSlider("Invisible Bind Button Size", 5, 25, universalState.invisibleBindSize * 100, function(value)
+        universalState.invisibleBindSize = (tonumber(value) or 10.5) / 100
+        updateInvisibleBindButtonSize()
+    end)
+    invisibleMods:AddLabel("Round Invisible button: tap to toggle; drag it to move. Its size and position are saved.")
+    -- AddToggle restores saved state synchronously; do not remove an Invisible button that was restored as enabled.
+    if not universalState.invisibleBindEnabled then removeInvisibleBindButton() end
+end
+
+
+-- Visuals are compiled in a separate deferred chunk.  The primary UI stays identical to the last verified mobile-safe build.
+local __noirVisualContext = {
+    tab = tab, players = Players, workspace = Workspace, runService = RunService,
+    localPlayer = LocalPlayer, getPlayers = getPlayers, roleCache = roleCache,
+    getMurderer = function() return murderer end, getSheriff = function() return sheriff end,
+    getHero = function() return hero end, getRoundState = function() return roundState end,
+    -- Visuals can request a role read immediately instead of waiting for their periodic update cycle.
+    refreshRoles = function() task.spawn(refreshTarget) end,
+    isRoleRevealActive = function()
+        if murderer or sheriff or hero then return true end
+        for _, role in pairs(roleCache) do
+            if role == "murderer" or role == "sheriff" or role == "hero" then return true end
+        end
+        return false
+    end,
+    isRunning = function() return running end,
+}
+getgenv().__NoirV4VisualContext = __noirVisualContext
+local __noirVisualSource = [==[
+-- Visuals run as a deferred satellite chunk so the main Noir loader remains within mobile executor limits.
+local V = getgenv().__NoirV4VisualContext
+if type(V) ~= "table" or not V.tab then return end
+
+local state = {
+    revision = 0,
+    feature = {
+        cham = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        esp = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        outline = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        highlight = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        tracer = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        box = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        avatar = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+        fire = {everyone=false,murderer=false,sheriff=false,hero=false,dead=false},
+    },
+    object = {gun=false,knife=false},
+}
+local entries, objectEntries = {}, {}
+-- Players who join after role reveal are lobby spectators until the next role reveal.
+local joinedLobby, roleRevealActive = {}, false
+local drawingState = nil
+local prefix = "NoirSatelliteVisual_"
+
+local function safe(label, callback)
+    local ok, err = pcall(callback)
+    if not ok then warn("[Noir Visuals] " .. tostring(label) .. ": " .. tostring(err)) end
+    return ok
+end
+-- Refresh roles as soon as the Visuals satellite starts, then retry while MM2 finishes assigning roles.
+task.spawn(function()
+    for _, pause in ipairs({0, .25, .6, 1.2, 2}) do
+        if pause > 0 then task.wait(pause) end
+        if V.refreshRoles then safe("initial role refresh", V.refreshRoles) end
+    end
+end)
+local function color(role)
+    if role == "murderer" then return Color3.fromRGB(255,72,82) end
+    if role == "sheriff" then return Color3.fromRGB(72,158,255) end
+    if role == "hero" then return Color3.fromRGB(255,206,72) end
+    if role == "dead" then return Color3.fromRGB(150,150,158) end
+    return Color3.fromRGB(86,230,145)
+end
+local function isInactive(player, character, cached)
+    if cached == "dead" or joinedLobby[player] then return true end
+    local round = V.getRoundState and V.getRoundState() or "waiting"
+    -- During map voting there are no assigned roles yet: all players are lobby/inactive.
+    -- Once the 10-second role reveal has started, known players can use their actual roles.
+    if round == "waiting" and not (V.isRoleRevealActive and V.isRoleRevealActive()) then return true end
+    local teamName = player.Team and string.lower(tostring(player.Team.Name)) or ""
+    if string.find(teamName,"lobby",1,true) or string.find(teamName,"spectat",1,true)
+        or string.find(teamName,"waiting",1,true) or string.find(teamName,"observer",1,true) then return true end
+    for _, container in ipairs({player, character}) do
+        if container then
+            for key, value in pairs(container:GetAttributes()) do
+                local name = string.lower(tostring(key))
+                if (string.find(name,"inround",1,true) or string.find(name,"ingame",1,true)
+                    or string.find(name,"isplaying",1,true) or string.find(name,"alive",1,true)) and value == false then return true end
+                if string.find(name,"state",1,true) or string.find(name,"status",1,true) or string.find(name,"location",1,true) then
+                    local text = string.lower(tostring(value))
+                    if string.find(text,"lobby",1,true) or string.find(text,"spectat",1,true)
+                        or string.find(text,"dead",1,true) or string.find(text,"waiting",1,true) then return true end
+                end
+            end
+            for _, name in ipairs({"InLobby","Spectating","Dead","IsDead"}) do
+                local flag = container:FindFirstChild(name)
+                if flag and flag:IsA("BoolValue") and flag.Value then return true end
+            end
+        end
+    end
+    return false
+end
+local function roleOf(player, character)
+    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+    local cached = V.roleCache and V.roleCache[player.UserId]
+    if not humanoid or humanoid.Health <= 0 or isInactive(player, character, cached) then return "dead" end
+    if player == V.getMurderer() or cached == "murderer" then return "murderer" end
+    if player == V.getSheriff() or cached == "sheriff" then return "sheriff" end
+    if player == V.getHero() or cached == "hero" then return "hero" end
+    return "innocent"
+end
+local function wanted(kind, role)
+    local f = state.feature[kind]
+    return f and (f.everyone or f[role]) or false
+end
+local function anyPlayerVisual()
+    for _, filters in pairs(state.feature) do
+        for _, enabled in pairs(filters) do if enabled then return true end end
+    end
+    return false
+end
+local function clearPlayer(player)
+    local e = entries[player]
+    if not e then return end
+    if e.line then pcall(function() e.line:Remove() end) end
+    for _, item in ipairs(e.items) do pcall(function() item:Destroy() end) end
+    entries[player] = nil
+end
+local function highlight(character, suffix, tint, fill, outline, e)
+    local h = Instance.new("Highlight")
+    h.Name = prefix .. suffix
+    h.Adornee = character
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.FillColor, h.OutlineColor = tint, tint
+    h.FillTransparency, h.OutlineTransparency = fill, outline
+    h.Parent = character
+    table.insert(e.items, h)
+end
+local function billboard(root, suffix, size, offset, e)
+    local b = Instance.new("BillboardGui")
+    b.Name = prefix .. suffix
+    b.Adornee = root
+    b.AlwaysOnTop = true
+    b.Size = size
+    b.StudsOffset = offset
+    b.Parent = root
+    table.insert(e.items, b)
+    return b
+end
+local function apply(player)
+    if player == V.localPlayer then return end
+    local character = player.Character
+    if not character then clearPlayer(player); return end
+    local root = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+    local role = roleOf(player, character)
+    local sign = tostring(state.revision) .. ":" .. role .. ":" .. tostring(root)
+    local old = entries[player]
+    if old and old.character == character and old.sign == sign then return end
+    clearPlayer(player)
+    if not anyPlayerVisual() then return end
+    local tint = color(role)
+    local e = {character=character, sign=sign, tint=tint, items={}, line=nil}
+    entries[player] = e
+    if wanted("cham",role) then highlight(character,"Cham",tint,.45,1,e) end
+    if wanted("outline",role) then highlight(character,"Outline",tint,1,0,e) end
+    if wanted("highlight",role) then highlight(character,"Highlight",tint,.68,.05,e) end
+    if wanted("tracer",role) then
+        if drawingState == nil then
+            local ok, api = pcall(function() return Drawing end)
+            drawingState = ok and type(api) == "table" and type(api.new) == "function" and api or false
+        end
+        if drawingState then
+            local line = drawingState.new("Line")
+            line.Thickness, line.Transparency, line.Color, line.Visible = 1.5, 1, tint, false
+            e.line = line
+        end
+    end
+    if root and wanted("esp",role) then
+        local b = billboard(root,"ESP",UDim2.fromOffset(156,42),Vector3.new(0,3.4,0),e)
+        local l = Instance.new("TextLabel")
+        l.Size, l.BackgroundTransparency, l.Font, l.TextSize = UDim2.fromScale(1,1), 1, Enum.Font.GothamSemibold, 14
+        l.TextColor3, l.TextStrokeTransparency = Color3.new(1,1,1), .35
+        l.Text, l.Parent = player.DisplayName .. "\n" .. string.upper(role), b
+    end
+    if root and wanted("box",role) then
+        local b = billboard(root,"Box",UDim2.fromOffset(86,122),Vector3.new(0,1.8,0),e)
+        local f = Instance.new("Frame")
+        f.Size, f.BackgroundTransparency, f.Parent = UDim2.fromScale(1,1), 1, b
+        local s = Instance.new("UIStroke")
+        s.Color, s.Thickness, s.Parent = tint, 1.7, f
+    end
+    if root and wanted("avatar",role) then
+        local b = billboard(root,"Avatar",UDim2.fromOffset(58,58),Vector3.new(0,4.8,0),e)
+        local image = Instance.new("ImageLabel")
+        image.Size, image.BackgroundColor3, image.BorderSizePixel, image.Parent = UDim2.fromScale(1,1), Color3.fromRGB(12,14,18), 0, b
+        local c = Instance.new("UICorner"); c.CornerRadius, c.Parent = UDim.new(1,0), image
+        local s = Instance.new("UIStroke"); s.Color, s.Thickness, s.Parent = tint, 1.5, image
+        task.spawn(function()
+            local ok, asset = pcall(function() return V.players:GetUserThumbnailAsync(player.UserId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size150x150) end)
+            if ok and image.Parent then image.Image = asset end
+        end)
+    end
+    if root and wanted("fire",role) then
+        local flame = Instance.new("Fire")
+        flame.Name, flame.Color, flame.SecondaryColor, flame.Size, flame.Heat, flame.Parent = prefix.."Fire", tint, tint:Lerp(Color3.new(1,1,1),.35), 5, 7, root
+        table.insert(e.items, flame)
+    end
+end
+local function refreshPlayers()
+    local seen = {}
+    for _, player in ipairs(V.getPlayers()) do
+        if player ~= V.localPlayer then seen[player] = true; apply(player) end
+    end
+    for player in pairs(entries) do if not seen[player] then clearPlayer(player) end end
+end
+local function objectType(instance)
+    if not instance:IsA("BasePart") then return nil end
+    local owner = instance:FindFirstAncestorOfClass("Model")
+    if owner and V.players:GetPlayerFromCharacter(owner) then return nil end
+    local name = string.lower(instance.Name)
+    if name == "gundrop" or name == "gun" or string.find(name,"droppedgun",1,true) or string.find(name,"gun_drop",1,true) then return "gun" end
+    if string.find(name,"throw",1,true) and string.find(name,"knife",1,true) then return "knife" end
+end
+local function clearObject(instance)
+    local e = objectEntries[instance]
+    if e then for _, item in ipairs(e) do pcall(function() item:Destroy() end) end; objectEntries[instance] = nil end
+end
+local function refreshObjects()
+    if not state.object.gun and not state.object.knife then
+        for instance in pairs(objectEntries) do clearObject(instance) end
+        return
+    end
+    local seen = {}
+    for _, instance in ipairs(V.workspace:GetDescendants()) do
+        local kind = objectType(instance)
+        if kind and state.object[kind] then
+            seen[instance] = true
+            if not objectEntries[instance] then
+                local tint = kind == "gun" and Color3.fromRGB(72,158,255) or Color3.fromRGB(255,126,72)
+                local h = Instance.new("Highlight")
+                h.Name, h.Adornee, h.DepthMode = prefix.."Object", instance, Enum.HighlightDepthMode.AlwaysOnTop
+                h.FillColor, h.OutlineColor, h.FillTransparency, h.OutlineTransparency, h.Parent = tint,tint,.72,0,instance
+                local b = Instance.new("BillboardGui")
+                b.Name, b.Adornee, b.AlwaysOnTop, b.Size, b.StudsOffset, b.Parent = prefix.."ObjectLabel",instance,true,UDim2.fromOffset(132,24),Vector3.new(0,1.5,0),instance
+                local l = Instance.new("TextLabel")
+                l.Size,l.BackgroundTransparency,l.Font,l.TextSize,l.TextColor3,l.TextStrokeTransparency,l.Text,l.Parent = UDim2.fromScale(1,1),1,Enum.Font.GothamBold,12,tint,.35,(kind=="gun" and "DROPPED GUN" or "THROWING KNIFE"),b
+                objectEntries[instance] = {h,b}
+            end
+        end
+    end
+    for instance in pairs(objectEntries) do if not seen[instance] or not instance.Parent then clearObject(instance) end end
+end
+local function setFilter(kind, filter, enabled)
+    state.feature[kind][filter] = enabled == true
+    state.revision = state.revision + 1
+    safe("player refresh", refreshPlayers)
+end
+local function setObject(kind, enabled)
+    state.object[kind] = enabled == true
+    safe("object refresh", refreshObjects)
+end
+V.runService.RenderStepped:Connect(function()
+    if not next(entries) then return end
+    safe("tracer", function()
+        local camera = V.workspace.CurrentCamera
+        if not camera then return end
+        local viewport, origin = camera.ViewportSize, nil
+        origin = Vector2.new(viewport.X*.5,viewport.Y)
+        for _, e in pairs(entries) do
+            if e.line then
+                local root = e.character and e.character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local point, visible = camera:WorldToViewportPoint(root.Position)
+                    e.line.From,e.line.To,e.line.Color,e.line.Visible = origin,Vector2.new(point.X,point.Y),e.tint,visible and point.Z>0
+                else e.line.Visible = false end
+            end
+        end
+    end)
+end)
+V.players.PlayerAdded:Connect(function(player)
+    -- A user arriving after roles have been dealt is in the lobby for this round.
+    if V.isRoleRevealActive and V.isRoleRevealActive() then joinedLobby[player] = true end
+end)
+V.players.PlayerRemoving:Connect(function(player)
+    joinedLobby[player] = nil
+    safe("cleanup",function() clearPlayer(player) end)
+end)
+task.spawn(function()
+    while V.isRunning() do
+        local revealing = V.isRoleRevealActive and V.isRoleRevealActive() or false
+        -- The first role reveal of a new round admits players that were waiting before it.
+        if revealing and not roleRevealActive then table.clear(joinedLobby) end
+        roleRevealActive = revealing
+        if anyPlayerVisual() or next(entries) then safe("player update",refreshPlayers) end
+        if state.object.gun or state.object.knife or next(objectEntries) then safe("object update",refreshObjects) end
+        task.wait(.35)
+    end
+end)
+
+local filters = {{"Everyone","everyone"},{"Murderer Only","murderer"},{"Sheriff Only","sheriff"},{"Hero Only","hero"},{"Dead Only","dead"}}
+for _, definition in ipairs({{"CHAM","cham"},{"ESP","esp"},{"OUTLINE","outline"},{"HIGHLIGHT","highlight"},{"TRACER","tracer"},{"ESP BOX","box"},{"ESP AVATAR","avatar"},{"ESP FIRE","fire"}}) do
+    local title, kind = definition[1], definition[2]
+    local section = V.tab:AddSection("VISUAL \u{2022} "..title,"BY PLAYER")
+    for _, f in ipairs(filters) do
+        local label, filter = f[1], f[2]
+        section:AddToggle(label,function(enabled) safe("toggle",function() setFilter(kind,filter,enabled) end) end)
+    end
+end
+local objects = V.tab:AddSection("VISUAL \u{2022} BY OBJECT","Object ESP")
+objects:AddToggle("Dropped Gun",function(enabled) safe("object toggle",function() setObject("gun",enabled) end) end)
+objects:AddToggle("Throwing Knives",function(enabled) safe("object toggle",function() setObject("knife",enabled) end) end)
+
+]==]
+task.defer(function()
+    local compiler = loadstring
+    if type(compiler) ~= "function" then
+        warn("[Noir Visuals] loadstring is unavailable; main Noir loaded without the optional Visuals module.")
+        return
+    end
+    local okCompile, module = pcall(compiler, __noirVisualSource)
+    if not okCompile or type(module) ~= "function" then
+        warn("[Noir Visuals] module compile failed: " .. tostring(module))
+        return
+    end
+    local okRun, err = xpcall(module, function(message) return tostring(message) end)
+    if not okRun then warn("[Noir Visuals] module startup failed: " .. tostring(err)) end
+end)
+
+
+
+-- Noclip and Fly are compiled in an isolated deferred chunk so they do not exceed the primary mobile Luau local-register budget.
+getgenv().__NoirMovementContext = {
+    tab = tab, players = Players, uis = UIS, runService = RunService, workspace = Workspace,
+    localPlayer = LocalPlayer, persistence = NoirPersistence, guiParent = guiParent, coreGui = CoreGui,
+    isPrimaryPress = isPrimaryPress,
+}
+task.defer(function()
+    local __noirMovementSource = [==[
+-- Noclip and Fly run in an isolated module to avoid the mobile Luau register limit in the main loader.
+local M = getgenv().__NoirMovementContext
+if type(M) ~= "table" or not M.tab or not M.persistence then return end
+
+local Players, UIS, RunService, Workspace = M.players, M.uis, M.runService, M.workspace
+local LocalPlayer, Persistence = M.localPlayer, M.persistence
+local state = {
+    noclip = false, noclipOriginals = {},
+    fly = false, flyVelocity = nil, flyGyro = nil, flyConnection = nil,
+    flyHumanoid = nil, flyAutoRotate = true, flyPlatformStand = false,
+    flyStateEnabled = {}, flyAnimate = nil, flyAnimateDisabled = false,
+    flySpeed = 48,
+}
+-- Uses the supplied universal-fly method: PlatformStand plus BodyGyro/BodyVelocity
+-- on UpperTorso (R15) or Torso (R6), with Humanoid:TranslateBy movement.
+local FLY_STATES = {
+    Enum.HumanoidStateType.Climbing, Enum.HumanoidStateType.FallingDown,
+    Enum.HumanoidStateType.Flying, Enum.HumanoidStateType.Freefall,
+    Enum.HumanoidStateType.GettingUp, Enum.HumanoidStateType.Jumping,
+    Enum.HumanoidStateType.Landed, Enum.HumanoidStateType.Physics,
+    Enum.HumanoidStateType.PlatformStanding, Enum.HumanoidStateType.Ragdoll,
+    Enum.HumanoidStateType.Running, Enum.HumanoidStateType.RunningNoPhysics,
+    Enum.HumanoidStateType.Seated, Enum.HumanoidStateType.StrafingNoPhysics,
+    Enum.HumanoidStateType.Swimming,
+}
+
+local function applyNoclip()
+    if not state.noclip then return end
+    local character = LocalPlayer.Character
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if state.noclipOriginals[part] == nil then state.noclipOriginals[part] = part.CanCollide end
+            if part.CanCollide then part.CanCollide = false end
+        end
+    end
+end
+local function restoreNoclip()
+    for part, original in pairs(state.noclipOriginals) do
+        if part and part.Parent then pcall(function() part.CanCollide = original end) end
+    end
+    table.clear(state.noclipOriginals)
+end
+local function setNoclip(enabled)
+    state.noclip = enabled == true
+    if state.noclip then applyNoclip() else restoreNoclip() end
+end
+RunService.Stepped:Connect(function() if state.noclip then applyNoclip() end end)
+
+local function restoreFlyCharacter()
+    local humanoid = state.flyHumanoid
+    if humanoid and humanoid.Parent then
+        humanoid.AutoRotate = state.flyAutoRotate
+        humanoid.PlatformStand = state.flyPlatformStand
+        for _, stateType in ipairs(FLY_STATES) do
+            local wasEnabled = state.flyStateEnabled[stateType.Name]
+            if wasEnabled ~= nil then pcall(function() humanoid:SetStateEnabled(stateType, wasEnabled) end) end
+        end
+        if not state.flyPlatformStand then
+            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+            task.delay(.08, function()
+                if humanoid.Parent and not state.fly then pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end) end
+            end)
+        else
+            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Running) end)
+        end
+    end
+    if state.flyAnimate and state.flyAnimate.Parent then state.flyAnimate.Disabled = state.flyAnimateDisabled end
+    state.flyHumanoid, state.flyAnimate = nil, nil
+    table.clear(state.flyStateEnabled)
+end
+
+local function stopFly()
+    if state.flyConnection then state.flyConnection:Disconnect(); state.flyConnection = nil end
+    if state.flyVelocity then state.flyVelocity:Destroy(); state.flyVelocity = nil end
+    if state.flyGyro then state.flyGyro:Destroy(); state.flyGyro = nil end
+    restoreFlyCharacter()
+end
+
+local function startFly()
+    stopFly()
+    if not state.fly then return end
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    -- The linked script handles R15 UpperTorso and R6 Torso.  HumanoidRootPart is used here
+    -- for the constraints because it prevents the torso/root physics fight that causes shaking.
+    local sourceTorso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"))
+    if not (humanoid and root and (sourceTorso or root)) then return end
+
+    -- Keep the source's BodyVelocity flight core, but leave Roblox's humanoid states and animation system intact.
+    -- Disabling them (and forcing a BodyGyro at the camera angle) is what caused the visible body rocking.
+    state.flyHumanoid, state.flyAutoRotate, state.flyPlatformStand = humanoid, humanoid.AutoRotate, humanoid.PlatformStand
+    humanoid.AutoRotate = false
+    -- PlatformStand is needed for a Humanoid avatar to physically pitch with the camera.
+    humanoid.PlatformStand = true
+    pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Physics) end)
+
+    -- Full 3D camera orientation: use the linked Fly's high-response gyro settings for quick camera following.
+    local gyro = Instance.new("BodyGyro")
+    gyro.Name, gyro.P, gyro.D, gyro.MaxTorque, gyro.CFrame = "NoirFlyGyro", 9e4, 800, Vector3.new(9e9,9e9,9e9), root.CFrame
+    gyro.Parent = root
+    local velocity = Instance.new("BodyVelocity")
+    velocity.Name, velocity.P, velocity.Velocity, velocity.MaxForce = "NoirFlyVelocity", 12000, Vector3.zero, Vector3.new(9e9,9e9,9e9)
+    velocity.Parent = root
+    state.flyVelocity, state.flyGyro = velocity, gyro
+
+    state.flyConnection = RunService.Heartbeat:Connect(function()
+        if not state.fly or not (character.Parent and humanoid.Parent and root.Parent and velocity.Parent and gyro.Parent) then return end
+        local camera = Workspace.CurrentCamera
+        if not camera then return end
+        -- Mobile joystick flight: push forward/back while aiming the camera up or down to rise/descend.
+        -- MoveDirection supplies the joystick vector; projecting it on the camera's flat axes preserves its intent.
+        local look = camera.CFrame.LookVector
+        local right = camera.CFrame.RightVector
+        local flatLook = Vector3.new(look.X, 0, look.Z)
+        local flatRight = Vector3.new(right.X, 0, right.Z)
+        gyro.CFrame = CFrame.new(root.Position, root.Position + look)
+        local input = humanoid.MoveDirection
+        local desiredVelocity = Vector3.zero
+        if input.Magnitude > .001 then
+            local forwardInput = flatLook.Magnitude > .001 and input:Dot(flatLook.Unit) or 0
+            local sideInput = flatRight.Magnitude > .001 and input:Dot(flatRight.Unit) or 0
+            local flightDirection = look * forwardInput + right * sideInput
+            if flightDirection.Magnitude > .001 then desiredVelocity = flightDirection.Unit * state.flySpeed end
+        end
+        velocity.Velocity = desiredVelocity
+    end)
+end
+
+local function setFly(enabled)
+    state.fly = enabled == true
+    if state.fly then startFly() else stopFly() end
+end
+
+local binds = {
+    noclip = { text="Noclip", key="noclip_bind_v1", default=UDim2.new(.38,0,.88,0), size=.105, enabled=false, gui=nil, button=nil, connections={} },
+    fly = { text="Fly", key="fly_bind_v1", default=UDim2.new(.52,0,.88,0), size=.105, enabled=false, gui=nil, button=nil, connections={} },
+}
+local function disconnect(bind)
+    for _, connection in ipairs(bind.connections) do pcall(function() connection:Disconnect() end) end
+    table.clear(bind.connections)
+end
+local function updateSize(bind)
+    local camera = Workspace.CurrentCamera
+    if not (bind.button and camera) then return end
+    local screen = camera.ViewportSize
+    bind.button.Size = UDim2.new(bind.size * (screen.Y / math.max(screen.X,1)),0,bind.size,0)
+end
+local function updateText(bind, active)
+    local label = bind.button and bind.button:FindFirstChild("Text")
+    if label then label.Text = bind.text .. "\n" .. (active and "ON" or "OFF") end
+end
+local function removeBind(bind)
+    disconnect(bind)
+    if bind.gui then bind.gui:Destroy() end
+    bind.gui, bind.button = nil, nil
+    for _, parent in ipairs({M.guiParent, M.coreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui")}) do
+        if typeof(parent) == "Instance" then
+            local old = parent:FindFirstChild("Noir" .. bind.text .. "BindButton")
+            if old then old:Destroy() end
+        end
+    end
+end
+local function createBind(bind, isActive, setActive)
+    if bind.button then return end
+    removeBind(bind)
+    local parent = M.guiParent
+    if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name, screenGui.ResetOnSpawn, screenGui.IgnoreGuiInset, screenGui.DisplayOrder = "Noir" .. bind.text .. "BindButton", false, true, 82
+    screenGui.Parent = parent
+    local button = Instance.new("ImageButton")
+    button.Name, button.AnchorPoint = bind.text, Vector2.new(.5,.5)
+    button.Position = Persistence.GetPosition(bind.key,bind.default)
+    button.BackgroundColor3, button.BackgroundTransparency, button.BorderSizePixel, button.Image, button.AutoButtonColor, button.ZIndex = Color3.fromRGB(8,8,10),.28,0,"",false,5
+    button.Parent = screenGui
+    local circle = Instance.new("UICorner"); circle.CornerRadius = UDim.new(1,0); circle.Parent = button
+    local aspect = Instance.new("UIAspectRatioConstraint"); aspect.AspectRatio = 1; aspect.Parent = button
+    local outer = Instance.new("UIStroke"); outer.Color,outer.Thickness,outer.ApplyStrokeMode,outer.Parent=Color3.fromRGB(255,255,255),2,Enum.ApplyStrokeMode.Border,button
+    local gradient = Instance.new("UIGradient")
+    gradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(35,35,40)),ColorSequenceKeypoint.new(.22,Color3.fromRGB(250,250,252)),ColorSequenceKeypoint.new(.48,Color3.fromRGB(70,70,78)),ColorSequenceKeypoint.new(.72,Color3.fromRGB(255,255,255)),ColorSequenceKeypoint.new(1,Color3.fromRGB(45,45,52))})
+    gradient.Parent=outer
+    local inner=Instance.new("UIStroke");inner.Color,inner.Transparency,inner.Thickness,inner.Parent=Color3.fromRGB(105,105,112),.5,1,button
+    local innerGradient=gradient:Clone();innerGradient.Rotation=180;innerGradient.Parent=inner
+    local label=Instance.new("TextLabel")
+    label.Name,label.AnchorPoint,label.Position,label.Size="Text",Vector2.new(.5,.5),UDim2.fromScale(.5,.5),UDim2.fromScale(.76,.76)
+    label.BackgroundTransparency,label.TextColor3,label.TextSize,label.TextWrapped,label.Font,label.ZIndex=1,Color3.fromRGB(245,245,248),14,true,Enum.Font.Gotham,6
+    label.Parent=button
+    local dragging,moved,dragStart,startPosition,dragInput=false,false,nil,nil,nil
+    bind.connections[#bind.connections+1]=button.InputBegan:Connect(function(input)
+        if not M.isPrimaryPress(input) then return end
+        dragging,moved,dragStart,startPosition=true,false,input.Position,button.Position
+    end)
+    bind.connections[#bind.connections+1]=button.InputChanged:Connect(function(input)
+        if input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch then dragInput=input end
+    end)
+    bind.connections[#bind.connections+1]=UIS.InputChanged:Connect(function(input)
+        if not dragging or input~=dragInput then return end
+        local delta=input.Position-dragStart
+        if delta.Magnitude>7 then moved=true end
+        button.Position=UDim2.new(startPosition.X.Scale,startPosition.X.Offset+delta.X,startPosition.Y.Scale,startPosition.Y.Offset+delta.Y)
+    end)
+    bind.connections[#bind.connections+1]=UIS.InputEnded:Connect(function(input)
+        if not dragging or not M.isPrimaryPress(input) then return end
+        dragging=false
+        Persistence.SetPosition(bind.key,button.Position)
+    end)
+    bind.connections[#bind.connections+1]=button.Activated:Connect(function() if not moved then setActive(not isActive()) end end)
+    bind.connections[#bind.connections+1]=RunService.RenderStepped:Connect(function() if gradient.Parent then gradient.Rotation=(gradient.Rotation+1)%360 end end)
+    bind.gui,bind.button=screenGui,button
+    updateSize(bind);updateText(bind,isActive())
+end
+local function setBind(bind, enabled, isActive, setActive)
+    bind.enabled=enabled==true
+    if bind.enabled then createBind(bind,isActive,setActive) else removeBind(bind) end
+end
+local function syncNoclipText() updateText(binds.noclip,state.noclip) end
+local function syncFlyText() updateText(binds.fly,state.fly) end
+
+local noclipSection=M.tab:AddSection("MAIN \u{2022} NOCLIP","Walk through local collision")
+noclipSection:AddToggle("Noclip",function(enabled) setNoclip(enabled);syncNoclipText() end)
+noclipSection:AddToggle("Enable Noclip Bind Button",function(enabled)
+    setBind(binds.noclip,enabled,function() return state.noclip end,function(active) setNoclip(active);syncNoclipText() end)
+end)
+noclipSection:AddSlider("Noclip Bind Button Size",5,25,binds.noclip.size*100,function(value) binds.noclip.size=(tonumber(value) or 10.5)/100;updateSize(binds.noclip) end)
+
+local flySection=M.tab:AddSection("MAIN \u{2022} FLY","Camera-guided movement")
+flySection:AddToggle("Fly",function(enabled) setFly(enabled);syncFlyText() end)
+flySection:AddToggle("Enable Fly Bind Button",function(enabled)
+    setBind(binds.fly,enabled,function() return state.fly end,function(active) setFly(active);syncFlyText() end)
+end)
+flySection:AddSlider("Fly Bind Button Size",5,25,binds.fly.size*100,function(value) binds.fly.size=(tonumber(value) or 10.5)/100;updateSize(binds.fly) end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    if state.noclip then table.clear(state.noclipOriginals);applyNoclip() end
+    if state.fly then startFly() end
+end)
+
+]==]
+    local compiler = loadstring
+    if type(compiler) ~= "function" then
+        warn("[Noir Movement] loadstring is unavailable; Noclip and Fly could not be started.")
+        return
+    end
+    local okCompile, module = pcall(compiler, __noirMovementSource)
+    if not okCompile or type(module) ~= "function" then
+        warn("[Noir Movement] module compile failed: " .. tostring(module))
+        return
+    end
+    local okRun, err = xpcall(module, function(message) return tostring(message) end)
+    if not okRun then warn("[Noir Movement] module startup failed: " .. tostring(err)) end
+end)
+
+
+
+
+-- Fun-client cosmetics run separately so the primary mobile-safe loader stays within Luau's register budget.
+getgenv().__NoirAvatarCosmeticsContext = { tab = tab, localPlayer = LocalPlayer, runService = RunService }
+task.defer(function()
+    local __noirAvatarCosmeticsSource = [==[
+-- Persistent client-side avatar cosmetics for Noir's Main tab.
+local A = getgenv().__NoirAvatarCosmeticsContext
+if type(A) ~= "table" or not A.tab or not A.localPlayer then return end
+
+local LocalPlayer = A.localPlayer
+local RunService = A.runService
+local KORBLOX_RIGHT_LEG = 139607718
+local KORBLOX_PARTS = {
+    RightFoot = { mesh = "rbxassetid://902942089", transparency = 1 },
+    RightLowerLeg = { mesh = "rbxassetid://902942093", transparency = 1 },
+    RightUpperLeg = { mesh = "rbxassetid://902942096", texture = "rbxassetid://902843398", transparency = 0 },
+}
+local state = {
+    korblox = false,
+    headless = false,
+    korbloxOriginals = setmetatable({}, {__mode = "k"}),
+    korbloxPartOriginals = setmetatable({}, {__mode = "k"}),
+    headOriginals = setmetatable({}, {__mode = "k"}),
+    applyingKorblox = setmetatable({}, {__mode = "k"}),
+}
+
+local function getHumanoid(character)
+    return character and character:FindFirstChildWhichIsA("Humanoid")
+end
+
+local function applyHeadless(character)
+    if not state.headless then return end
+    local head = character and character:FindFirstChild("Head")
+    if not (head and head:IsA("BasePart")) then return end
+    local original = state.headOriginals[head]
+    if not original then
+        original = { transparency = head.LocalTransparencyModifier, decals = {} }
+        state.headOriginals[head] = original
+        for _, descendant in ipairs(head:GetDescendants()) do
+            if descendant:IsA("Decal") or descendant:IsA("Texture") then original.decals[descendant] = descendant.Transparency end
+        end
+    end
+    head.LocalTransparencyModifier = 1
+    for decal in pairs(original.decals) do
+        if decal and decal.Parent then decal.Transparency = 1 end
+    end
+    local face = head:FindFirstChildWhichIsA("Decal")
+    if face and original.decals[face] == nil then
+        original.decals[face] = face.Transparency
+        face.Transparency = 1
+    end
+end
+
+local function restoreHeadless(character)
+    local head = character and character:FindFirstChild("Head")
+    local original = head and state.headOriginals[head]
+    if not original then return end
+    if head.Parent then head.LocalTransparencyModifier = original.transparency end
+    for decal, transparency in pairs(original.decals) do
+        if decal and decal.Parent then decal.Transparency = transparency end
+    end
+    state.headOriginals[head] = nil
+end
+
+local function applyKorbloxMesh(character)
+    if not state.korblox or not character then return end
+    for partName, appearance in pairs(KORBLOX_PARTS) do
+        local part = character:FindFirstChild(partName)
+        if part and part:IsA("MeshPart") then
+            local original = state.korbloxPartOriginals[part]
+            if not original then
+                original = { mesh = part.MeshId, texture = part.TextureID, transparency = part.Transparency }
+                state.korbloxPartOriginals[part] = original
+            end
+            pcall(function() part.MeshId = appearance.mesh end)
+            if appearance.texture then pcall(function() part.TextureID = appearance.texture end) end
+            pcall(function() part.Transparency = appearance.transparency end)
+        end
+    end
+end
+
+local function restoreKorbloxMesh(character)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        local original = state.korbloxPartOriginals[part]
+        if original and part:IsA("MeshPart") then
+            pcall(function()
+                part.MeshId, part.TextureID, part.Transparency = original.mesh, original.texture, original.transparency
+            end)
+            state.korbloxPartOriginals[part] = nil
+        end
+    end
+end
+
+local function applyKorblox(character)
+    if not state.korblox then return end
+    local humanoid = getHumanoid(character)
+    if not (humanoid and humanoid.RigType == Enum.HumanoidRigType.R15) or state.applyingKorblox[character] then return end
+    local ok, description = pcall(function() return humanoid:GetAppliedDescription() end)
+    if not ok or not description then return end
+    if state.korbloxOriginals[character] == nil then state.korbloxOriginals[character] = description.RightLeg end
+    if description.RightLeg ~= KORBLOX_RIGHT_LEG then
+        state.applyingKorblox[character] = true
+        description.RightLeg = KORBLOX_RIGHT_LEG
+        pcall(function() humanoid:ApplyDescription(description) end)
+        task.delay(.4, function()
+            state.applyingKorblox[character] = nil
+            if character.Parent then applyKorbloxMesh(character) end
+            if state.headless and character.Parent then applyHeadless(character) end
+        end)
+    end
+    -- HumanoidDescription can be rejected or overwritten in live games; direct R15 mesh fallback keeps the cosmetic visible.
+    applyKorbloxMesh(character)
+    applyHeadless(character)
+end
+
+local function restoreKorblox(character)
+    local originalRightLeg = character and state.korbloxOriginals[character]
+    local humanoid = getHumanoid(character)
+    if not (humanoid and originalRightLeg ~= nil) then return end
+    local ok, description = pcall(function() return humanoid:GetAppliedDescription() end)
+    if ok and description then
+        description.RightLeg = originalRightLeg
+        pcall(function() humanoid:ApplyDescription(description) end)
+    end
+    restoreKorbloxMesh(character)
+    state.korbloxOriginals[character] = nil
+end
+
+local function applyCurrentCharacter()
+    local character = LocalPlayer.Character
+    if state.korblox then applyKorblox(character) end
+    if state.headless then applyHeadless(character) end
+end
+
+local section = A.tab:AddSection("MAIN \u{2022} FUN CLIENT", "Respawn-persistent local avatar cosmetics")
+section:AddToggle("Permanent Korblox (R15)", function(enabled)
+    state.korblox = enabled == true
+    local character = LocalPlayer.Character
+    if state.korblox then applyKorblox(character) else restoreKorblox(character) end
+end)
+section:AddToggle("Permanent Headless", function(enabled)
+    state.headless = enabled == true
+    local character = LocalPlayer.Character
+    if state.headless then applyHeadless(character) else restoreHeadless(character) end
+end)
+section:AddLabel("Both looks are reapplied after each respawn. Korblox requires an R15 character.")
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+    task.wait(.75)
+    applyKorblox(character)
+    applyHeadless(character)
+end)
+LocalPlayer.CharacterAppearanceLoaded:Connect(function(character)
+    task.wait(.2)
+    if state.korblox then applyKorblox(character) end
+    if state.headless then applyHeadless(character) end
+end)
+-- Games may refresh an avatar after it has spawned. Keep the two requested client cosmetics applied while enabled.
+if RunService then
+    -- Avatar refreshes only need to counter occasional game appearance writes; avoid doing mesh/head work every render frame.
+    local nextRefresh = 0
+    RunService.Heartbeat:Connect(function()
+        local now = os.clock()
+        if now < nextRefresh then return end
+        nextRefresh = now + .12
+        local character = LocalPlayer.Character
+        if state.korblox then applyKorbloxMesh(character) end
+        if state.headless then applyHeadless(character) end
+    end)
+end
+task.defer(applyCurrentCharacter)
+
+]==]
+    local compiler = loadstring
+    if type(compiler) ~= "function" then
+        warn("[Noir Avatar Cosmetics] loadstring is unavailable; cosmetic controls could not be started.")
+        return
+    end
+    local okCompile, moduleFn = pcall(compiler, __noirAvatarCosmeticsSource)
+    if not okCompile or type(moduleFn) ~= "function" then
+        warn("[Noir Avatar Cosmetics] module compile failed: " .. tostring(moduleFn))
+        return
+    end
+    local okRun, err = xpcall(moduleFn, function(message) return tostring(message) end)
+    if not okRun then warn("[Noir Avatar Cosmetics] module startup failed: " .. tostring(err)) end
+end)
+
+
+
+
+-- Full 7yd7 Emotes port, hosted in Noir's native Emotes page instead of as an external ODH plugin.
+getgenv().__NoirEmotesContext = {
+    container = emotesContent,
+    theme = { base = C.base, panel = C.panel, surface = C.surface, card = C.card, button = C.btn, accent = C.accent, text = C.text, dim = C.dim, border = C.border },
+    SetCanvasHeight = function(height)
+        emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(200, tonumber(height) or 664))
+    end,
+    Notify = function(textValue, duration) notify("Emotes: " .. tostring(textValue), duration or 3) end,
+}
+task.defer(function()
+    local __noirEmotesSource = [==[
+-- 7yd7 Emotes — Overdrive H plugin + responsive thumbnail card browser.
+-- Original: https://github.com/7yd7/Hub/blob/Branch/GUIS/Emotes.lua
+-- Catalog: 7yd7/sniper-Emote, EmoteSniper.json. No remote Lua execution.
+-- Separate card GUI; original animation bundles/themes/HUD editor are not included.
+-- R15 only. Asset permissions and replication remain controlled by Roblox/the game.
+-- Integrated into Noir's native Emotes tab. The catalog source stays data-only; no remote Lua is executed.
+local shared=getgenv().__NoirEmotesContext
+local container=shared and shared.container
+if not shared or not (container and typeof(container)=="Instance") then
+    warn("[Noir Emotes] native Emotes tab container unavailable.")
+    return
+end
+local KEY="Noir_7yd7_EmotesRuntime_v1"
+local previous=_G[KEY]
+if type(previous)=="table" and previous.alive and type(previous.Cleanup)=="function" then
+    pcall(previous.Cleanup)
+end
+local Players=game:GetService("Players")
+local Player=Players.LocalPlayer
+if not Player then warn("[ODH Emotes] LocalPlayer unavailable.");return end
+local HttpService=game:GetService("HttpService")
+local RunService=game:GetService("RunService")
+local UIS=game:GetService("UserInputService")
+local runtime={version=7,alive=true,initializing=true,generation=0,filterGeneration=0,page=1,catalog={},filtered={},resolutions={},connections={}}
+local prefs={windowTransparency=22,thumbnailSize=68,thumbnailPresetVersion=2,playbackModeVersion=2,shortcuts={},browserOnLoad=false,loop=false,walk=false,speed=1,favoritesOnly=false,query="",customId="",customKind="Catalog emote ID",favorites={}}
+local FILE="ODH_Emotes_settings.json"
+local CACHE="ODH_Emotes_catalog.json"
+local URL="https://raw.githubusercontent.com/7yd7/sniper-Emote/refs/heads/test/EmoteSniper.json"
+local PAGE_SIZE=12
+local MAX_SHORTCUTS=12
+local warnings={}
+local function Notify(text)
+    if type(shared.Notify)=="function" then pcall(shared.Notify,"Emotes: "..text,5) end
+end
+local function WarnOnce(key,text)
+    if warnings[key] then return end
+    warnings[key]=true;warn("[ODH Emotes] "..text);Notify(text)
+end
+local env={}
+if type(getgenv)=="function" then
+    local ok,value=pcall(getgenv)
+    if ok and type(value)=="table" then env=value end
+end
+local read=type(readfile)=="function" and readfile or env.readfile
+local write=type(writefile)=="function" and writefile or env.writefile
+local exists=type(isfile)=="function" and isfile or env.isfile
+local canSave=type(read)=="function" and type(write)=="function"
+runtime.settingsFile=FILE
+runtime.saveStatus=canSave and "Not saved" or "Session only"
+runtime.preferences=prefs
+local function AssetId(value)
+    if type(value)~="number" and type(value)~="string" then return nil end
+    local id=tonumber(value)
+    if id and id==id and id>0 and id<9007199254740992 and id==math.floor(id) then return id end
+end
+local function IdText(id) return string.format("%.0f",id) end
+local function ParseId(text)
+    if type(text)~="string" then return nil end
+    local digits=text:match("^%s*(%d+)%s*$") or text:match("^rbxassetid://(%d+)$")
+        or text:match("[?&]id=(%d+)") or text:match("roblox%.com/catalog/(%d+)")
+    return digits and AssetId(digits)
+end
+local function Item(value)
+    if type(value)~="table" then return nil end
+    local id=AssetId(value.id)
+    if not id then return nil end
+    local name=type(value.name)=="string" and value.name:gsub("[%c]"," ") or ("Emote "..IdText(id))
+    if #name==0 or #name>2000 then name="Emote "..IdText(id) end
+    return {id=id,name=name}
+end
+local function ReadJSON(path)
+    if type(read)~="function" then return nil,"unavailable" end
+    if type(exists)=="function" then
+        local ok,found=pcall(exists,path)
+        if ok and not found then return nil,"missing" end
+    end
+    local ok,text=pcall(read,path)
+    if not ok then return nil,"read error" end
+    local decoded,data=pcall(function() return HttpService:JSONDecode(text) end)
+    if not decoded or type(data)~="table" then return nil,"invalid JSON" end
+    return data
+end
+local function LoadSettings()
+    if not canSave then WarnOnce("files","readfile/writefile unavailable; settings are session-only.");return end
+    local data,err=ReadJSON(FILE)
+    if not data then
+        if err~="missing" then WarnOnce("read","Settings not loaded ("..tostring(err).."). Existing file is kept until you change a setting.") end
+        return
+    end
+    if data.version~=1 or type(data.values)~="table" then
+        WarnOnce("read","Invalid settings; existing file is kept until you change a setting.");return
+    end
+    local values=data.values
+    -- Migrate the old forced/default Loop ON without discarding other settings.
+    if values.playbackModeVersion==2 and type(values.loop)=="boolean" then prefs.loop=values.loop end
+    if type(values.shortcuts)=="table" then
+        local count=0
+        for _,value in pairs(values.shortcuts) do
+            local item=Item(value)
+            if item then
+                local function position(number,default)
+                    if type(number)=="number" and number==number and number>-math.huge and number<math.huge then
+                        return math.clamp(number,0,1)
+                    end
+                    return default
+                end
+                item.x=position(value.x,.75);item.y=position(value.y,.45)
+                prefs.shortcuts[IdText(item.id)]=item;count=count+1
+                if count>=MAX_SHORTCUTS then break end
+            end
+        end
+    end
+    for key,limits in pairs({windowTransparency={0,50},thumbnailSize={50,100}}) do
+        local value=values[key]
+        if type(value)=="number" and value==value and value>-math.huge and value<math.huge then
+            prefs[key]=math.clamp(value,limits[1],limits[2])
+        end
+    end
+    if values.thumbnailPresetVersion~=2 and prefs.thumbnailSize==78 then prefs.thumbnailSize=68 end
+    for _,key in ipairs({"walk","favoritesOnly","browserOnLoad"}) do
+        if type(values[key])=="boolean" then prefs[key]=values[key] end
+    end
+    if type(values.speed)=="number" and values.speed==values.speed and values.speed>-math.huge and values.speed<math.huge then prefs.speed=math.clamp(values.speed,0,3) end
+    if type(values.query)=="string" then prefs.query=values.query:sub(1,200) end
+    if type(values.customId)=="string" and #values.customId<=200 then prefs.customId=values.customId end
+    if values.customKind=="Animation ID" then prefs.customKind=values.customKind end
+    prefs.selected=Item(values.selected)
+    if type(values.favorites)=="table" then
+        local count=0
+        for _,value in pairs(values.favorites) do
+            local item=Item(value)
+            if item then prefs.favorites[IdText(item.id)]=item;count=count+1 end
+            if count>=10000 then break end
+        end
+    end
+    runtime.saveStatus="Loaded"
+end
+local function SaveSettings()
+    if runtime.initializing or not runtime.alive or not canSave then return false end
+    local ok,err=pcall(function() write(FILE,HttpService:JSONEncode({version=1,values=prefs})) end)
+    if not ok then runtime.saveStatus="Write error";WarnOnce("write","Cannot save settings: "..tostring(err));return false end
+    runtime.saveStatus="Saved";warnings.write=nil;return true
+end
+LoadSettings()
+
+local BUILTIN={
+    {id=3360689775,name="Salute"},
+    {id=5915779043,name="Applaud"},
+    {id=3360692915,name="Tilt"},
+    {id=15610015346,name="Yungblud Happier Jump"},
+    {id=14353423348,name="Baby Queen - Bouncy Twirl"},
+    {id=14353421343,name="Baby Queen - Face Frame"},
+    {id=3823158750,name="Godlike"},
+    {id=139021427684680,name="KATSEYE - Touch"},
+    {id=133596366979822,name="Biblically Accurate Emote"},
+    {id=108128682361404,name="Rambunctious"},
+    {id=79127989560307,name="Moon Walk"},
+    {id=5230661597,name="Bored"},
+    {id=14353425085,name="Baby Queen - Strut"},
+    {id=15694504637,name="d4vd - Backflip"},
+    {id=104142334418357,name="[Original] It's Gangnam Style!"},
+    {id=16553249658,name="Mae Stephens - Piano Hands"},
+    {id=12507097350,name="Alo Yoga Pose - Lotus Position"},
+    {id=15698511500,name="Cuco - Levitate"},
+    {id=4689362868,name="Sleep"},
+    {id=111426928948833,name="Floating on clouds"},
+    {id=130245358716273,name="The Weeknd Starboy Strut"},
+    {id=120642514156293,name="Secret Handshake Dance"},
+    {id=15506503658,name="Victory Dance"},
+    {id=3576717965,name="Shy"},
+    {id=73796726960568,name="Nyan Nyan! "},
+    {id=78758922757947,name="Kicking Feet Sit"},
+    {id=93511411593120,name="/e fly"},
+    {id=114899970878842,name="R15 Death (Accurate)"},
+    {id=5104377791,name="Hero Landing"},
+    {id=5917570207,name="Floss Dance"},
+    {id=131763631172236,name="Xaviersobased Emote"},
+    {id=132074413582912,name="California Girl Dance"},
+    {id=15554010118,name="Olivia Rodrigo Head Bop"},
+    {id=112758073578333,name="Bubbly Sit"},
+    {id=3716636630,name="Monkey"},
+    {id=123015710605336,name="Onion"},
+    {id=4646306583,name="Curtsy"},
+    {id=85936805522788,name="Caramell"},
+    {id=14900153406,name="TWICE Feel Special"},
+    {id=102492229412911,name="Deltarune - Tenna Dance"},
+    {id=133142324349281,name="Flopping Fish"},
+    {id=10214406616,name="Frosty Flair - Tommy Hilfiger"},
+    {id=120224229260879,name="Cute crouch "},
+    {id=15679955281,name="Festive Dance"},
+    {id=4849502101,name="Sad"},
+    {id=10214418283,name="V Pose - Tommy Hilfiger"},
+    {id=92853367837757,name="Garry's Dance"},
+    {id=104485625389237,name="Make You Mine"},
+    {id=139830733782518,name="Phut On"},
+    {id=132382355371060,name="Tank Transformation"},
+    {id=103046131635200,name="Scenario - LOVE SCENARIO"},
+    {id=15123050663,name="Bone Chillin' Bop"},
+    {id=124305244640379,name="Shattered"},
+    {id=134311528115559,name="how did he hit every beat"},
+    {id=17748346932,name="Elton John - Heart Shuffle"},
+    {id=93105950995997,name="Caramelldansen"},
+    {id=7466046574,name="Quiet Waves"},
+    {id=96557878503341,name="Caramell Dansen"},
+    {id=139859849852362,name="Dead"},
+    {id=17360720445,name="HUGO Let's Drive!"},
+    {id=103102322875221,name="Skibidi Toilet - Titan Speakerman Laser Spin"},
+    {id=3576968026,name="Shrug"},
+    {id=130998336536045,name="Gangnam Style"},
+    {id=84555218084038,name="Helicopter Spin"},
+    {id=71302743123422,name="Popular"},
+    {id=133765015173412,name="DearALICE - Ariana"},
+    {id=115319301809339,name="2 Phut Hon Dance"},
+    {id=70635223083942,name="Be Not Afraid"},
+    {id=17746270218,name="Sturdy Dance - Ice Spice"},
+    {id=129149402922241,name="griddy"},
+    {id=3576686446,name="Hello"},
+    {id=113547795536875,name="Gangnam Style"},
+    {id=126614732606871,name="Sit"},
+    {id=3762654854,name="Greatest"},
+    {id=16572756230,name="HIPMOTION - Amaarae"},
+    {id=16276506814,name="Sol de Janeiro - Samba"},
+    {id=3576823880,name="Point2"},
+    {id=78459263478161,name="Family Man Death Pose"},
+    {id=14900151704,name="TWICE LIKEY"},
+    {id=3360686498,name="Stadium"},
+    {id=15571540519,name="Nicki Minaj Starships"},
+    {id=4940597758,name="Cower"},
+    {id=11394056822,name="Elton John - Elevate"},
+    {id=117734400993750,name="Virtual Singer Dance"},
+    {id=97263450325496,name="Teto Territory"},
+    {id=4102315500,name="Haha"},
+    {id=79312439851071,name="Chappell Roan HOT TO GO!"},
+    {id=105851216004006,name="Electro Swing"},
+    {id=92707348383277,name="Mesmerizer"},
+    {id=103139492736941,name="Deltarune - Tenna Swing Dance"},
+    {id=15571538346,name="Nicki Minaj Boom Boom Boom"},
+    {id=15554016057,name="Olivia Rodrigo Fall Back to Float"},
+    {id=70615023659736,name="Floating"},
+    {id=136740085081295,name="/e hidden animation"},
+    {id=119431985170060,name="Helicopter"},
+    {id=87141651594092,name="No-Clip/Speed Glitch"},
+    {id=16303091119,name="Beauty Touchdown"},
+    {id=3934986896,name="Dizzy"},
+    {id=130726889233022,name="rolling crybaby"},
+    {id=11309263077,name="Elton John - Heart Skip"},
+    {id=84511772437190,name="Emote Loading. Please Wait... | spinning Robloxian"},
+    {id=14353417553,name="Baby Queen - Air Guitar & Knee Slide"},
+    {id=15392927897,name="Paris Hilton - Sliving For The Groove"},
+    {id=94796833553521,name="TWICE Takedown pt 1 from Kpop Demon Hunters"},
+    {id=120437019363089,name="peter griffin death pose"},
+    {id=15506506103,name="Flex Walk"},
+    {id=90608224567833,name="Proud to be Expendable - Pressure"},
+    {id=18526338976,name="Team USA Breaking Emote"},
+    {id=99818263438846,name="Default Dance"},
+    {id=103197720369544,name="Dani's Gangnam Style"},
+    {id=75017857395637,name="TV Time Dance"},
+    {id=73683655527605,name="Fashion Roadkill"},
+    {id=15392932768,name="Paris Hilton - Iconic IT-Grrrl"},
+    {id=82217023310738,name="Thanos Happy Jump - Squid Game"},
+    {id=102610758906338,name="Possessed"},
+    {id=95323795166399,name="Rat Dance"},
+    {id=127562607220778,name="Gangnam Style "},
+    {id=129132611803602,name="Helicopter"},
+    {id=82345302788133,name="Dia Delicia Dance"},
+    {id=15392937495,name="Paris Hilton - Checking My Angles"},
+    {id=4212496830,name="Zombie"},
+    {id=113016438012253,name="⌛ Best Mates EMOTE [LIMITED]"},
+    {id=110537281410647,name="[Aura Farm] Wall Lean Idle"},
+    {id=92903522317071,name="ILLIT - Magnetic"},
+    {id=122899100558551,name="It's TV Time!"},
+    {id=75528418031928,name="Rambunctious"},
+    {id=103040723950430,name="Gojo Floating"},
+    {id=70788193750089,name="Kickn around"},
+    {id=5915776835,name="High Wave"},
+    {id=84195923658292,name="Jojo"},
+    {id=110731335896907,name="[⌛ Limited]  HEADLESS EMOTE "},
+    {id=139271706064778,name="Hip Bounce"},
+    {id=4849499887,name="Happy"},
+    {id=127271798262177,name="M3GAN's Dance"},
+    {id=104304182344567,name="ONCE HOP HOP!"},
+    {id=85623000473425,name="TWICE Takedown pt 2 from KPop Demon Hunters"},
+    {id=84067050907557,name="Pickle Rick Dance"},
+    {id=86982022610765,name="Caramelldansen"},
+    {id=117301403779781,name="Im Talm Bout Innit"},
+    {id=84822284410814,name="Maraschino Step"},
+    {id=97847706148165,name="[NEW !] Caramelldansen Kawaii Dance"},
+    {id=89174456614428,name="Laying Down - Daydreaming"},
+    {id=91023138078288,name="OH WHO IS YOU"},
+    {id=107978036345855,name="Prince Of Egypt Dance / What You Want"},
+    {id=71363859760586,name="Golden Freddy Pose"},
+    {id=80877772569772,name="Default Dance | OG"},
+    {id=80436375269036,name="HEADLESS HOOPER"},
+    {id=93262662842394,name="Sit"},
+    {id=75703899901487,name="6 7 Transformation"},
+    {id=100773414188482,name="Stray Kids Walkin On Water"},
+    {id=131544122623505,name="Become A Car!"},
+    {id=99005087791705,name="Death Pose"},
+    {id=132384701706046,name="💀MM2 Fake Dead"},
+    {id=129916107176034,name="Discombobulated"},
+    {id=88598010609888,name="Angry Stomp "},
+    {id=132508867759412,name="xavier so based emote"},
+    {id=121167704249654,name="Hide"},
+    {id=137873580964093,name="Floating Human Spinner (LIMITED) "},
+    {id=76700167742736,name="Belly Dance"},
+    {id=87826892596287,name="levitate"},
+    {id=70972410468289,name="Fake Dead (Troll Emote)"},
+    {id=134615135651900,name="Young-hee Head Spin - Squid Game"},
+    {id=13823339506,name="Tommy - Archer"},
+    {id=109755476052324,name="IShowSpeed Dance"},
+    {id=124828909173982,name="Skibidi"},
+    {id=4272351660,name="Fast Hands"},
+    {id=137006085779408,name="Speed Glitch+"},
+    {id=89633087256727,name="Weird Spin"},
+    {id=125032357496729,name="Fake Death (BEST)"},
+    {id=81177294287826,name="Hug"},
+    {id=88721672617892,name="P.B.J.T."},
+    {id=121259524934987,name="Xaviersobased Jig"},
+    {id=121067808279598,name="PARROT PARTY DANCE"},
+    {id=7202898984,name="Show Dem Wrists - KSI"},
+    {id=120377619472998,name="Macarena"},
+    {id=4940602656,name="Jumping Wave"},
+    {id=94663026124741,name="Torture Dance"},
+    {id=120896030393583,name="Get Sturdy"},
+    {id=137261874619072,name="Sponge Dance"},
+    {id=119746055344304,name="Plane"},
+    {id=78620443286892,name="Cute Laying Down"},
+    {id=108922782921118,name="📸 Pose for the Pic "},
+    {id=131221550165951,name="Heart Hands Pose 3.0"},
+    {id=119454955259757,name="Caramel Hip Sway"},
+    {id=7202900159,name="Wake Up Call - KSI"},
+    {id=79752538807060,name="Griddy"},
+    {id=140466682449054,name="head spin"},
+    {id=107899954696611,name="Spongebob Shuffle Dance 🧽"},
+    {id=96405718067779,name="Cute Sit"},
+    {id=4849497510,name="Power Blast"},
+    {id=89413575288931,name="Blue Shirt Guy Dancing"},
+    {id=112924687333965,name="Aura Farm"},
+    {id=100782362883099,name="Car Transformation"},
+    {id=102323907950469,name="Space Dance"},
+    {id=110521067391235,name="The Old Jitterbug"},
+    {id=111304332281521,name="Druski Shuffle"},
+    {id=133600250245899,name="🥤 Soda Pop - Saja Boys"},
+    {id=133477296392756,name="Rasputin – Boney M."},
+    {id=122949892043249,name="[Aura Farm] Sit Idle"},
+    {id=82739386299071,name="Jackpot Groove"},
+    {id=80422524668416,name="Dreamer"},
+    {id=97968838104258,name="Subject Three / AI Cat Chinese Dance"},
+    {id=91274761264433,name="Macarena"},
+    {id=3994130516,name="Bodybuilder"},
+    {id=5938365243,name="Dolphin Dance"},
+    {id=99563839802389,name="Jumpstyle"},
+    {id=85361710130557,name="Caramelldansen"},
+    {id=74646784680842,name="Ishowspeed shake "},
+    {id=5230615437,name="Beckon"},
+    {id=135489824748823,name="Magical Pose"},
+    {id=98603994713783,name="Rat Dance"},
+    {id=14353419229,name="Baby Queen - Dramatic Bow"},
+    {id=84052327668385,name="Floating"},
+    {id=97999370392804,name="Spin my Head"},
+    {id=94319114655768,name="Rat Dance"},
+    {id=86849720336961,name="Mr. Ant Tennas Dance - DELTARUNE"},
+    {id=124754178569693,name="Die Lit!"},
+    {id=80544397800234,name="Helicopter"},
+    {id=100532972764499,name="MONSTER MASH"},
+    {id=88922397617835,name="What You Want"},
+    {id=115810068374896,name="Garry's Dance"},
+    {id=75842745124834,name="Human Snake"},
+    {id=94451497143711,name="Hakari Dance"},
+    {id=128972617664804,name="Fortnite Default Dance"},
+    {id=73556976257737,name="Saja Boy Pose - Jinu"},
+    {id=81390693780805,name="PROXIMA"},
+    {id=17000058939,name="Mini Kong"},
+    {id=97629500912487,name="BlockyKick Dance"},
+    {id=112949099442762,name="Griddy"},
+    {id=130641944883645,name=" Jinu Pose - Saja Boys"},
+    {id=108474079699304,name="Dep"},
+    {id=4049646104,name="Line Dance"},
+    {id=91423783304464,name="criss cross sit"},
+    {id=90524692306889,name="[⏳] Chill Sit"},
+    {id=15506496093,name="Rock n Roll"},
+    {id=134737246939931,name="GAG IT DEATH DROP"},
+    {id=71787387963141,name="Worm Dance"},
+    {id=128658037413893,name="I'm Going To Die Here - Pressure"},
+    {id=99568437064777,name="Relaxed Sit"},
+    {id=83018514370428,name="Stargazing"},
+    {id=92859581691366,name="ALTÉGO - Couldn’t Care Less"},
+    {id=94534169345613,name="Casual Sit"},
+    {id=16126526506,name="Paris Hilton Sanasa"},
+    {id=140037329261678,name="Caramel dance"},
+    {id=94118707925458,name="Go Mufasa"},
+    {id=105730788757021,name="Dani's BIRDBRAIN"},
+    {id=91927498467600,name="Koto Nai Meme Dance"},
+    {id=117450501566142,name="Hide Hidden Box Invisible Camo Emote Small tiny"},
+    {id=4272484885,name="Baby Dance"},
+    {id=88024974500195,name="Oppa Gangnam Style"},
+    {id=7202896732,name="Boxing Punch - KSI"},
+    {id=128792127841374,name="Watching silly videos (Or texting)"},
+    {id=87756443172440,name="xavier so based dance"},
+    {id=116770268279002,name="BirdBrain Teto"},
+    {id=124935873390035,name="Hiding Human Box"},
+    {id=94121796810251,name="Kicking Feet And Blushing"},
+}
+
+local statusLabel,catalogLabel,selectedLabel,searchLabel,customLabel
+local function Label(control,text)
+    if control then pcall(function() control:SetValue(text) end) end
+end
+local function Status(text)
+    runtime.status=text;Label(statusLabel,text)
+    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+end
+local function Dispose(track,animation)
+    if track then
+        pcall(function() track:Stop(0) end)
+        pcall(function() track:Destroy() end)
+    end
+    if animation then pcall(function() animation:Destroy() end) end
+end
+local function StopCurrent(message)
+    runtime.generation=runtime.generation+1
+    if runtime.endedConnection then runtime.endedConnection:Disconnect();runtime.endedConnection=nil end
+    local track,animation=runtime.track,runtime.animation
+    runtime.track=nil;runtime.animation=nil;runtime.character=nil;runtime.playing=nil
+    Dispose(track,animation)
+    if message then Status(message) end
+end
+runtime.Stop=function() StopCurrent("Stopped") end
+local function Current(ticket,character)
+    return runtime.alive and runtime.generation==ticket and Player.Character==character
+end
+local function ResolveCatalog(id)
+    if runtime.resolutions[id] then return runtime.resolutions[id] end
+    local ok,objects=pcall(function() return game:GetObjects("rbxassetid://"..IdText(id)) end)
+    if not ok or type(objects)~="table" then return nil end
+    local resolved
+    -- Loaded objects stay unparented. Scripts in an asset are never executed.
+    pcall(function()
+        for _,root in ipairs(objects) do
+            if root:IsA("Animation") then resolved=ParseId(root.AnimationId) end
+            if not resolved then
+                local descendants=root:GetDescendants()
+                for i,obj in ipairs(descendants) do
+                    if i>4000 then break end
+                    if obj:IsA("Animation") then resolved=ParseId(obj.AnimationId);if resolved then break end end
+                end
+            end
+            if resolved then break end
+        end
+    end)
+    for _,root in ipairs(objects) do pcall(function() root:Destroy() end) end
+    if resolved then runtime.resolutions[id]=resolved end
+    return resolved
+end
+local function Play(item,direct)
+    if not runtime.alive then return end
+    if not item or not AssetId(item.id) then Notify("Select an emote or enter a valid ID first.");return end
+    StopCurrent()
+    local ticket=runtime.generation
+    local character=Player.Character
+    if not character then Status("Waiting for character — press Play after spawning");return end
+    Status("Loading: "..item.name)
+    task.spawn(function()
+        local track,animation
+        local ok,err=pcall(function()
+            if not Current(ticket,character) then return end
+            local humanoid=character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid",8)
+            if not Current(ticket,character) then return end
+            if not humanoid or humanoid.Health<=0 then error("Character is not ready") end
+            if humanoid.RigType~=Enum.HumanoidRigType.R15 then error("R15 character required") end
+            local animator=humanoid:FindFirstChildOfClass("Animator") or humanoid:WaitForChild("Animator",8)
+            if not Current(ticket,character) then return end
+            if not animator then error("Animator is not ready") end
+            local animationId=direct and item.id or ResolveCatalog(item.id)
+            if not Current(ticket,character) then return end
+            if not animationId and not direct then
+                -- Roblox's native emote API is a fallback when GetObjects is unavailable.
+                local nativeOK,nativeTrack=pcall(function() return humanoid:PlayEmoteAndGetAnimTrackById(item.id) end)
+                if nativeOK and nativeTrack and typeof(nativeTrack)=="Instance" and nativeTrack:IsA("AnimationTrack") then track=nativeTrack end
+                if not Current(ticket,character) then return end
+            end
+            if not track then
+                animation=Instance.new("Animation")
+                animation.AnimationId="rbxassetid://"..IdText(animationId or item.id)
+                track=animator:LoadAnimation(animation)
+            end
+            if not Current(ticket,character) then return end
+            if not track then error("Roblox did not return an animation track") end
+            track.Priority=Enum.AnimationPriority.Action
+            track.Looped=prefs.loop
+            if not track.IsPlaying then track:Play(0.05,1,prefs.speed) else track:AdjustSpeed(prefs.speed) end
+            runtime.track=track;runtime.animation=animation;runtime.character=character
+            runtime.playing=item
+            runtime.endedConnection=track.Ended:Connect(function()
+                if runtime.track==track and Current(ticket,character) then StopCurrent("Finished: "..item.name) end
+            end)
+            -- LoadAnimation may return a track even for an inaccessible/deleted asset.
+            local deadline=os.clock()+8
+            while Current(ticket,character) and runtime.track==track and track.Length<=0 and os.clock()<deadline do task.wait(0.1) end
+            if not Current(ticket,character) or runtime.track~=track then return end
+            if track.Length<=0 then error("Animation did not load. It may be restricted, deleted, or incompatible.") end
+            Status("Playing: "..item.name)
+        end)
+        if not Current(ticket,character) then
+            -- A newer click/Stop/respawn wins even if GetObjects/LoadAnimation yielded.
+            if runtime.track~=track then Dispose(track,animation) end
+            return
+        end
+        if not ok then
+            if runtime.track==track then StopCurrent() else Dispose(track,animation) end
+            Status("Cannot play this emote")
+            Notify(tostring(err))
+        end
+    end)
+end
+runtime.Play=function(id,name,direct) Play({id=id,name=name or IdText(id)},direct==true) end
+runtime.SaveSettings=SaveSettings
+runtime.connections[#runtime.connections+1]=Player.CharacterAdded:Connect(function()
+    StopCurrent("Respawned — select an emote and press Play")
+end)
+runtime.connections[#runtime.connections+1]=RunService.Heartbeat:Connect(function()
+    if not runtime.alive or not runtime.track then return end
+    local character=runtime.character
+    local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+    if Player.Character~=character or not humanoid or humanoid.Health<=0 then StopCurrent("Stopped");return end
+    if not prefs.walk and humanoid.MoveDirection.Magnitude>0.05 then StopCurrent("Stopped on movement") end
+end)
+function runtime.Cleanup()
+    runtime.alive=false;runtime.filterGeneration=runtime.filterGeneration+1
+    StopCurrent()
+    for _,connection in ipairs(runtime.connections) do connection:Disconnect() end
+    if runtime.DestroyBrowser then runtime.DestroyBrowser() end
+end
+
+local dropdown,pageLabel
+local displayed={}
+local syncing=false
+local SENTINEL="— Select an emote —"
+local function NormalizeCatalog(data)
+    if type(data)~="table" then return nil end
+    local source=type(data.data)=="table" and data.data or data
+    local items,seen={},{}
+    for i,value in ipairs(source) do
+        if i>100000 then break end
+        local item=Item(value)
+        if item and not seen[item.id] then
+            seen[item.id]=true;items[#items+1]=item
+        end
+    end
+    return #items>0 and items or nil
+end
+local function SelectionLabel()
+    local item=prefs.selected
+    Label(selectedLabel,item and ("Selected: "..item.name.." ["..IdText(item.id).."]") or "Selected: none")
+    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+end
+local function RenderPage()
+    if not runtime.alive then return end
+    local pages=math.max(1,math.ceil(#runtime.filtered/PAGE_SIZE))
+    runtime.page=math.clamp(runtime.page,1,pages)
+    local names={SENTINEL}
+    displayed={}
+    local selectedText=SENTINEL
+    for i=(runtime.page-1)*PAGE_SIZE+1,math.min(runtime.page*PAGE_SIZE,#runtime.filtered) do
+        local item=runtime.filtered[i]
+        local text=item.name.." ["..IdText(item.id).."]"
+        names[#names+1]=text;displayed[text]=item
+        if prefs.selected and prefs.selected.id==item.id then selectedText=text end
+    end
+    if dropdown then
+        syncing=true
+        local ok,err=pcall(function() dropdown:ChangeItems(names);dropdown:Select(selectedText) end)
+        syncing=false
+        if not ok then WarnOnce("dropdown","Could not update the emote list: "..tostring(err)) end
+    end
+    Label(pageLabel,"Page "..runtime.page.." / "..pages.." • matches: "..#runtime.filtered.." • catalog: "..#runtime.catalog)
+    SelectionLabel()
+    if runtime.RenderCards then runtime.RenderCards() end
+end
+local function Filter(resetPage)
+    runtime.filterGeneration=runtime.filterGeneration+1
+    local ticket=runtime.filterGeneration
+    local query=prefs.query:lower()
+    local favoritesOnly=prefs.favoritesOnly
+    local source=runtime.catalog
+    if favoritesOnly then
+        source={}
+        for _,item in pairs(prefs.favorites) do source[#source+1]=item end
+        table.sort(source,function(a,b) return a.name:lower()<b.name:lower() end)
+    end
+    local words={}
+    for word in query:gmatch("%S+") do words[#words+1]=word end
+    runtime.filtering=true
+    if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    Label(searchLabel,"Search: "..(prefs.query=="" and "(all)" or prefs.query))
+    task.spawn(function()
+        local filtered={}
+        for i,item in ipairs(source) do
+            if not runtime.alive or runtime.filterGeneration~=ticket then return end
+            local haystack=item.name:lower().." "..IdText(item.id)
+            local matches=true
+            for _,word in ipairs(words) do
+                if not haystack:find(word,1,true) then matches=false;break end
+            end
+            if matches then filtered[#filtered+1]=item end
+            if i%500==0 then task.wait() end
+        end
+        if not runtime.alive or runtime.filterGeneration~=ticket then return end
+        runtime.filtered=filtered;runtime.filtering=false
+        if resetPage then runtime.page=1 end
+        RenderPage()
+    end)
+end
+local function AdoptCatalog(items,source)
+    runtime.catalog=items
+    runtime.catalogSource=source
+    Label(catalogLabel,"Catalog: "..#items.." emotes • "..source)
+    -- A selected item need not be on the visible page or present in a newer catalog.
+    if not prefs.selected then prefs.selected=items[1] end
+    SelectionLabel()
+    Filter(true)
+end
+local function RefreshCatalog()
+    if not runtime.alive or runtime.catalogBusy then return end
+    runtime.catalogBusy=true
+    Label(catalogLabel,"Updating catalog... current list remains available")
+    task.spawn(function()
+        local ok,data=pcall(function() return HttpService:JSONDecode(game:HttpGet(URL)) end)
+        if not runtime.alive then return end
+        local items=ok and NormalizeCatalog(data) or nil
+        runtime.catalogBusy=false
+        if not items then
+            Label(catalogLabel,"Catalog: "..#runtime.catalog.." • offline / update failed")
+            WarnOnce("network","Catalog update failed. The cached or built-in list remains available.")
+            return
+        end
+        warnings.network=nil
+        AdoptCatalog(items,"7yd7 online catalog")
+        if type(write)=="function" then
+            local saved=pcall(function() write(CACHE,HttpService:JSONEncode({version=1,data=items})) end)
+            if not saved then WarnOnce("cache","Could not save the catalog cache; the list still works this session.") end
+        end
+    end)
+end
+runtime.RefreshCatalog=RefreshCatalog
+
+-- Native Noir-styled Emotes page. It uses the supplied script's catalog, persistence and playback core.
+do
+    local UI = { connections = {}, cards = {}, settingsOpen = false, searchToken = 0 }
+    runtime.browser = UI
+    local theme = shared.theme or {}
+    local C = {
+        base = theme.base or Color3.fromRGB(9, 10, 13),
+        panel = theme.panel or Color3.fromRGB(16, 18, 22),
+        surface = theme.surface or Color3.fromRGB(24, 27, 32),
+        card = theme.card or Color3.fromRGB(20, 24, 28),
+        button = theme.button or Color3.fromRGB(34, 38, 44),
+        accent = theme.accent or Color3.fromRGB(98, 230, 144),
+        text = theme.text or Color3.fromRGB(240, 243, 246),
+        dim = theme.dim or Color3.fromRGB(147, 156, 166),
+        border = theme.border or Color3.fromRGB(68, 75, 84),
+        danger = Color3.fromRGB(245, 142, 142),
+    }
+    local function Make(class, properties, parent)
+        local instance = Instance.new(class)
+        for key, value in pairs(properties or {}) do instance[key] = value end
+        instance.Parent = parent
+        return instance
+    end
+    local function Round(instance, radius)
+        return Make("UICorner", { CornerRadius = UDim.new(0, radius or 10) }, instance)
+    end
+    local function Stroke(instance, color, transparency, thickness)
+        return Make("UIStroke", { Color = color or C.border, Transparency = transparency or .45, Thickness = thickness or 1 }, instance)
+    end
+    local function Text(parent, value, size, position, dimensions, color)
+        return Make("TextLabel", {
+            BackgroundTransparency = 1, Text = value or "", TextColor3 = color or C.text,
+            Font = Enum.Font.Gotham, TextSize = size or 14, TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Center, Position = position or UDim2.new(), Size = dimensions or UDim2.new(1,0,1,0),
+        }, parent)
+    end
+    local function Button(parent, value, position, dimensions)
+        local button = Make("TextButton", {
+            BackgroundColor3 = C.button, BackgroundTransparency = .06, BorderSizePixel = 0,
+            Text = value or "", TextColor3 = C.text, Font = Enum.Font.GothamMedium,
+            TextSize = 13, AutoButtonColor = false, Position = position or UDim2.new(), Size = dimensions or UDim2.new(),
+        }, parent)
+        Round(button, 10); Stroke(button, C.border, .52)
+        button.MouseEnter:Connect(function() if button.Parent then button.BackgroundColor3 = C.surface end end)
+        button.MouseLeave:Connect(function() if button.Parent then button.BackgroundColor3 = C.button end end)
+        return button
+    end
+    local function Connect(signal, callback)
+        local connection = signal:Connect(callback)
+        UI.connections[#UI.connections + 1] = connection
+        return connection
+    end
+    local function Save()
+        SaveSettings()
+    end
+    local function SetSelected(item)
+        if not item then return end
+        prefs.selected = { id = item.id, name = item.name }
+        Save()
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+    local function ToggleFavorite(item)
+        local key = IdText(item.id)
+        if prefs.favorites[key] then prefs.favorites[key] = nil else prefs.favorites[key] = { id = item.id, name = item.name } end
+        Save()
+        if prefs.favoritesOnly then Filter(false) elseif runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+    local function SetLoop(value)
+        prefs.loop = value == true
+        Save()
+        if runtime.track then pcall(function() runtime.track.Looped = prefs.loop end) end
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+    local function SetMove(value)
+        prefs.walk = value == true
+        Save()
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+    local function SetSpeed(value)
+        prefs.speed = math.clamp(math.floor((tonumber(value) or prefs.speed) * 100 + .5) / 100, 0, 3)
+        Save()
+        if runtime.track then pcall(function() runtime.track:AdjustSpeed(prefs.speed) end) end
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+    -- Circular pin buttons create draggable on-screen photo shortcuts, matching the supplied card browser behavior.
+    local quickGui, quickRecords, quickConnections = nil, {}, {}
+    local function clearQuickConnections()
+        for _, connection in ipairs(quickConnections) do pcall(function() connection:Disconnect() end) end
+        table.clear(quickConnections)
+    end
+    local function destroyQuickGui()
+        clearQuickConnections()
+        if quickGui then quickGui:Destroy() end
+        quickGui, quickRecords = nil, {}
+    end
+    local function ensureQuickGui()
+        if quickGui and quickGui.Parent then return quickGui end
+        quickGui = Instance.new("ScreenGui")
+        quickGui.Name, quickGui.ResetOnSpawn, quickGui.IgnoreGuiInset, quickGui.DisplayOrder = "NoirEmoteQuickButtons", false, true, 90
+        local parent
+        if type(gethui) == "function" then
+            local ok, value = pcall(gethui)
+            if ok and typeof(value) == "Instance" then parent = value end
+        end
+        quickGui.Parent = parent or Player:WaitForChild("PlayerGui")
+        return quickGui
+    end
+    local function viewport()
+        return workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(900,600)
+    end
+    local function positionQuick(record)
+        local saved = prefs.shortcuts[record.key]
+        if not saved then return end
+        local screen = viewport()
+        record.button.Position = UDim2.fromOffset(math.clamp(saved.x * screen.X, 38, math.max(38, screen.X - 38)), math.clamp(saved.y * screen.Y, 38, math.max(38, screen.Y - 38)))
+    end
+    local function createQuick(key, saved)
+        -- Rounded-square photo control using the same dark body and metallic double border as Shoot Murder.
+        local button = Instance.new("TextButton")
+        button.Name, button.AnchorPoint, button.Size = "Emote_" .. key, Vector2.new(.5,.5), UDim2.fromOffset(88,88)
+        button.BackgroundColor3, button.BackgroundTransparency, button.BorderSizePixel = Color3.fromRGB(8,8,10), .28, 0
+        button.Text, button.AutoButtonColor, button.ZIndex = "", false, 91
+        button.Parent = ensureQuickGui()
+        local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0,16); corner.Parent = button
+        local outline = Instance.new("UIStroke"); outline.Color, outline.Thickness, outline.ApplyStrokeMode, outline.Parent = Color3.fromRGB(255,255,255), 2, Enum.ApplyStrokeMode.Border, button
+        local shine = Instance.new("UIGradient")
+        shine.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(35,35,40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250,250,252)),
+            ColorSequenceKeypoint.new(.48, Color3.fromRGB(70,70,78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255,255,255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(45,45,52)),
+        })
+        shine.Parent = outline
+        local inner = Instance.new("UIStroke"); inner.Color, inner.Transparency, inner.Thickness, inner.Parent = Color3.fromRGB(105,105,112), .5, 1, button
+        local innerShine = shine:Clone(); innerShine.Rotation = 180; innerShine.Parent = inner
+        local image = Instance.new("ImageLabel")
+        image.Name, image.AnchorPoint, image.Position, image.Size = "Photo", Vector2.new(.5,.5), UDim2.fromScale(.5,.5), UDim2.fromOffset(62,62)
+        image.BackgroundTransparency, image.Image, image.ScaleType, image.ZIndex = 1, "rbxthumb://type=Asset&id=" .. key .. "&w=420&h=420", Enum.ScaleType.Fit, 92
+        image.Parent = button
+        local imageCorner = Instance.new("UICorner"); imageCorner.CornerRadius = UDim.new(0,11); imageCorner.Parent = image
+        local record = { key = key, item = { id = saved.id, name = saved.name }, button = button, dragging = false, moved = false }
+        quickRecords[key] = record
+        positionQuick(record)
+        local dragInput, start, startPosition
+        quickConnections[#quickConnections+1] = button.InputBegan:Connect(function(input)
+            if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+            record.dragging, record.moved, dragInput, start, startPosition = true, false, input, input.Position, button.Position
+        end)
+        quickConnections[#quickConnections+1] = UIS.InputChanged:Connect(function(input)
+            if not record.dragging then return end
+            if input ~= dragInput and not (dragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement) then return end
+            local delta = input.Position - start
+            if delta.Magnitude > 7 then record.moved = true end
+            button.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end)
+        quickConnections[#quickConnections+1] = UIS.InputEnded:Connect(function(input)
+            if not record.dragging or input ~= dragInput then return end
+            record.dragging = false
+            if record.moved then
+                local screen = viewport()
+                prefs.shortcuts[key].x = math.clamp(button.Position.X.Offset / math.max(screen.X,1), 0, 1)
+                prefs.shortcuts[key].y = math.clamp(button.Position.Y.Offset / math.max(screen.Y,1), 0, 1)
+                record.blockUntil = os.clock() + .25
+                Save()
+            end
+        end)
+        quickConnections[#quickConnections+1] = button.Activated:Connect(function()
+            if record.moved or (record.blockUntil and os.clock() < record.blockUntil) then return end
+            SetSelected(record.item); Play(record.item, false)
+        end)
+    end
+    local function RefreshQuickButtons()
+        for key, record in pairs(quickRecords) do
+            if not prefs.shortcuts[key] then record.button:Destroy(); quickRecords[key] = nil end
+        end
+        for key, saved in pairs(prefs.shortcuts) do
+            if not quickRecords[key] then createQuick(key, saved) else positionQuick(quickRecords[key]) end
+        end
+        if not next(prefs.shortcuts) then destroyQuickGui() end
+    end
+    local function ToggleQuick(item)
+        local key = IdText(item.id)
+        if prefs.shortcuts[key] then
+            prefs.shortcuts[key] = nil
+        else
+            local count = 0
+            for _ in pairs(prefs.shortcuts) do count += 1 end
+            if count >= MAX_SHORTCUTS then Notify("Maximum " .. MAX_SHORTCUTS .. " on-screen emote buttons."); return end
+            local screen = viewport()
+            prefs.shortcuts[key] = { id = item.id, name = item.name, x = .86, y = math.clamp(.28 + count * .1, .18, .82) }
+        end
+        Save(); RefreshQuickButtons()
+        if runtime.UpdateCardStatus then runtime.UpdateCardStatus() end
+    end
+
+    local function Layout()
+        if not (UI.root and UI.cardsScroll) then return end
+        local size = UI.root.AbsoluteSize
+        if size.X < 1 or size.Y < 1 then return end
+        local narrow = size.X < 570
+        local veryNarrow = size.X < 410
+        UI.search.Position = UDim2.fromOffset(18, 68)
+        UI.search.Size = UDim2.new(1, narrow and -138 or -268, 0, 38)
+        UI.favoriteFilter.Position = UDim2.new(1, narrow and -112 or -242, 0, 68)
+        UI.favoriteFilter.Size = UDim2.fromOffset(narrow and 94 or 118, 38)
+        UI.settingsButton.Position = UDim2.new(1, narrow and -18 or -116, 0, 18)
+        UI.settingsButton.AnchorPoint = Vector2.new(1, 0)
+        UI.settingsButton.Size = UDim2.fromOffset(narrow and 86 or 98, 32)
+        UI.random.Position = UDim2.new(1, narrow and -18 or -18, 0, 110)
+        UI.random.AnchorPoint = Vector2.new(1, 0)
+        UI.random.Size = UDim2.fromOffset(narrow and 82 or 94, 30)
+        UI.stop.Position = UDim2.new(1, narrow and -108 or -122, 0, 110)
+        UI.stop.AnchorPoint = Vector2.new(1, 0)
+        UI.stop.Size = UDim2.fromOffset(narrow and 82 or 94, 30)
+        UI.summary.Position = UDim2.fromOffset(20, 112)
+        UI.summary.Size = UDim2.new(1, narrow and -200 or -260, 0, 28)
+        local top, footer = 148, 58
+        UI.cardsScroll.Position = UDim2.fromOffset(18, top)
+        UI.cardsScroll.Size = UDim2.new(1, -36, 1, -(top + footer + 10))
+        UI.footer.Position = UDim2.new(0, 18, 1, -54)
+        UI.footer.Size = UDim2.new(1, -36, 0, 40)
+        -- Use the full Noir tab width, matching the supplied menu's three-card gallery on wider screens.
+        local available = math.max(1, size.X - 48)
+        -- Scale-based cells fill the whole Noir page even when the mobile UI has a UIScale applied.
+        local columns, padding, cellHeight = 3, 12, 250
+        UI.grid.CellSize = UDim2.new(1 / columns, -10, 0, cellHeight)
+        UI.grid.FillDirectionMaxCells = columns
+        local rows = math.ceil(#UI.cards / columns)
+        UI.cardsScroll.CanvasSize = UDim2.fromOffset(0, math.max(0, rows * (cellHeight + padding) - padding + 8))
+        UI.settings.Size = UDim2.fromOffset(math.min(290, math.max(230, size.X - 36)), math.min(470, math.max(250, size.Y - 96)))
+        UI.settings.Position = UDim2.new(1, -18, 0, 58)
+        UI.settings.AnchorPoint = Vector2.new(1, 0)
+    end
+    runtime.ApplyBrowserAppearance = Layout
+    runtime.ResetBrowserPosition = function() Layout() end
+    local function UpdateStatus()
+        if not UI.root then return end
+        local pages = math.max(1, math.ceil(#runtime.filtered / PAGE_SIZE))
+        UI.page.Text = "Page " .. runtime.page .. " / " .. pages
+        UI.status.Text = runtime.status or "Ready — select an emote and press Play"
+        UI.summary.Text = runtime.filtering and "Searching emotes..." or (tostring(#runtime.filtered) .. " emotes")
+        UI.favoriteFilter.Text = prefs.favoritesOnly and "★ Saved" or "☆ Saved"
+        UI.favoriteFilter.TextColor3 = prefs.favoritesOnly and C.accent or C.text
+        UI.favoriteFilter.BackgroundColor3 = prefs.favoritesOnly and C.surface or C.button
+        UI.loop.Text = prefs.loop and "Loop  ON" or "Loop  OFF"
+        UI.loop.TextColor3 = prefs.loop and C.accent or C.text
+        UI.move.Text = prefs.walk and "Move  ON" or "Move  OFF"
+        UI.move.TextColor3 = prefs.walk and C.accent or C.text
+        UI.speedValue.Text = "Speed " .. tostring(prefs.speed)
+        for _, card in ipairs(UI.cards) do
+            local selected = prefs.selected and prefs.selected.id == card.item.id
+            local playing = runtime.track and runtime.playing and runtime.playing.id == card.item.id
+            card.stroke.Color = selected and C.accent or C.border
+            card.stroke.Transparency = selected and .08 or .62
+            card.star.Text = prefs.favorites[IdText(card.item.id)] and "★" or "☆"
+            card.star.TextColor3 = prefs.favorites[IdText(card.item.id)] and C.accent or C.text
+            card.pin.Text = prefs.shortcuts[IdText(card.item.id)] and "●" or "○"
+            card.pin.TextColor3 = prefs.shortcuts[IdText(card.item.id)] and C.accent or C.dim
+            card.play.Text = playing and "■" or "▶"
+            card.play.BackgroundColor3 = playing and Color3.fromRGB(71, 91, 78) or C.button
+            card.play.TextColor3 = playing and C.accent or C.text
+        end
+    end
+    runtime.UpdateCardStatus = UpdateStatus
+    local function BuildCard(item, order)
+        local card = Make("Frame", { Name = "Emote_" .. IdText(item.id), LayoutOrder = order, BackgroundColor3 = C.card, BorderSizePixel = 0, ClipsDescendants = true }, UI.cardsScroll)
+        local cardConnections = {}
+        local function CardConnect(signal, callback)
+            local connection = signal:Connect(callback)
+            cardConnections[#cardConnections + 1] = connection
+            return connection
+        end
+        Round(card, 14)
+        local outline = Stroke(card, C.border, .62, 1)
+        local title = Text(card, item.name, 15, UDim2.fromOffset(12, 10), UDim2.new(1, -70, 0, 36))
+        title.TextWrapped = true; title.TextTruncate = Enum.TextTruncate.AtEnd; title.Font = Enum.Font.GothamMedium; title.TextYAlignment = Enum.TextYAlignment.Top
+        local star = Button(card, "☆", UDim2.new(1, -50, 0, 8), UDim2.fromOffset(38, 36))
+        star.BackgroundTransparency = 1; star.TextSize = 27
+        local image = Make("ImageButton", { BackgroundTransparency = 1, AutoButtonColor = false, AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5, 0, .55, 0), Size = UDim2.fromOffset(130,130), Image = "rbxthumb://type=Asset&id=" .. IdText(item.id) .. "&w=420&h=420", ScaleType = Enum.ScaleType.Fit }, card)
+        local pin = Button(card, "○", UDim2.new(1, -60, .48, 0), UDim2.fromOffset(46,46))
+        pin.BackgroundTransparency = 1; pin.TextSize = 30
+        local play = Button(card, "▶", UDim2.new(1, -62, 1, -62), UDim2.fromOffset(50,50)); play.TextSize = 20
+        local record = { frame = card, connections = cardConnections, item = item, stroke = outline, star = star, pin = pin, play = play }
+        UI.cards[#UI.cards + 1] = record
+        CardConnect(image.Activated, function() SetSelected(item) end)
+        CardConnect(star.Activated, function() ToggleFavorite(item) end)
+        CardConnect(pin.Activated, function() ToggleQuick(item) end)
+        CardConnect(play.Activated, function()
+            local playing = runtime.track and runtime.playing and runtime.playing.id == item.id
+            SetSelected(item)
+            if playing then StopCurrent("Stopped") else Play(item, false) end
+            UpdateStatus()
+        end)
+    end
+    local function RenderCards()
+        if not UI.root then return end
+        -- Do not create thumbnail cards while this page is hidden. The visible-page handler performs one render on open.
+        if not container.Visible then UI.needsRender = true; return end
+        for _, record in ipairs(UI.cards) do
+            for _, connection in ipairs(record.connections or {}) do pcall(function() connection:Disconnect() end) end
+            if record.frame then record.frame:Destroy() end
+        end
+        UI.cards = {}
+        UI.needsRender = false
+        local first = (runtime.page - 1) * PAGE_SIZE + 1
+        local last = math.min(runtime.page * PAGE_SIZE, #runtime.filtered)
+        for index = first, last do BuildCard(runtime.filtered[index], index - first + 1) end
+        UI.empty.Visible = #runtime.filtered == 0
+        UI.empty.Text = runtime.filtering and "Searching..." or (prefs.favoritesOnly and "No saved emotes yet." or "No emotes match your search.")
+        UI.cardsScroll.CanvasPosition = Vector2.zero
+        Layout(); UpdateStatus()
+    end
+    runtime.RenderCards = RenderCards
+    local function Build()
+        local old = container:FindFirstChild("NoirEmotesNative")
+        if old then old:Destroy() end
+        UI.root = Make("Frame", { Name = "NoirEmotesNative", Position = UDim2.fromOffset(12, 12), Size = UDim2.new(1, -24, 0, 640), BackgroundColor3 = C.base, BorderSizePixel = 0, ClipsDescendants = true }, container)
+        if shared.SetCanvasHeight then shared.SetCanvasHeight(664) end
+        Round(UI.root, 18); Stroke(UI.root, C.border, .35, 1.2)
+        local gradient = Make("UIGradient", { Color = ColorSequence.new(C.base, Color3.fromRGB(7, 30, 31)), Rotation = 20 }, UI.root)
+        Text(UI.root, "EMOTES", 21, UDim2.fromOffset(18, 14), UDim2.new(1,-150,0,24)).Font = Enum.Font.GothamBold
+        Text(UI.root, "R15 ANIMATION LIBRARY", 10, UDim2.fromOffset(19, 39), UDim2.new(1,-150,0,16), C.dim)
+        UI.settingsButton = Button(UI.root, "Settings", UDim2.new(1,-116,0,18), UDim2.fromOffset(98,32))
+        UI.search = Make("TextBox", { BackgroundColor3 = C.surface, BorderSizePixel = 0, Text = prefs.query, PlaceholderText = "Search emote or ID...", PlaceholderColor3 = C.dim, TextColor3 = C.text, Font = Enum.Font.Gotham, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false }, UI.root)
+        Round(UI.search, 10); Stroke(UI.search, C.border, .55); Make("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 8) }, UI.search)
+        UI.favoriteFilter = Button(UI.root, "☆ Saved", UDim2.new(), UDim2.fromOffset(118,38))
+        UI.random = Button(UI.root, "Random", UDim2.new(), UDim2.fromOffset(94,30))
+        UI.stop = Button(UI.root, "■ Stop", UDim2.new(), UDim2.fromOffset(94,30)); UI.stop.TextColor3 = C.danger
+        UI.summary = Text(UI.root, "Loading emotes...", 12, UDim2.fromOffset(20,112), UDim2.new(1,-260,0,28), C.dim)
+        UI.cardsScroll = Make("ScrollingFrame", { BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = C.accent, CanvasSize = UDim2.fromOffset(0,0), ScrollingDirection = Enum.ScrollingDirection.Y, ElasticBehavior = Enum.ElasticBehavior.Never }, UI.root)
+        Make("UIPadding", { PaddingLeft = UDim.new(0,2), PaddingRight = UDim.new(0,8), PaddingTop = UDim.new(0,2), PaddingBottom = UDim.new(0,6) }, UI.cardsScroll)
+        UI.grid = Make("UIGridLayout", { SortOrder = Enum.SortOrder.LayoutOrder, CellPadding = UDim2.fromOffset(12,12), CellSize = UDim2.fromOffset(240,170) }, UI.cardsScroll)
+        UI.empty = Text(UI.root, "No emotes found", 16, UDim2.fromOffset(26,185), UDim2.new(1,-52,0,200), C.dim)
+        UI.empty.TextXAlignment = Enum.TextXAlignment.Center; UI.empty.TextYAlignment = Enum.TextYAlignment.Center; UI.empty.Visible = false
+        UI.footer = Make("Frame", { BackgroundTransparency = 1 }, UI.root)
+        UI.previous = Button(UI.footer, "‹", UDim2.fromOffset(0,0), UDim2.fromOffset(46,38)); UI.previous.TextSize = 28
+        UI.next = Button(UI.footer, "›", UDim2.new(1,-46,0,0), UDim2.fromOffset(46,38)); UI.next.TextSize = 28
+        UI.page = Text(UI.footer, "Page 1 / 1", 12, UDim2.fromOffset(54,0), UDim2.new(1,-108,0,38), C.dim); UI.page.TextXAlignment = Enum.TextXAlignment.Center
+        UI.status = Text(UI.footer, "Ready", 11, UDim2.fromOffset(2,39), UDim2.new(1,-4,0,14), C.dim)
+        -- Settings content is taller than a phone-sized drawer, so make the drawer itself vertically scrollable.
+        UI.settings = Make("ScrollingFrame", { BackgroundColor3 = C.panel, BorderSizePixel = 0, Visible = false, ZIndex = 20,
+            ClipsDescendants = true, Active = true, ScrollBarThickness = 4, ScrollBarImageColor3 = C.accent,
+            ScrollingDirection = Enum.ScrollingDirection.Y, ElasticBehavior = Enum.ElasticBehavior.Never,
+            CanvasSize = UDim2.fromOffset(0, 388) }, UI.root)
+        Round(UI.settings, 14); Stroke(UI.settings, C.border, .2, 1.2)
+        Text(UI.settings, "EMOTE SETTINGS", 15, UDim2.fromOffset(16,14), UDim2.new(1,-32,0,24)).Font = Enum.Font.GothamBold
+        local function SettingsButton(label, y)
+            local button = Button(UI.settings, label, UDim2.fromOffset(16,y), UDim2.new(1,-32,0,36)); button.ZIndex = 21; return button
+        end
+        UI.loop = SettingsButton("Loop  OFF", 52)
+        UI.move = SettingsButton("Move  OFF", 96)
+        UI.speedMinus = SettingsButton("−", 140); UI.speedMinus.Size = UDim2.fromOffset(38,36)
+        UI.speedValue = SettingsButton("Speed 1", 140); UI.speedValue.Position = UDim2.fromOffset(62,140); UI.speedValue.Size = UDim2.new(1,-124,0,36)
+        UI.speedPlus = SettingsButton("+", 140); UI.speedPlus.Position = UDim2.new(1,-54,0,140); UI.speedPlus.Size = UDim2.fromOffset(38,36)
+        UI.custom = Make("TextBox", { BackgroundColor3 = C.surface, BorderSizePixel = 0, Position = UDim2.fromOffset(16,188), Size = UDim2.new(1,-32,0,36), Text = prefs.customId, PlaceholderText = "Custom animation ID", PlaceholderColor3 = C.dim, TextColor3 = C.text, Font = Enum.Font.Gotham, TextSize = 13, ClearTextOnFocus = false, ZIndex = 21 }, UI.settings)
+        Round(UI.custom, 9); Stroke(UI.custom, C.border, .5); Make("UIPadding", { PaddingLeft = UDim.new(0,10) }, UI.custom)
+        UI.playCustom = SettingsButton("Play custom animation", 232)
+        UI.refresh = SettingsButton("Refresh catalog", 276)
+        UI.closeSettings = SettingsButton("Close settings", 320)
+        Connect(UI.settingsButton.Activated, function()
+            UI.settingsOpen = not UI.settingsOpen
+            UI.settings.Visible = UI.settingsOpen
+            if UI.settingsOpen then UI.settings.CanvasPosition = Vector2.zero end
+        end)
+        Connect(UI.closeSettings.Activated, function() UI.settingsOpen = false; UI.settings.Visible = false end)
+        Connect(UI.loop.Activated, function() SetLoop(not prefs.loop) end)
+        Connect(UI.move.Activated, function() SetMove(not prefs.walk) end)
+        Connect(UI.speedMinus.Activated, function() SetSpeed(prefs.speed - .25) end)
+        Connect(UI.speedPlus.Activated, function() SetSpeed(prefs.speed + .25) end)
+        Connect(UI.refresh.Activated, RefreshCatalog)
+        Connect(UI.playCustom.Activated, function()
+            prefs.customId = UI.custom.Text:sub(1,200); Save()
+            local id = ParseId(prefs.customId)
+            if not id then Notify("Enter a valid animation ID."); return end
+            Play({ id = id, name = "Custom " .. IdText(id) }, true)
+        end)
+        Connect(UI.custom.FocusLost, function() prefs.customId = UI.custom.Text:sub(1,200); Save() end)
+        Connect(UI.favoriteFilter.Activated, function() prefs.favoritesOnly = not prefs.favoritesOnly; Save(); Filter(true) end)
+        Connect(UI.random.Activated, function()
+            if runtime.filtering or #runtime.filtered == 0 then Notify("No emotes available yet."); return end
+            local item = runtime.filtered[math.random(1,#runtime.filtered)]; SetSelected(item); Play(item,false)
+        end)
+        Connect(UI.stop.Activated, function() StopCurrent("Stopped") end)
+        Connect(UI.previous.Activated, function() runtime.page = math.max(1, runtime.page - 1); RenderPage() end)
+        Connect(UI.next.Activated, function() runtime.page = runtime.page + 1; RenderPage() end)
+        Connect(UI.search:GetPropertyChangedSignal("Text"), function()
+            UI.searchToken = UI.searchToken + 1
+            local ticket = UI.searchToken
+            task.delay(.25, function()
+                if not runtime.alive or ticket ~= UI.searchToken then return end
+                prefs.query = UI.search.Text:sub(1,200); Save(); Filter(true)
+            end)
+        end)
+        Connect(UI.search.FocusLost, function() prefs.query = UI.search.Text:sub(1,200); Save(); Filter(true) end)
+        Connect(UI.root:GetPropertyChangedSignal("AbsoluteSize"), function() task.defer(Layout) end)
+        Connect(UI.cardsScroll:GetPropertyChangedSignal("AbsoluteSize"), function() task.defer(Layout) end)
+        Connect(container:GetPropertyChangedSignal("Visible"), function()
+            if container.Visible then task.delay(.05, function() if runtime.alive and UI.root then Layout(); RenderCards() end end) end
+        end)
+        Layout(); RenderCards(); RefreshQuickButtons()
+    end
+    function runtime.OpenBrowser()
+        if not runtime.alive then return end
+        if UI.root and UI.root.Parent then UI.root.Visible = true; RenderCards(); return end
+        local ok, err = pcall(Build)
+        if not ok then WarnOnce("native_ui", "Could not build the Noir Emotes page: " .. tostring(err)) end
+    end
+    function runtime.CloseBrowser() end
+    function runtime.RestoreQuickButtons() end
+    function runtime.SyncQuickButtons() end
+    function runtime.ClearQuickButtons() prefs.shortcuts = {}; Save() end
+    function runtime.DestroyBrowser()
+        for _, connection in ipairs(UI.connections) do pcall(function() connection:Disconnect() end) end
+        UI.connections = {}
+        destroyQuickGui()
+        if UI.root then UI.root:Destroy() end
+        UI.root = nil; UI.cards = {}
+    end
+end
+
+-- The supplied card browser is embedded directly in Noir's Emotes page; no duplicate native control sections.
+function runtime.SyncNative() end
+runtime.initializing=false
+_G[KEY]=runtime
+local cache=ReadJSON(CACHE)
+local cachedItems=NormalizeCatalog(cache)
+AdoptCatalog(cachedItems or BUILTIN,cachedItems and "saved cache" or "built-in starter list")
+Status("Ready — select an emote and press Play")
+RefreshCatalog()
+task.defer(function()
+    if runtime.alive then runtime.OpenBrowser() end
+end)
+
+]==]
+    local compiler = loadstring
+    if type(compiler) ~= "function" then
+        warn("[Noir Emotes] loadstring is unavailable; the Emotes tab could not be started.")
+        return
+    end
+    local okCompile, moduleFn = pcall(compiler, __noirEmotesSource)
+    if not okCompile or type(moduleFn) ~= "function" then
+        warn("[Noir Emotes] module compile failed: " .. tostring(moduleFn))
+        return
+    end
+    local okRun, err = xpcall(moduleFn, function(message) return tostring(message) end)
+    if not okRun then warn("[Noir Emotes] module startup failed: " .. tostring(err)) end
+end)
+
+
 
 local selfMods = tab:AddSection("MAIN \u{2022} SELF MODS", "Universal player controls")
 selfMods:AddToggle("Enable WalkSpeed", function(v) utility.walkEnabled = v; applyCharacterMods() end)
@@ -2845,37 +4669,26 @@ serverMods:AddButton("Show Murderer Chance", showMurdererChance)
 serverMods:AddButton("Refresh Roles", refreshTarget)
 serverMods:AddLabel("Roles are sampled during the 10 second countdown.")
 
-local worldGun = tab:AddSection("WORLD \u{2022} GUN", "Gun pickup and dropped gun controls")
-worldGun:AddButton("Grab Gun", function() grabGun() end)
-worldGun:AddToggle("Auto Grab Gun", function(v) utility.autoGrab = v end)
-worldGun:AddToggle("Auto Grab Gun Safety Check", function(v) utility.grabSafety = v end)
-worldGun:AddToggle("Gun Aura", function(v) utility.gunAura = v end)
-worldGun:AddSlider("Gun Aura Range", 5, 40, 10, function(v) utility.gunAuraRange = v end)
-worldGun:AddToggle("Auto Notify on Dropped Gun", function(v) utility.notifyDropped = v end)
-worldGun:AddToggle("Gun Pickup Notify", function(v) utility.notifyPickup = v end)
-
-local worldFling = tab:AddSection("WORLD \u{2022} FLING", "Sheriff, Murderer and selected player")
-worldFling:AddButton("Fling Sheriff", function() local p = findSheriff(); if p then task.spawn(flingPlayer, p) else notify("Sheriff not found", 2) end end)
-worldFling:AddButton("Fling Murder", function() local p = validTarget(murderer) and murderer or findByKnife(); if p then task.spawn(flingPlayer, p) else notify("Murderer not found", 2) end end)
-local selectedPlayerControl = worldFling:AddDropdown("Select Player", playerNameList(), function(name)
-    utility.selectedPlayer = name ~= "None" and name or nil
-    config.selectedPlayer = utility.selectedPlayer
+local gunUtilities = tab:AddSection("WORLD \u{2022} GUN", "Auto GG, pickup, aura, notifications and bind button")
+gunUtilities:AddToggle("Enable Auto GG", setAutoGG)
+gunUtilities:AddLabel("Auto GG picks up GunDrop while you do not have a Gun.")
+gunUtilities:AddButton("Grab Gun", requestGrabGun)
+gunUtilities:AddToggle("Gun Aura", setGunAura)
+gunUtilities:AddSlider("Gun Aura Range", 5, 250, gunUtilityState.auraRange, function(value)
+    gunUtilityState.auraRange = tonumber(value) or gunUtilityState.auraRange
 end)
-worldFling:AddButton("Fling Selected", function() local p = utility.selectedPlayer and Players:FindFirstChild(utility.selectedPlayer); if p then task.spawn(flingPlayer, p) else notify("Select a player", 2) end end)
-worldFling:AddButton("Refresh Player List", function() if selectedPlayerControl and selectedPlayerControl.Refresh then selectedPlayerControl:Refresh(playerNameList(), utility.selectedPlayer or "None") end end)
-
-local touchFlingSection = tab:AddSection("WORLD \u{2022} TOUCH FLING", "Adapted from FlingGui")
-touchFlingSection:AddToggle("Touch Fling", function(v) utility.touchFling = v end)
-touchFlingSection:AddSlider("Touch Fling Power", 10, 50000, 100, function(v) utility.touchPower = v end)
-
-local flingSettings = tab:AddSection("WORLD \u{2022} FLING SETTINGS", "Automatic fling and power settings")
-flingSettings:AddButton("Fling Nearest", function() task.spawn(flingPlayer, nearestPlayer()) end)
-flingSettings:AddToggle("Auto Fling Sheriff / Hero", function(v) utility.autoFlingSheriff = v end)
-flingSettings:AddToggle("Auto Fling Murderer", function(v) utility.autoFlingMurderer = v end)
-flingSettings:AddToggle("Fling All", function(v) utility.flingAll = v end)
-flingSettings:AddToggle("Anti Fling", function(v) utility.antiFling = v end)
-flingSettings:AddSlider("Fling Duration", 1, 5, 2, function(v) utility.flingDuration = v end)
-flingSettings:AddSlider("Fling Power", 1, 3, 1, function(v) utility.flingPower = v end)
+gunUtilities:AddToggle("Auto Notify Dropped Gun", function(enabled)
+    gunUtilityState.droppedGunNotify = enabled == true
+end)
+gunUtilities:AddToggle("Gun Pickup Notify", function(enabled)
+    gunUtilityState.gunPickupNotify = enabled == true
+end)
+gunUtilities:AddToggle("Enable Grab Gun Bind Button", setGrabGunBindButton)
+gunUtilities:AddSlider("Grab Gun Bind Button Size", 5, 25, gunUtilityState.bindButtonSize * 100, function(value)
+    gunUtilityState.bindButtonSize = (tonumber(value) or 11) / 100
+    updateGrabGunBindButtonSize()
+end)
+gunUtilities:AddLabel("Round Grab Gun button: drag it to move; its size and position are saved.")
 
 do
     local combatAim=tab:AddSection("SILENT AIM", "Server FireServer redirect")
@@ -2884,12 +4697,29 @@ do
     combatAim:AddToggle("Show Shoot Murder Button", setShootButtonVisible)
     combatAim:AddToggle("Lock Shoot Murder Button", function(v) config.lockShootButton=v==true end)
 
+    local combatGun=tab:AddSection("GUN", "Gun targeting controls")
+    combatGun:AddToggle("Piercer Bullet", setPiercerBullet)
+    combatGun:AddLabel("Sends a target-side Gun ray when a wall blocks the selected target.")
+
     local combatKnife=tab:AddSection("KNIFE SILENT AIM", "Nearest player or Sheriff-only targeting")
     combatKnife:AddToggle("Knife Silent Aim", function(v)
         config.knifeEnabled=v==true
         if config.knifeEnabled then installHook() end
     end)
-    combatKnife:AddSlider("Knife Radius", 5, 40, config.knifeRadius, function(v) config.knifeRadius = tonumber(v) or config.knifeRadius end)
+    -- Preserve the previous Knife Radius value when upgrading the control name.
+    local oldKnifeAuraKey = "KNIFE SILENT AIM::Knife Radius"
+    local newKnifeAuraKey = "KNIFE SILENT AIM::Knife Throw Aura"
+    if NoirPersistence.data.sliders[newKnifeAuraKey] == nil and NoirPersistence.data.sliders[oldKnifeAuraKey] ~= nil then
+        NoirPersistence.data.sliders[newKnifeAuraKey] = NoirPersistence.data.sliders[oldKnifeAuraKey]
+        NoirPersistence.Save()
+    end
+    -- The old working Knife Silent Aim kept this behavior enabled with no separate control.
+    -- First run preserves that default; later user choices are saved normally.
+    local knifeAuraToggle = combatKnife:AddToggle("KnifeThrown Aura", function(v) config.knifeThrownAura=v==true end)
+    if NoirPersistence.data.toggles["KNIFE SILENT AIM::KnifeThrown Aura"] == nil then
+        knifeAuraToggle(true)
+    end
+    combatKnife:AddSlider("Knife Throw Aura", 1, 40, config.knifeRadius, function(v) config.knifeRadius = tonumber(v) or config.knifeRadius end)
     combatKnife:AddToggle("Knife Wall Check", function(v) config.knifeWallCheck=v==true end)
     combatKnife:AddToggle("Prioritize Sheriff", function(v)
         config.knifePrioritizeSheriff=v==true
@@ -2911,7 +4741,7 @@ do
         addToggle("predictLag","Predict Lag")
         addSlider("maxSimulationMs","Prediction Max Simulation",20,300)
         addSlider("predictionIntervalMs","Prediction Interval",1,100)
-        addSlider("manualPingMs","Prediction Ping",10,350)
+        addSlider("manualPingMs","Prediction Ping",10,1000)
         addSlider("offsetX","X Position Offset",-100,100)
         addSlider("offsetY","Y Position Offset",-100,100)
         addSlider("offsetZ","Z Position Offset",-100,100)
@@ -2924,7 +4754,7 @@ do
     local knifePrediction=tab:AddSection("KNIFE PREDICTION", "Independent KnifeThrown prediction")
     addPrediction(knifePrediction,config.knifeAim,"knife.")
 
-    local profileKeys={"adaptive","fixedLead","extraLead","maxLead","prioritizePing","predictJump","predictLag","maxSimulationMs","predictionIntervalMs","manualPingMs","offsetX","offsetY","offsetZ","horizontalMultiplier","verticalMultiplier"}
+    local profileKeys={"adaptive","fixedLead","extraLead","prioritizePing","predictJump","predictLag","maxSimulationMs","predictionIntervalMs","manualPingMs","offsetX","offsetY","offsetZ","horizontalMultiplier","verticalMultiplier"}
     local function profileSnapshot(profile)
         local data={}
         for _,key in ipairs(profileKeys) do data[key]=profile[key] end
@@ -2997,37 +4827,6 @@ do
     end
 end
 
-local playerOutline = tab:AddSection("VISUAL \u{2022} PLAYER OUTLINE", "Role-colored silhouettes")
-playerOutline:AddToggle("Everyone", function(v) config.espOutline = v; task.spawn(refreshTarget); refreshESP() end)
-playerOutline:AddToggle("Murderer Only", function(v) config.espOutlineMurderer = v; task.spawn(refreshTarget); refreshESP() end)
-playerOutline:AddToggle("Sheriff / Hero Only", function(v) config.espOutlineSheriff = v; task.spawn(refreshTarget); refreshESP() end)
-playerOutline:AddToggle("Chams Everyone", function(v) config.espChams = v; refreshESP() end)
-playerOutline:AddToggle("Chams Murderer", function(v) config.espChamsMurderer = v; refreshESP() end)
-playerOutline:AddToggle("Chams Sheriff / Hero", function(v) config.espChamsSheriff = v; refreshESP() end)
-
-local playerBox = tab:AddSection("VISUAL \u{2022} PLAYER BOX", "Clean role-colored boxes")
-playerBox:AddToggle("Everyone", function(v) config.espBox = v; task.spawn(refreshTarget); refreshESP() end)
-playerBox:AddToggle("Murderer Only", function(v) config.espBoxMurderer = v; task.spawn(refreshTarget); refreshESP() end)
-playerBox:AddToggle("Sheriff / Hero Only", function(v) config.espBoxSheriff = v; task.spawn(refreshTarget); refreshESP() end)
-playerBox:AddToggle("Show Name", function(v) config.espName = v; refreshESP() end)
-playerBox:AddToggle("Show Distance", function(v) config.espDistance = v; refreshESP() end)
-playerBox:AddToggle("Show Health", function(v) config.espHealth = v; refreshESP() end)
-playerBox:AddToggle("Show Role", function(v) config.espRole = v; refreshESP() end)
-playerBox:AddToggle("Show Tracer", function(v) config.espTracer = v end)
-playerBox:AddToggle("Show Skeleton", function(v) config.espSkeleton = v end)
-
-local objectOutline = tab:AddSection("VISUAL \u{2022} OBJECT OUTLINE", "Dropped items and map objects")
-objectOutline:AddToggle("Dropped Gun", function(v) config.outlineDroppedGun = v; refreshObjectESP() end)
-objectOutline:AddToggle("Traps", function(v) config.outlineTraps = v; refreshObjectESP() end)
-objectOutline:AddToggle("Throwing Knives", function(v) config.outlineThrowingKnives = v; refreshObjectESP() end)
-objectOutline:AddToggle("Coins", function(v) config.outlineCoins = v; refreshObjectESP() end)
-
-local objectBox = tab:AddSection("VISUAL \u{2022} OBJECT BOX", "Compact object boxes")
-objectBox:AddToggle("Dropped Gun", function(v) config.boxDroppedGun = v; refreshObjectESP() end)
-objectBox:AddToggle("Traps", function(v) config.boxTraps = v; refreshObjectESP() end)
-objectBox:AddToggle("Throwing Knives", function(v) config.boxThrowingKnives = v; refreshObjectESP() end)
-objectBox:AddToggle("Coins", function(v) config.boxCoins = v; refreshObjectESP() end)
-
 local remoteConnections = {}
 function connectRemote(name, handler)
     local wanted = string.lower(tostring(name))
@@ -3058,7 +4857,6 @@ local function finishRound()
     resetRoundTimer()
     murderer, sheriff, hero = nil, nil, nil
     table.clear(roleCache); table.clear(announcedRoles)
-    if type(refreshESP) == "function" then refreshESP() end
 end
 connectRemote("RoundEndFade", finishRound)
 connectRemote("RoundEnd", finishRound)
@@ -3198,7 +4996,7 @@ if not LocalPlayer then warn("[FE Animations] LocalPlayer unavailable."); return
 local HttpService = game:GetService("HttpService")
 local runtime = {version=3,alive=true, initializing=true, enabled=false, generation=0,
     selections={all="Default",idle="Default",walk="Default",run="Default",jump="Default",climb="Default",fall="Default"}}
-local FILE = "ODH_FEAnimations_settings.json"
+local FILE = "Noir Hub/configs/ODH_FEAnimations_settings.json"
 runtime.settingsFile=FILE
 local warnings={}
 local function WarnOnce(key,text)
@@ -4040,7 +5838,7 @@ RequestApply()
         local __pluginOk, __pluginError = xpcall(function()
 local ODHX = (function()
     local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
-    X.id, X.title, X.file = "BJP", "Bomb Jump+", "ODH_BJP_settings.json"
+    X.id, X.title, X.file = "BJP", "Bomb Jump+", "Noir Hub/configs/ODH_BJP_settings.json"
     local host = odh_shared_plugins
     assert(host and type(host.CreateTab)=="function", X.title .. ": load through the current Overdrive H plugin menu")
     local env = {}
@@ -4562,7 +6360,34 @@ local function DeleteBigButton(id)
     end
 end
 
-BindableButtons = {Buttons = {}, Maids = {}, Count = 0}
+local savedBindButtonPositions = ODHX.data.bindButtonPositions
+if type(savedBindButtonPositions) ~= "table" then
+    savedBindButtonPositions = {}
+    ODHX.data.bindButtonPositions = savedBindButtonPositions
+end
+
+BindableButtons = {Buttons = {}, Maids = {}, Count = 0, SavedPositions = savedBindButtonPositions}
+
+function BindableButtons.GetSavedPosition(id)
+    local value = BindableButtons.SavedPositions[id]
+    if type(value) ~= "table" then return nil end
+    local xScale, xOffset = tonumber(value.xScale), tonumber(value.xOffset)
+    local yScale, yOffset = tonumber(value.yScale), tonumber(value.yOffset)
+    if not xScale or not xOffset or not yScale or not yOffset then return nil end
+    return __UD2(xScale, xOffset, yScale, yOffset)
+end
+
+function BindableButtons.SavePosition(id, position)
+    if not id or typeof(position) ~= "UDim2" then return end
+    BindableButtons.SavedPositions[id] = {
+        xScale = position.X.Scale,
+        xOffset = position.X.Offset,
+        yScale = position.Y.Scale,
+        yOffset = position.Y.Offset
+    }
+    ODHX.data.bindButtonPositions = BindableButtons.SavedPositions
+    ODHX.Commit()
+end
 
 local __SHAPES = {
     [0] = "rbxassetid://86221076925479",
@@ -4573,28 +6398,30 @@ local __SHAPES = {
 }
 
 local __NORMAL_COLOR = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   __PCLR(0.133333, 0.827451, 0.494118)),
-    ColorSequenceKeypoint.new(0.6, __PCLR(0.231373, 0.509804, 0.498039)),
-    ColorSequenceKeypoint.new(1,   __PCLR(0.501961, 0.501961, 0.501961))
+    ColorSequenceKeypoint.new(0,    __RGB(35, 35, 40)),
+    ColorSequenceKeypoint.new(0.22, __RGB(250, 250, 252)),
+    ColorSequenceKeypoint.new(0.48, __RGB(70, 70, 78)),
+    ColorSequenceKeypoint.new(0.72, __RGB(255, 255, 255)),
+    ColorSequenceKeypoint.new(1,    __RGB(45, 45, 52)),
 })
 
 local __WAIT_COLOR = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   __PCLR(0.827451, 0.133333, 0.133333)),
-    ColorSequenceKeypoint.new(0.6, __PCLR(0.509804, 0.231373, 0.231373)),
-    ColorSequenceKeypoint.new(1,   __PCLR(0.501961, 0.501961, 0.501961))
+    ColorSequenceKeypoint.new(0,    __RGB(95, 30, 35)),
+    ColorSequenceKeypoint.new(0.22, __RGB(255, 110, 120)),
+    ColorSequenceKeypoint.new(0.48, __RGB(100, 35, 42)),
+    ColorSequenceKeypoint.new(0.72, __RGB(255, 150, 155)),
+    ColorSequenceKeypoint.new(1,    __RGB(70, 25, 30)),
 })
 
 local __GOLD_NORMAL_COLOR = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   __RGB(255, 215, 0)),
-    ColorSequenceKeypoint.new(0.6, __RGB(255, 140, 0)),
-    ColorSequenceKeypoint.new(1,   __RGB(184, 134, 11))
+    ColorSequenceKeypoint.new(0,    __RGB(75, 60, 25)),
+    ColorSequenceKeypoint.new(0.22, __RGB(255, 225, 120)),
+    ColorSequenceKeypoint.new(0.48, __RGB(110, 85, 30)),
+    ColorSequenceKeypoint.new(0.72, __RGB(255, 240, 175)),
+    ColorSequenceKeypoint.new(1,    __RGB(70, 55, 25)),
 })
 
-local __GOLD_WAIT_COLOR = ColorSequence.new({
-    ColorSequenceKeypoint.new(0,   __RGB(255, 69, 0)),
-    ColorSequenceKeypoint.new(0.6, __RGB(139, 69, 19)),
-    ColorSequenceKeypoint.new(1,   __RGB(160, 82, 45))
-})
+local __GOLD_WAIT_COLOR = __WAIT_COLOR
 
 local function bind_safecallback(callback)
     if not callback then return end
@@ -4626,7 +6453,7 @@ local function Bind_GetStorage()
     return sg
 end
 
-local function Bind_MakeDraggable(gui, maid, ripple, sound, clickFunc)
+local function Bind_MakeDraggable(gui, maid, ripple, sound, clickFunc, onPositionChanged)
     local dragging, dragInput, dragStart, startPos
     local hasMoved = false
 
@@ -4649,7 +6476,9 @@ local function Bind_MakeDraggable(gui, maid, ripple, sound, clickFunc)
             rel = ODHX.Connect(__UIS.InputEnded, function(endInput)
                 if endInput.UserInputType == input.UserInputType then
                     dragging = false
-                    if not hasMoved then
+                    if hasMoved then
+                        if onPositionChanged then pcall(onPositionChanged, gui.Position) end
+                    else
                         bind_safecallback(clickFunc)
                     end
                     rel:Disconnect()
@@ -4688,7 +6517,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     local ImageButton = Instance.new("ImageButton")
     ImageButton.Name = id
     ImageButton.Size = __UD2(widthScale, 0, buttonSizeY, 0)
-    ImageButton.Position = __UD2(xPos, 0, yPos, 0)
+    ImageButton.Position = BindableButtons.GetSavedPosition(id) or __UD2(xPos, 0, yPos, 0)
     ImageButton.AnchorPoint = __V2(0.5, 0.5)
     ImageButton.Image = ""
     ImageButton.BackgroundColor3 = __RGB(8, 8, 10)
@@ -4715,10 +6544,10 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     TextLabel.Position = __UD2(0.5, 0, 0.5, 0)
     TextLabel.AnchorPoint = __V2(0.5, 0.5)
     TextLabel.BackgroundTransparency = 1
-    TextLabel.Font = Enum.Font.GothamBold
+    TextLabel.Font = Enum.Font.Gotham
     TextLabel.Text = text
     TextLabel.TextColor3 = __PCLR(1, 1, 1)
-    TextLabel.TextSize = 14
+    TextLabel.TextSize = 17
     TextLabel.TextWrapped = true
     TextLabel.ZIndex = 3
 
@@ -4755,7 +6584,9 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     sound.Volume = muteButtonSounds and 0 or 0.5
     sound.Parent = ImageButton
 
-    Bind_MakeDraggable(ImageButton, buttonMaid, ripple, sound, clickFunc)
+    Bind_MakeDraggable(ImageButton, buttonMaid, ripple, sound, clickFunc, function(position)
+        BindableButtons.SavePosition(id, position)
+    end)
     buttonMaid:GiveTask(ODHX.Connect(__RS.RenderStepped, function()
         Stroke.Rotation = (Stroke.Rotation + 1) % 360
     end))
@@ -4767,12 +6598,27 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
 end
 
 function BindableButtons.DeleteBButton(id)
-    if BindableButtons.Maids[id] then
-        BindableButtons.Maids[id]:Destroy()
-        BindableButtons.Maids[id] = nil
-        BindableButtons.Buttons[id] = nil
+    -- Remove the managed button and any orphan left by a prior script execution.
+    local button = BindableButtons.Buttons[id]
+    local maid = BindableButtons.Maids[id]
+    if maid then
+        maid:Destroy()
+    elseif button and button.Parent then
+        button:Destroy()
+    end
+    BindableButtons.Maids[id] = nil
+    BindableButtons.Buttons[id] = nil
+
+    local ok, storage = pcall(Bind_GetStorage)
+    if ok and storage then
+        local orphan = storage:FindFirstChild(id)
+        if orphan then orphan:Destroy() end
     end
 end
+
+-- A stale visual button must not survive while its Bind Button toggle is off.
+BindableButtons.DeleteBButton("bombjump_bind")
+BindableButtons.DeleteBButton("goldbombjump_bind")
 
 function BindableButtons.UpdateBButtonText(id, text, isWaiting, isGold)
     local btn = BindableButtons.Buttons[id]
@@ -4783,7 +6629,7 @@ function BindableButtons.UpdateBButtonText(id, text, isWaiting, isGold)
         textLabel.Text = text
     end
 
-    local stroke = btn:FindFirstChild("@Stroke")
+    local stroke = btn:FindFirstChild("@Stroke", true)
     if stroke then
         if isGold then
             stroke.Color = isWaiting and __GOLD_WAIT_COLOR or __GOLD_NORMAL_COLOR
@@ -5133,20 +6979,21 @@ local function CreateBombJumpSystem(config)
     end)
 
     section:AddToggle("Enable " .. displayName .. " Bind Button", function(e)
-        state.bindBtnExists = e
-        if e then
-            local shortName = isGold and "GBJ" or "BJ"
-            BindableButtons.AddBButton(config.bindButtonId, shortName, FastBombJump, isGold, state.bindButtonSize)
-            state.bindButton = BindableButtons.Buttons[config.bindButtonId]
-            if state.bindButton then
-                local screen = Services.Workspace.CurrentCamera.ViewportSize
-                state.bindButton.Size = __UD2(state.bindButtonSize * (screen.Y / screen.X), 0, state.bindButtonSize, 0)
-                BindableButtons.UpdateBButtonText(config.bindButtonId,
-                    state.onCooldown and "Wait" or shortName, state.onCooldown, isGold)
-            end
-        else
-            BindableButtons.DeleteBButton(config.bindButtonId)
-            state.bindButton = nil
+        -- Only an explicit true from this toggle may create the floating Bind Button.
+        local wantsBindButton = e == true
+        state.bindBtnExists = wantsBindButton
+        BindableButtons.DeleteBButton(config.bindButtonId)
+        state.bindButton = nil
+        if not wantsBindButton then return end
+
+        local shortName = isGold and "GBJ" or "BJ"
+        BindableButtons.AddBButton(config.bindButtonId, shortName, FastBombJump, isGold, state.bindButtonSize)
+        state.bindButton = BindableButtons.Buttons[config.bindButtonId]
+        if state.bindButton then
+            local screen = Services.Workspace.CurrentCamera.ViewportSize
+            state.bindButton.Size = __UD2(state.bindButtonSize * (screen.Y / screen.X), 0, state.bindButtonSize, 0)
+            BindableButtons.UpdateBButtonText(config.bindButtonId,
+                state.onCooldown and "Wait" or shortName, state.onCooldown, isGold)
         end
     end)
 
@@ -5329,7 +7176,7 @@ end
 local fileRead = type(readfile)=="function" and readfile or environment.readfile
 local fileWrite = type(writefile)=="function" and writefile or environment.writefile
 local fileExists = type(isfile)=="function" and isfile or environment.isfile
-local FILE = "ODH_InventoryUnlimiter_settings.json"
+local FILE = "Noir Hub/configs/ODH_InventoryUnlimiter_settings.json"
 local httpOK, HttpService = pcall(function() return game:GetService("HttpService") end)
 local canPersist = type(fileRead)=="function" and type(fileWrite)=="function" and httpOK and HttpService~=nil
 runtime.settingsFile=FILE
@@ -5615,7 +7462,7 @@ print("[Inventory Unlimiter V5] Loaded | Settings: " .. FILE .. " | " .. runtime
         local __pluginOk, __pluginError = xpcall(function()
 local ODHX = (function()
     local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=false }
-    X.id, X.title, X.file = "Pm-Wallhop", "Pm-WallHop", "ODH_Pm-Wallhop_settings.json"
+    X.id, X.title, X.file = "Pm-Wallhop", "Pm-WallHop", "Noir Hub/configs/ODH_Pm-Wallhop_settings.json"
     local host = odh_shared_plugins
     assert(host and type(host.CreateTab)=="function", X.title .. ": load through the current Overdrive H plugin menu")
     local env = {}
@@ -6191,6 +8038,8 @@ local lastFlickTime = 0
 local isJumpKeyPressed = false
 local Camera = workspace.CurrentCamera
 local wallDetectionCooldown = 0
+local lastWallhopAt = 0
+local WALLHOP_COOLDOWN = 0.55
 
 local wallRaycastParams = RaycastParams.new()
 wallRaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
@@ -6305,9 +8154,12 @@ performWallhop = function()
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
     if not (humanoid and rootPart and humanoid:GetState() ~= Enum.HumanoidStateType.Dead) then return end
+    local now = os.clock()
+    if now - lastWallhopAt < WALLHOP_COOLDOWN then return end
 
     local wall = getWallRaycastResult()
     if not wall then return end
+    lastWallhopAt = now
 
     rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + wall.Normal)
     RunService.Heartbeat:Wait()
@@ -6398,6 +8250,7 @@ ODHX.Connect(LocalPlayer.CharacterAdded, function(character)
     lastHitInstance = nil
     currentHitInstance = nil
     isFlicking = false
+    lastWallhopAt = 0
 end)
 
 ODHX.Connect(UserInputService.WindowFocused, function()
@@ -6418,5 +8271,2088 @@ ODHX.Finish()
             warn("[Noir embedded plugin: Pm-Wallhop.lua.txt] " .. tostring(__pluginError))
             notify("Pm-Wallhop.lua.txt failed to load: " .. tostring(__pluginError), 7)
         end
+    end
+end
+
+
+-- Embedded plugin: full user-supplied fling_мой.lua.txt, routed to the World page.
+do
+    local __pluginOk, __pluginError = xpcall(function()
+-- Direct Noir integration: Fling uses Noir's own host and notification system.
+local noirHost = host
+assert(noirHost and type(noirHost.CreateTab) == "function", "Ultimate Fling: Noir host unavailable")
+-- Local Fling state adapter. It uses no external shared-host global.
+local ODHX = (function()
+    local X = { ready=false, silent=false, restoring=false, replay=true, records={}, byKey={}, data={version=1, controls={}}, external=true }
+    X.id, X.title, X.file = "FLING", "ULTIMATE FLING", "Noir Hub/configs/ODH_FLING_settings.json"
+    local host = {
+        CreateTab = function()
+            return noirHost.CreateTab()
+        end,
+        Notify = function(textValue, duration)
+            return notify(tostring(textValue), duration or 3)
+        end,
+    }
+    local env = {}
+    if type(getgenv)=="function" then local ok,g=pcall(getgenv); if ok and type(g)=="table" then env=g end end
+    local rd = type(readfile)=="function" and readfile or env.readfile
+    local wr = type(writefile)=="function" and writefile or env.writefile
+    local exists = type(isfile)=="function" and isfile or env.isfile
+    local http = game:GetService("HttpService")
+    local reported = {}
+    local function report(message)
+        if reported[message] then return end
+        reported[message]=true
+        warn("[" .. X.title .. "] " .. message)
+        if type(host.Notify)=="function" then pcall(host.Notify, X.title .. ": " .. message, 5) end
+    end
+    X.Report = report
+    local function finite(v) return type(v)=="number" and v==v and math.abs(v)<math.huge end
+    local function encode(v, depth)
+        depth=depth or 0
+        if depth>20 then error("settings nesting too deep") end
+        if typeof(v)=="Color3" then return {__odhColor={v.R,v.G,v.B}} end
+        local t=type(v)
+        if t=="boolean" or t=="string" then return v end
+        if t=="number" then if finite(v) then return v end; return nil end
+        if t=="table" then
+            local result={}
+            for k,item in pairs(v) do
+                if type(k)=="string" or type(k)=="number" then result[k]=encode(item,depth+1) end
+            end
+            return result
+        end
+        return nil -- never serialize Instances, connections, functions or players
+    end
+    local function decode(v, depth)
+        depth=depth or 0
+        if depth>20 then error("settings nesting too deep") end
+        if type(v)~="table" then return v end
+        if v.__odhColor then
+            local c=v.__odhColor
+            assert(type(c)=="table" and finite(c[1]) and finite(c[2]) and finite(c[3]),"invalid color")
+            return Color3.new(math.clamp(c[1],0,1),math.clamp(c[2],0,1),math.clamp(c[3],0,1))
+        end
+        local result={}
+        for k,item in pairs(v) do result[k]=decode(item,depth+1) end
+        return result
+    end
+    X.Encode, X.Decode = encode, decode
+    if not X.external then
+        if type(rd)=="function" and type(wr)=="function" then
+            local present=true
+            if type(exists)=="function" then local ok,v=pcall(exists,X.file); if ok then present=v end end
+            if present then
+                local ok,text=pcall(rd,X.file)
+                if ok then
+                    local good,data=pcall(function() return decode(http:JSONDecode(text)) end)
+                    if good and type(data)=="table" and data.version==1 and type(data.controls)=="table" then X.data=data
+                    else X.badFile=true; report("Invalid settings file; defaults loaded. A manual change will replace it.") end
+                elseif type(exists)=="function" then report("Could not read settings file: " .. tostring(text)); X.badFile=true end
+            end
+        else report("readfile/writefile unavailable; settings last only for this session.") end
+    end
+    local tab
+    X.shared=setmetatable({}, {__index=host}) -- never mutate the host API
+    X.shared.Notify=function(text,seconds)
+        if X.restoring then return end
+        if type(host.Notify)=="function" then return host.Notify(text,seconds or 3) end
+    end
+    local function key(section,name,kind) return section .. " / " .. kind .. " / " .. name end
+    local function safeValue(r,v)
+        if r.kind=="Toggle" then if type(v)=="boolean" then return v end
+        elseif r.kind=="Slider" then if finite(v) then return math.clamp(v,r.min,r.max) end
+        elseif r.kind=="Colorpicker" then if typeof(v)=="Color3" then return v end
+        elseif r.kind=="Dropdown" then
+            for _,item in ipairs(r.items) do if v==item then return v end end
+        end
+        return nil
+    end
+    local function show(r,v)
+        if v==nil or r.shown==v then return end
+        local prior=X.silent; X.silent=true
+        local ok,err=pcall(function()
+            if r.kind=="Toggle" then
+                if r.visual~=v then assert(type(r.handle)=="function","AddToggle must return a closure"); r.handle() end
+            elseif r.kind=="Slider" then r.handle:SetValue(v)
+            elseif r.kind=="Colorpicker" then r.handle:SetRGBValue(v)
+            elseif r.kind=="Dropdown" then r.handle:Select(v) end
+        end)
+        X.silent=prior
+        if ok then r.shown=v else report("UI sync failed: " .. r.name .. ": " .. tostring(err)) end
+    end
+    function X.Bind(section,name,kind,getter)
+        local r=X.byKey[key(section,name,kind)]
+        assert(r,"Unknown binding " .. section .. " / " .. name)
+        r.get=getter
+    end
+    function X.Sync()
+        for _,r in ipairs(X.records) do
+            if r.get then
+                local ok,v=pcall(r.get)
+                if ok then
+                    v=safeValue(r,v)
+                    if v~=nil then
+                        r.value=v
+                        if not r.exclude then X.data.controls[r.key]=v end
+                        show(r,v)
+                    end
+                end
+            end
+        end
+    end
+    function X.Commit()
+        if not X.ready or X.silent or X.restoring or X.stopped or X.committing then return end
+        X.committing=true
+        local ok,err=pcall(function()
+            X.Sync()
+            if X.capture then X.data.snapshot=X.capture() end
+            if X.external then
+                if not X.backend or not X.backend(X.data) then error("native settings file could not be saved") end
+            elseif type(wr)=="function" then
+                wr(X.file,http:JSONEncode(encode(X.data)))
+            end
+        end)
+        X.committing=false
+        if not ok then report("Settings save failed: " .. tostring(err)) end
+    end
+    function X.Restore()
+        X.restoring=true
+        -- Options before enabling modules. Actions and player selections are never replayed.
+        for _,togglePass in ipairs({false,true}) do
+            for _,r in ipairs(X.records) do
+                if not r.exclude and ((r.kind=="Toggle")==togglePass) then
+                    local v=safeValue(r,X.data.controls[r.key])
+                    if v==nil and r.get then local ok,x=pcall(r.get); if ok then v=safeValue(r,x) end end
+                    if v==nil then v=r.default end
+                    if v~=nil then
+                        show(r,v)
+                        local ok,err=pcall(r.callback,v)
+                        if not ok then report("Restore failed: " .. r.name .. ": " .. tostring(err)) end
+                        r.value=v; X.data.controls[r.key]=v
+                    end
+                end
+            end
+        end
+        X.restoring=false
+    end
+    function X.Finish()
+        if X.replay then X.Restore() else X.Sync() end
+        X.ready=true
+        if not X.badFile then X.Commit() end
+    end
+    function X.Set(section,name,kind,v,apply)
+        local r=X.byKey[key(section,name,kind)]
+        if not r then return end
+        v=safeValue(r,v); if v==nil then return end
+        show(r,v); r.value=v; X.data.controls[r.key]=v
+        if apply then r.callback(v) end
+    end
+    function X.ResetControls()
+        X.data.controls={}
+        for _,r in ipairs(X.records) do
+            if r.kind=="Toggle" and not r.exclude then X.Set(r.section,r.name,r.kind,false,true) end
+        end
+    end
+    function X.shared.AddSection(name,subtitle)
+        if not tab then tab=host.CreateTab() end
+        -- Route every original Fling card into Noir's existing World page.
+        local raw=tab:AddSection("WORLD \u{2022} " .. name,subtitle or "")
+        local section={Name=name,Raw=raw}
+        local function register(kind,label,callback,default,min,max,items)
+            local r={section=name,name=label,kind=kind,callback=callback,default=default,min=min,max=max,items=items,visual=false}
+            r.key=key(name,label,kind)
+            r.exclude=(name=="🔑 Keys") -- key-capture toggles are actions, not enabled modes
+            X.records[#X.records+1]=r; X.byKey[r.key]=r
+            local function changed(v)
+                if kind=="Toggle" then r.visual=(v==true) end
+                if not X.ready or X.silent or X.restoring or X.stopped then return end
+                v=safeValue(r,v); if v==nil then return end
+                r.shown=v
+                local ok,err=pcall(callback,v)
+                if ok then
+                    r.value=v
+                    if not r.exclude then X.data.controls[r.key]=v end
+                    X.Commit()
+                else report("Callback failed: " .. label .. ": " .. tostring(err)) end
+            end
+            if kind=="Toggle" then r.handle=raw:AddToggle(label,changed)
+            elseif kind=="Slider" then r.handle=raw:AddSlider(label,min,max,default,changed)
+            elseif kind=="Colorpicker" then r.handle=raw:AddColorpicker(label,default,changed)
+            elseif kind=="Dropdown" then r.handle=raw:AddDropdown(label,items,changed) end
+            return r.handle
+        end
+        function section:AddToggle(label,cb) return register("Toggle",label,cb,false) end
+        function section:AddSlider(label,min,max,default,cb) return register("Slider",label,cb,default,min,max) end
+        function section:AddColorpicker(label,default,cb) return register("Colorpicker",label,cb,default) end
+        function section:AddDropdown(label,items,cb) return register("Dropdown",label,cb,items[1],nil,nil,items) end
+        local function action(cb)
+            return function(...)
+                if not X.ready or X.stopped then return end
+                local ok,err=pcall(cb,...)
+                if not ok then report("Action failed: " .. tostring(err)) end
+                X.Commit()
+            end
+        end
+        function section:AddButton(label,cb) return raw:AddButton(label,action(cb)) end
+        function section:AddKeybind(label,default,cb) return raw:AddKeybind(label,default,action(cb)) end
+        function section:AddPlayerDropdown(label,cb)
+            -- Noir has no AddPlayerDropdown method; use its native dropdown with current player names.
+            local playerService = game:GetService("Players")
+            local names, lookup = { "None" }, {}
+            for _, player in ipairs(playerService:GetPlayers()) do
+                if player ~= playerService.LocalPlayer then
+                    names[#names + 1] = player.Name
+                    lookup[player.Name] = player
+                end
+            end
+            table.sort(names, function(a, b)
+                if a == "None" then return true end
+                if b == "None" then return false end
+                return a:lower() < b:lower()
+            end)
+            return raw:AddDropdown(label, names, function(name)
+                local player = lookup[name] or playerService:FindFirstChild(name)
+                if player then action(cb)(player) end
+            end)
+        end
+        function section:AddTextBox(label,cb) return raw:AddTextBox(label,action(cb)) end
+        function section:AddLabel(...) return raw:AddLabel(...) end
+        function section:AddParagraph(...) return raw:AddParagraph(...) end
+        return section
+    end
+    -- Stable GUI paths, never serialized Instances. Player name is session-independent.
+    function X.Path(object)
+        local parts={}
+        local player=game:GetService("Players").LocalPlayer
+        while object and object~=game do
+            table.insert(parts,1,object==player and "$LocalPlayer" or object.Name)
+            object=object.Parent
+            if #parts>32 then return nil end
+        end
+        if object~=game then return nil end
+        return parts
+    end
+    function X.Resolve(parts)
+        if type(parts)~="table" then return nil end
+        local object=game
+        for _,name in ipairs(parts) do
+            if name=="$LocalPlayer" then object=game:GetService("Players").LocalPlayer
+            elseif type(name)=="string" and object then object=object:FindFirstChild(name)
+            else return nil end
+        end
+        return object
+    end
+    X.connections={}
+    function X.Connect(signal,callback)
+        local c=signal:Connect(function(...) if not X.stopped then return callback(...) end end)
+        X.connections[#X.connections+1]=c
+        return c
+    end
+    function X.Stop()
+        if X.stopped then return end
+        X.Commit()
+        X.stopped=true
+        for _,c in ipairs(X.connections) do pcall(function() c:Disconnect() end) end
+        if X.cleanup then pcall(X.cleanup) end
+    end
+    local registry=rawget(_G,"ODH_2026_PluginRuntimes")
+    if type(registry)~="table" then registry={}; rawset(_G,"ODH_2026_PluginRuntimes",registry) end
+    local previous=registry[X.id]
+    if previous and type(previous.Stop)=="function" then pcall(previous.Stop) end
+    registry[X.id]=X
+    return X
+end)()
+-- END ODH 2026 ADAPTER
+
+--[[
+    ⚡ ULTIMATE FLING • FLING   —   V1.0
+    Ultimate Fling GUI · Overdrive Hub plugin
+    Author: K1LAS1K (original), adapted to ODH 2026
+    =========================================================================
+    Плагин мульти-таргет флинга: выбор игроков, непрерывный флинг,
+    сохранение позиции, FPDH trick, бинды, хоткеи, HUD, настройка силы/длительности.
+
+    ── ВОЗМОЖНОСТИ ────────────────────────────────────────────────────────────
+      • Ручной флинг: Selected, Everyone, Nearest, Cancel
+        и выбор конкретного игрока из списка.
+      • Авто-режимы: Loop (по списку), Aura (по радиусу), Click (флинг кликом).
+      • Плавающие бинды-кружки: перетаскивание с запоминанием позиции, размер,
+        подсветка активности, общий звук клика.
+      • Хоткеи на все действия: захват клавиши тумблером.
+      • HUD-статус: пульс, имя текущей цели, перетаскивание с сохранением позиции.
+      • Списки: выбор цели, список для Loop, вайтлист.
+      • Сохранение настроек (readfile/writefile + JSON): длительность, сила,
+        размеры и позиции кнопок/HUD, хоткеи, вайтлист.
+
+    ── АРХИТЕКТУРА ────────────────────────────────────────────────────────────
+      • Один RenderStepped-диспетчер, общие обработчики ввода.
+      • Мультитач-совместимый драг, FPDH restore, cleanup + watchdog.
+]]
+
+-- ── Идентичность плагина ─────────────────────────
+local AUTHOR            = "K1LAS1K"
+local BRAND             = "ULTIMATE FLING"
+local PLUGIN_ID         = "fling"
+local PLUGIN_NAME       = BRAND .. " • FLING"
+local VERSION           = "V1.0"
+local VERSION_TAG       = "fling"
+local MARKER_PREFIX     = "@fling_"
+local CONFIG_PATH       = CONFIGS_FOLDER .. "/ODH_FLING_settings.json"
+local STORAGE_NAME      = "@" .. PLUGIN_ID
+local UNLOAD_GLOBAL     = "__FLING_UNLOAD"
+local LEGACY_STORAGES   = { "@bindstorage_v6", "@bindstorage_v5", "@flingstorage_v1" }
+local CLEAN_LEGACY_MENU = true
+
+-- ====== Хост-уведомления ======
+local StarterGui = nil
+
+local function hostNotify(text, dur)
+    if type(notify) == "function" then
+        local ok = pcall(notify, tostring(text), dur or 3)
+        if ok then return end
+    end
+    pcall(function()
+        local sg = StarterGui or game:GetService("StarterGui")
+        sg:SetCore("SendNotification", {
+            Title = BRAND, Text = tostring(text), Duration = dur or 3,
+        })
+    end)
+end
+
+local shared = ODHX.shared
+if not shared then
+    hostNotify(BRAND .. " " .. VERSION .. ": Load through Overdrive H plugin menu", 3)
+    return
+end
+
+-- ====== Повторная загрузка ======
+pcall(function()
+    if type(getgenv) ~= "function" then return end
+    local g = getgenv()
+    if type(g) ~= "table" then return end
+    local prev = rawget(g, UNLOAD_GLOBAL)
+    rawset(g, UNLOAD_GLOBAL, nil)
+    if type(prev) == "function" then pcall(prev) end
+end)
+
+-- ====== Maid ======
+local Maid = {}
+Maid.__index = Maid
+
+function Maid._cleanup(item)
+    local t = typeof(item)
+    if t == "RBXScriptConnection" then
+        pcall(function() item:Disconnect() end)
+    elseif t == "Instance" then
+        pcall(function() item:Destroy() end)
+    elseif t == "function" then
+        local ok, err = pcall(item)
+        if not ok then warn("[" .. BRAND .. "][maid] " .. tostring(err)) end
+    elseif t == "thread" then
+        pcall(task.cancel, item)
+    elseif t == "table" and type(item.Destroy) == "function" then
+        pcall(item.Destroy, item)
+    end
+end
+
+function Maid.new()
+    return setmetatable({ _tasks = {}, _destroyed = false }, Maid)
+end
+
+function Maid:GiveTask(item)
+    if item == nil then return nil end
+    if self._destroyed then
+        Maid._cleanup(item)
+        return nil
+    end
+    local tasks = self._tasks
+    tasks[#tasks + 1] = item
+    return item
+end
+
+function Maid:DoCleaning()
+    if self._destroyed then return end
+    self._destroyed = true
+    local tasks = self._tasks
+    self._tasks = {}
+    for i = #tasks, 1, -1 do
+        Maid._cleanup(tasks[i])
+        tasks[i] = nil
+    end
+end
+
+function Maid:Destroy()
+    self:DoCleaning()
+end
+
+local RootMaid = Maid.new()
+
+-- ====== Сервисы ======
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+local LocalPlayer       = Players.LocalPlayer
+local UserInputService  = game:GetService("UserInputService")
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local TweenService      = game:GetService("TweenService")
+local HttpService       = game:GetService("HttpService")
+local CoreGui           = game:GetService("CoreGui")
+StarterGui              = game:GetService("StarterGui")
+
+-- ====== Шорткаты ======
+local new      = Instance.new
+local clamp    = math.clamp
+local sin, cos, floor = math.sin, math.cos, math.floor
+local now      = os.clock
+local insert   = table.insert
+local ud2      = UDim2.new
+local ud       = UDim.new
+local v2       = Vector2.new
+local v3       = Vector3.new
+local cfr      = CFrame.new
+local rgb      = Color3.fromRGB
+local pclr     = Color3.new
+local cs       = ColorSequence.new
+local csk      = ColorSequenceKeypoint.new
+local tinfo    = TweenInfo.new
+local V3_ZERO  = Vector3.zero
+local UIT      = Enum.UserInputType
+local MOUSE1   = UIT.MouseButton1
+local TOUCH    = UIT.Touch
+local MOUSEMOV = UIT.MouseMovement
+local EASING   = Enum.EasingStyle
+local EDIR     = Enum.EasingDirection
+local FALLBACK_VIEWPORT = v2(1920, 1080)
+
+local function clearTable(t)
+    if table.clear then table.clear(t) else for k in pairs(t) do t[k] = nil end end
+end
+
+-- ====== Конфигурация ======
+local state_whitelist_ref = nil
+local loadedWhitelist = {}
+local persistDisabled = false
+
+local DEFAULTS = {
+    flingDuration     = 2,
+    flingPower        = 1,
+    autoReturn        = true,
+    loopInterval      = 0.4,
+    auraInterval      = 0.4,
+    auraStuds         = 15,
+    bindButtonSize    = 0.11,
+    targetCooldown    = 0.8,
+    autoSheriffDelay  = 0.25,
+    autoMurdererDelay = 0.35,
+    roleCacheTTL      = 0.8,
+    muteSounds        = false,
+    notifications     = true,
+    keybinds          = {},
+    bindPositions     = {},
+    hudPos            = { x = 0.5, y = 6 },
+    pluginUI          = {},
+    whitelist         = {},
+}
+
+local config = {}
+for key, value in pairs(DEFAULTS) do
+    if type(value) == "table" then
+        local copy = {}
+        for kk, vv in pairs(value) do copy[kk] = vv end
+        config[key] = copy
+    else
+        config[key] = value
+    end
+end
+
+local canPersist = (type(writefile) == "function" and type(readfile) == "function")
+local jsonBroken = false
+
+local function jsonEncode(tbl)
+    if jsonBroken then return nil end
+    local ok, res = pcall(function() return HttpService:JSONEncode(tbl) end)
+    if ok and type(res) == "string" then return res end
+    jsonBroken = true
+    return nil
+end
+
+local function jsonDecode(str)
+    if jsonBroken then return nil end
+    local ok, res = pcall(function() return HttpService:JSONDecode(str) end)
+    if ok and type(res) == "table" then return res end
+    return nil
+end
+
+local function packWhitelist(map)
+    local out = {}
+    for id, name in pairs(map) do
+        insert(out, { id = id, name = tostring(name) })
+    end
+    return out
+end
+
+local function unpackWhitelist(list)
+    local map = {}
+    if type(list) == "table" then
+        for _, row in ipairs(list) do
+            if type(row) == "table" and type(row.id) == "number" then
+                map[row.id] = tostring(row.name or row.id)
+            end
+        end
+    end
+    return map
+end
+
+local function serializeConfig()
+    return {
+        flingDuration = config.flingDuration, flingPower = config.flingPower,
+        autoReturn = config.autoReturn,
+        loopInterval = config.loopInterval, auraInterval = config.auraInterval,
+        auraStuds = config.auraStuds, bindButtonSize = config.bindButtonSize,
+        targetCooldown = config.targetCooldown,
+        autoSheriffDelay = config.autoSheriffDelay, autoMurdererDelay = config.autoMurdererDelay,
+        roleCacheTTL = config.roleCacheTTL,
+        muteSounds = config.muteSounds,
+        notifications = config.notifications, pluginUI = config.pluginUI,
+        keybinds = config.keybinds, bindPositions = config.bindPositions,
+        hudPos = config.hudPos, whitelist = packWhitelist(state_whitelist_ref or {}),
+    }
+end
+
+local function applyLoaded(data)
+    if type(data) ~= "table" then return false end
+    local scalars = {
+        "flingDuration", "flingPower", "autoReturn",
+        "loopInterval", "auraInterval", "auraStuds",
+        "bindButtonSize", "targetCooldown",
+        "autoSheriffDelay", "autoMurdererDelay", "roleCacheTTL",
+        "muteSounds", "notifications",
+    }
+    for _, key in ipairs(scalars) do
+        local v = data[key]
+        if v ~= nil and type(v) == type(DEFAULTS[key]) then config[key] = v end
+    end
+    -- clamp after load
+    if type(config.flingDuration)=="number" then config.flingDuration=math.clamp(math.floor(config.flingDuration+0.5),1,5) end
+    if type(config.flingPower)=="number" then config.flingPower=math.clamp(math.floor(config.flingPower+0.5),1,3) end
+    if type(data.keybinds) == "table" then config.keybinds = data.keybinds end
+    if type(data.bindPositions) == "table" then config.bindPositions = data.bindPositions end
+    if type(data.hudPos) == "table" and type(data.hudPos.x) == "number" and type(data.hudPos.y) == "number" then
+        config.hudPos = { x = data.hudPos.x, y = data.hudPos.y }
+    end
+    if type(data.pluginUI)=="table" then config.pluginUI=data.pluginUI end
+    loadedWhitelist = unpackWhitelist(data.whitelist)
+    return true
+end
+
+local function loadConfig()
+    if not canPersist or type(isfile) ~= "function" then return false end
+    local applied = false
+    pcall(function()
+        if not isfile(CONFIG_PATH) then return end
+        applied = applyLoaded(jsonDecode(readfile(CONFIG_PATH))) and true or false
+    end)
+    return applied
+end
+
+local saveQueued, saveThread = false, nil
+
+local function saveConfig(force)
+    if not canPersist or persistDisabled then return false end
+    if force then
+        if saveThread then pcall(task.cancel,saveThread) end
+        saveThread,saveQueued=nil,false
+        local ok,err=pcall(function()
+            local payload=jsonEncode(serializeConfig())
+            assert(payload,"JSON encode failed")
+            writefile(CONFIG_PATH,payload)
+        end)
+        if not ok then ODHX.Report("Could not save " .. CONFIG_PATH .. ": " .. tostring(err)) end
+        return ok
+    end
+    if saveQueued and not force then return true end
+    saveQueued = true
+    if saveThread then pcall(task.cancel, saveThread) end
+    saveThread = task.delay(force and 0 or 0.35, function()
+        saveQueued = false
+        saveThread = nil
+        pcall(function()
+            local payload = jsonEncode(serializeConfig())
+            if payload then writefile(CONFIG_PATH, payload) end
+        end)
+    end)
+    return true
+end
+
+local configLoaded = loadConfig()
+ODHX.data.controls=config.pluginUI or {}
+ODHX.backend=function(data)
+    config.pluginUI=data.controls
+    return saveConfig(true)
+end
+
+-- ====== Состояние ======
+local state = {
+    whitelist       = loadedWhitelist,
+    selectedPlayers = {},
+    selectedSet     = {},
+    resetSelPlr     = nil,
+    lastResetAt     = {},
+}
+state_whitelist_ref = state.whitelist
+
+local maids = {
+    loopPlr = nil, clickFling = nil, aura = nil,
+    autoSheriff = nil, autoMurderer = nil,
+}
+
+-- ====== Уведомления ======
+local lastNotify = { text = nil, at = 0 }
+local function Notify(title, msg, dur)
+    if not config.notifications then return end
+    local text = msg and (title .. ": " .. msg) or title
+    local t = now()
+    if lastNotify.text == text and (t - lastNotify.at) < 0.35 then return end
+    lastNotify.text, lastNotify.at = text, t
+    hostNotify(text, dur or 3)
+end
+
+-- ====== Единый тикер ======
+local Ticker = { _fns = {}, _conn = nil }
+
+function Ticker._start()
+    if Ticker._conn then return end
+    Ticker._conn = RunService.RenderStepped:Connect(function(dt)
+        local fns = Ticker._fns
+        local i = 1
+        while i <= #fns do
+            local fn = fns[i]
+            if fn then
+                local ok, err = xpcall(fn, debug.traceback, dt)
+                if not ok then
+                    warn("[" .. BRAND .. "][ticker] " .. tostring(err))
+                    table.remove(fns, i)
+                    i = i - 1
+                end
+            end
+            i = i + 1
+        end
+        if #fns == 0 and Ticker._conn then
+            Ticker._conn:Disconnect()
+            Ticker._conn = nil
+        end
+    end)
+end
+
+function Ticker.add(fn)
+    if type(fn) ~= "function" then return function() end end
+    local fns = Ticker._fns
+    fns[#fns + 1] = fn
+    Ticker._start()
+    local removed = false
+    return function()
+        if removed then return end
+        removed = true
+        for i = 1, #fns do
+            if fns[i] == fn then
+                table.remove(fns, i)
+                break
+            end
+        end
+    end
+end
+
+RootMaid:GiveTask(function()
+    if Ticker._conn then Ticker._conn:Disconnect(); Ticker._conn = nil end
+    clearTable(Ticker._fns)
+end)
+
+-- ====== Заголовки секций ======
+local LEGACY_TITLES = {
+    ["⚡ Quick Actions"] = true,
+    ["🤖 Automation"] = true,
+    ["📋 Lists Management"] = true,
+    ["⚙️ Reset Settings"] = true,
+    ["⚙ Reset Settings"] = true,
+    ["🔄 Bind Buttons (circles)"] = true,
+    ["📊 Status"] = true,
+    ["ℹ️ Info"] = true,
+    ["⚡ Reset"] = true,
+    ["🤖 Auto"] = true,
+    ["📋 Lists"] = true,
+    ["⚙️ Tuning"] = true,
+    ["⚙ Tuning"] = true,
+    ["🔘 Binds"] = true,
+    ["ℹ️"] = true,
+    ["Ultimate Fling V1"] = true,
+    ["Ultimate Fling"] = true,
+}
+local EXTRA_LEGACY_TITLES = {}
+for _title in pairs(EXTRA_LEGACY_TITLES) do LEGACY_TITLES[_title] = true end
+local CUR_TITLES = {
+    ["💀 " .. BRAND] = true,
+    ["⚡ Fling"] = true,
+    ["🤖 Auto"] = true,
+    ["📋 Lists"] = true,
+    ["⚙️ Tuning"] = true,
+    ["⚙ Tuning"] = true,
+    ["🔘 Binds"] = true,
+    ["🔑 Keys"] = true,
+    ["💾 Config"] = true,
+    ["ℹ️"] = true,
+}
+local HOST_WORDS = {
+    "Looking for a feature", "Plugins", "Overdrive", "Logged in as", "gg/overdrivehub",
+}
+local MAX_CARD_HEIGHT = 520
+
+local RUN_ID = MARKER_PREFIX .. tostring(floor(now() * 1000) % 100000000)
+    .. "_" .. tostring(math.random(1000, 9999))
+
+-- ====== Хранилище GUI ======
+local storageGui = nil
+local function getStorage()
+    if storageGui and storageGui.Parent then return storageGui end
+
+    local parent
+    local ok, res = pcall(function()
+        if gethui then return gethui() end
+        if getcore then return getcore() end
+        return nil
+    end)
+    if ok and typeof(res) == "Instance" then parent = res else parent = CoreGui end
+    if typeof(parent) ~= "Instance" then parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") end
+    if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui", 5) end
+    if typeof(parent) ~= "Instance" then parent = CoreGui end
+
+    pcall(function()
+        for _, legacyName in ipairs(LEGACY_STORAGES) do
+            local legacy = parent:FindFirstChild(legacyName)
+            if legacy then legacy:Destroy() end
+        end
+    end)
+
+    local sg = parent:FindFirstChild(STORAGE_NAME)
+    if not sg then
+        sg = new("ScreenGui")
+        sg.Name = STORAGE_NAME
+        sg.ResetOnSpawn = false
+        sg.IgnoreGuiInset = true
+        pcall(function() sg.ScreenInsets = Enum.ScreenInsets.None end)
+        if syn and syn.protect_gui then pcall(syn.protect_gui, sg) end
+        sg.Parent = parent
+    end
+    storageGui = sg
+    return sg
+end
+
+-- ====== Реестр своих секций ======
+local mySections = {}
+local headlessMode = false
+
+local function stubSection()
+    return setmetatable({}, { __index = function() return function() end end })
+end
+
+local function protectSection(sec)
+    if typeof(sec) ~= "table" then return stubSection() end
+    local proxy = { _raw = sec }
+    return setmetatable(proxy, {
+        __index = function(p, key)
+            local raw = p._raw
+            local value = raw[key]
+            if type(value) == "function" then
+                return function(first, ...)
+                    local ok, err
+                    if first == p then
+                        ok, err = pcall(value, raw, ...)
+                    else
+                        ok, err = pcall(value, raw, first, ...)
+                    end
+                    if not ok then warn("[" .. BRAND .. "][menu] " .. tostring(key) .. ": " .. tostring(err)) end
+                    return ok and err or nil
+                end
+            end
+            return value
+        end,
+    })
+end
+
+local function AddSection(name)
+    local ok, sec = pcall(function() return shared.AddSection(name) end)
+    local obj
+    if ok and sec then
+        obj = protectSection(sec)
+    else
+        headlessMode = true
+        obj = stubSection()
+    end
+    insert(mySections, { name = name, obj = obj })
+    return obj
+end
+
+-- ====== Сканер GUI ======
+local function guiRoots()
+    local roots, seen = {}, {}
+    local function add(r)
+        if typeof(r) == "Instance" and not seen[r] then
+            seen[r] = true
+            roots[#roots + 1] = r
+        end
+    end
+    pcall(function() add(gethui and gethui()) end)
+    pcall(function() add(getcore and getcore()) end)
+    add(CoreGui)
+    pcall(function() add(LocalPlayer:FindFirstChildOfClass("PlayerGui")) end)
+    return roots
+end
+
+local function hasHostWords(node, memo)
+    local cached = memo[node]
+    if cached ~= nil then return cached end
+    local res = false
+    local descendants = node:GetDescendants()
+    for i = 1, #descendants do
+        local d = descendants[i]
+        if d:IsA("TextLabel") then
+            local txt = d.Text
+            for w = 1, #HOST_WORDS do
+                if txt:find(HOST_WORDS[w], 1, true) then
+                    res = true
+                    break
+                end
+            end
+            if res then break end
+        end
+    end
+    memo[node] = res
+    return res
+end
+
+local function findCard(node, memo)
+    for _ = 1, 7 do
+        if not node or typeof(node) ~= "Instance" or node == game then return nil end
+        if node:IsA("Frame") or node:IsA("ScrollingFrame") then
+            local framed = node:FindFirstChildOfClass("UIStroke") or node:FindFirstChildOfClass("UICorner")
+            if framed then
+                local sz = node.AbsoluteSize
+                if sz.Y > 0 and sz.Y < MAX_CARD_HEIGHT and not hasHostWords(node, memo) then
+                    return node
+                end
+            end
+        end
+        node = node.Parent
+    end
+    return nil
+end
+
+local function markerOf(card)
+    if not card then return nil end
+    local descendants = card:GetDescendants()
+    for i = 1, #descendants do
+        local d = descendants[i]
+        if d.Name:sub(1, #MARKER_PREFIX) == MARKER_PREFIX then return d.Name end
+    end
+    return nil
+end
+
+local function attachMarker(card)
+    if not card or markerOf(card) then return false end
+    local ok = pcall(function()
+        local sv = new("StringValue")
+        sv.Name = RUN_ID
+        sv.Value = VERSION
+        sv.Parent = card
+    end)
+    return ok
+end
+
+local lastPurge = 0
+local PURGE_COOLDOWN = 0.5
+
+local function cardIsOurs(card)
+    if markerOf(card) == RUN_ID then return true end
+    local descendants = card:GetDescendants()
+    for i = 1, #descendants do
+        local d = descendants[i]
+        if d:IsA("TextLabel") and d.Text:find(VERSION_TAG, 1, true) then return true end
+    end
+    return false
+end
+
+local function purgeForeign(force)
+    local t = now()
+    if not force and (t - lastPurge) < PURGE_COOLDOWN then return 0 end
+    lastPurge = t
+    local killed = 0
+    for _, root in ipairs(guiRoots()) do
+        local memo = {}
+        local descendants = root:GetDescendants()
+        for i = 1, #descendants do
+            local d = descendants[i]
+            if d.Parent and d:IsA("TextLabel") then
+                local txt = d.Text
+                if CUR_TITLES[txt] or (CLEAN_LEGACY_MENU and LEGACY_TITLES[txt]) then
+                    local card = findCard(d, memo)
+                    if card and not cardIsOurs(card) then
+                        if pcall(function() card:Destroy() end) then killed = killed + 1 end
+                    end
+                end
+            end
+        end
+    end
+    return killed
+end
+
+local markedCount = 0
+local function markOwnCards()
+    local marked = 0
+    for _, root in ipairs(guiRoots()) do
+        local memo = {}
+        local descendants = root:GetDescendants()
+        for i = 1, #descendants do
+            local d = descendants[i]
+            if d.Parent and d:IsA("TextLabel") and CUR_TITLES[d.Text] then
+                local card = findCard(d, memo)
+                if card and markerOf(card) == nil and attachMarker(card) then
+                    marked = marked + 1
+                end
+            end
+        end
+    end
+    markedCount = markedCount + marked
+    return marked
+end
+
+local function removeByTitles()
+    local removed = 0
+    for _, root in ipairs(guiRoots()) do
+        local memo = {}
+        local descendants = root:GetDescendants()
+        for i = 1, #descendants do
+            local d = descendants[i]
+            if d.Parent and d:IsA("TextLabel") and CUR_TITLES[d.Text] then
+                local card = findCard(d, memo)
+                if card and not markerOf(card) then
+                    if pcall(function() card:Destroy() end) then removed = removed + 1 end
+                end
+            end
+        end
+    end
+    return removed
+end
+
+local function removeMySections()
+    local removed = 0
+    for _, root in ipairs(guiRoots()) do
+        local descendants = root:GetDescendants()
+        for i = 1, #descendants do
+            local d = descendants[i]
+            if d.Name == RUN_ID and d.Parent then
+                local card = d.Parent
+                pcall(function() d:Destroy() end)
+                if pcall(function() card:Destroy() end) then removed = removed + 1 end
+            end
+        end
+    end
+    if removed == 0 and markedCount == 0 then removed = removeByTitles() end
+    return removed
+end
+
+pcall(purgeForeign, true)
+
+-- ====== Звук клика ======
+local Audio = { click = nil }
+function Audio.init()
+    local s = new("Sound")
+    s.Name = "@click"
+    s.SoundId = "rbxassetid://3868133279"
+    s.Volume = config.muteSounds and 0 or 0.5
+    s.Parent = getStorage()
+    Audio.click = s
+    RootMaid:GiveTask(s)
+end
+function Audio.play()
+    local s = Audio.click
+    if not s or s.Volume <= 0 then return end
+    pcall(function() s:Play() end)
+end
+function Audio.setMuted(muted)
+    config.muteSounds = muted and true or false
+    if Audio.click then Audio.click.Volume = config.muteSounds and 0 or 0.5 end
+    saveConfig()
+end
+
+-- ====== Bindable Buttons ======
+local BindableButtons = {
+    Buttons = {},
+    Maids   = {},
+    recs    = {},
+    order   = {},
+    Count   = 0,
+    ResetActive = false,
+    CurrentSize = config.bindButtonSize or 0.11,
+}
+
+local __SHAPES = {
+    [0] = "rbxassetid://86221076925479",
+    [1] = "rbxassetid://96242665417546",
+    [2] = "rbxassetid://97129189935336",
+    [3] = "rbxassetid://76165862027868",
+    [4] = "rbxassetid://125868092127496",
+}
+local GLOW_IMG = "rbxassetid://131961136"
+
+local __NORMAL_COLOR = cs({
+    csk(0,    rgb(35, 35, 40)),
+    csk(0.22, rgb(250, 250, 252)),
+    csk(0.48, rgb(70, 70, 78)),
+    csk(0.72, rgb(255, 255, 255)),
+    csk(1,    rgb(45, 45, 52)),
+})
+local __WAIT_COLOR = cs({
+    csk(0,    rgb(95, 30, 35)),
+    csk(0.22, rgb(255, 110, 120)),
+    csk(0.48, rgb(100, 35, 42)),
+    csk(0.72, rgb(255, 150, 155)),
+    csk(1,    rgb(70, 25, 30)),
+})
+local __GOLD_NORMAL_COLOR = cs({
+    csk(0,    rgb(75, 60, 25)),
+    csk(0.22, rgb(255, 225, 120)),
+    csk(0.48, rgb(110, 85, 30)),
+    csk(0.72, rgb(255, 240, 175)),
+    csk(1,    rgb(70, 55, 25)),
+})
+local __GOLD_WAIT_COLOR = __WAIT_COLOR
+
+local function bind_safecallback(callback)
+    if not callback then return end
+    local ok, err = xpcall(callback, debug.traceback)
+    if not ok then warn("[" .. BRAND .. "][bind] " .. tostring(err)) end
+end
+
+function BindableButtons.relayout()
+    local camera = Workspace.CurrentCamera
+    local screen = (camera and camera.ViewportSize) or FALLBACK_VIEWPORT
+    if not screen or screen.X <= 1 or screen.Y <= 1 then
+        screen = FALLBACK_VIEWPORT
+    end
+    local h = BindableButtons.CurrentSize or 0.11
+    local w = h * (screen.Y / screen.X)
+    if w ~= w or w <= 0 or w > 1 then w = h * (FALLBACK_VIEWPORT.Y / FALLBACK_VIEWPORT.X) end
+    local perRow = math.max(1, floor(0.84 / (w + 0.008)))
+    for i = 1, #BindableButtons.order do
+        local id = BindableButtons.order[i]
+        local rec = BindableButtons.recs[id]
+        if rec then
+            local saved = config.bindPositions[id]
+            if saved and type(saved.x) == "number" and type(saved.y) == "number" then
+                rec.x, rec.y = saved.x, saved.y
+            else
+                local row = floor((i - 1) / perRow)
+                local col = (i - 1) % perRow
+                rec.x = 0.08 + col * (w + 0.008)
+                rec.y = 0.88 - row * (h + 0.02)
+            end
+            rec.btn.Position = ud2(rec.x, 0, rec.y, 0)
+        end
+    end
+end
+
+function BindableButtons.setSize(sizeScale)
+    BindableButtons.CurrentSize = clamp(sizeScale or 0.11, 0.02, 0.4)
+    config.bindButtonSize = BindableButtons.CurrentSize
+    BindableButtons.relayout()
+    saveConfig()
+end
+
+local dragState = nil
+local binderGlobalMaid = Maid.new()
+RootMaid:GiveTask(binderGlobalMaid)
+
+local function isDragInput(input)
+    if not dragState then return false end
+    if input == dragState.dragInput then return true end
+    if input == dragState.input then return true end
+    return false
+end
+
+binderGlobalMaid:GiveTask(UserInputService.InputChanged:Connect(function(input)
+    if not dragState then return end
+    if input.UserInputType ~= MOUSEMOV and input.UserInputType ~= TOUCH then return end
+    if not isDragInput(input) then return end
+    local rec = dragState.rec
+    if not rec or not rec.btn then return end
+    local delta = input.Position - dragState.startInput
+    if delta.Magnitude > 7 then dragState.moved = true end
+    local parentGui = rec.btn.Parent
+    if not parentGui then return end
+    local screen = parentGui.AbsoluteSize
+    if screen.X <= 0 or screen.Y <= 0 then return end
+    rec.x = clamp(dragState.startX + (delta.X / screen.X), 0.03, 0.97)
+    rec.y = clamp(dragState.startY + (delta.Y / screen.Y), 0.05, 0.95)
+    rec.btn.Position = ud2(rec.x, 0, rec.y, 0)
+end))
+
+binderGlobalMaid:GiveTask(UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType ~= MOUSE1 and input.UserInputType ~= TOUCH then return end
+    for _, rec in pairs(BindableButtons.recs) do rec.targetPress = 0 end
+    if not dragState then return end
+    local mine = (input == dragState.input)
+        or (input == dragState.dragInput)
+        or (dragState.isMouse and input.UserInputType == MOUSE1)
+    if not mine then return end
+    local rec, moved = dragState.rec, dragState.moved
+    dragState = nil
+    if not rec then return end
+    if not moved then
+        Audio.play()
+        bind_safecallback(rec.onClick)
+    else
+        config.bindPositions[rec.id] = { x = rec.x, y = rec.y }
+        saveConfig(true)
+    end
+end))
+
+local function binderStep(dt)
+    local cam = Workspace.CurrentCamera
+    local scr = (cam and cam.ViewportSize) or FALLBACK_VIEWPORT
+    local bh = BindableButtons.CurrentSize or 0.11
+    local bw = bh * (scr.Y / scr.X)
+    local rotStep = BindableButtons.ResetActive and 3.5 or 1.1
+    local kHover = clamp(dt * 12, 0, 1)
+    local kPress = clamp(dt * 16, 0, 1)
+
+    for _, rec in pairs(BindableButtons.recs) do
+        local btn = rec.btn
+        if btn and rec.stroke then
+            rec.hover = rec.hover + (rec.targetHover - rec.hover) * kHover
+            rec.press = rec.press + (rec.targetPress - rec.press) * kPress
+            local scale = 1 + rec.hover * 0.12 - rec.press * 0.08
+            local diameter = bh * scr.Y * scale
+            btn.Size = ud2(0, diameter, 0, diameter)
+            rec.rot = (rec.rot + rotStep) % 360
+            rec.stroke.Rotation = rec.rot
+            rec.stroke.Color = BindableButtons.ResetActive and __WAIT_COLOR
+                or (rec.isGold and __GOLD_NORMAL_COLOR or __NORMAL_COLOR)
+        end
+    end
+end
+
+local binderTickerOff = nil
+local function binderEnsureTicker()
+    if binderTickerOff then return end
+    binderTickerOff = Ticker.add(binderStep)
+    RootMaid:GiveTask(function()
+        if binderTickerOff then binderTickerOff(); binderTickerOff = nil end
+    end)
+end
+
+function BindableButtons.AddBButton(id, text, clickFunc, isGold)
+    if BindableButtons.Buttons[id] then return BindableButtons.Buttons[id] end
+    binderEnsureTicker()
+
+    local buttonMaid = Maid.new()
+    local storage = getStorage()
+    local camera = Workspace.CurrentCamera
+    local screen = (camera and camera.ViewportSize) or FALLBACK_VIEWPORT
+    local h0 = BindableButtons.CurrentSize or 0.11
+    local w0 = h0 * (screen.Y / screen.X)
+
+    -- Noir/Shoot Murder visual style, preserved in the original circular Fling bind shape.
+    local ImageButton = new("ImageButton")
+    ImageButton.Name = id
+    -- Pixel sizing guarantees a true circle on every screen ratio.
+    local diameter = h0 * screen.Y
+    ImageButton.Size = ud2(0, diameter, 0, diameter)
+    ImageButton.AnchorPoint = v2(0.5, 0.5)
+    ImageButton.Image = ""
+    ImageButton.BackgroundColor3 = rgb(8, 8, 10)
+    ImageButton.BackgroundTransparency = 0.28
+    ImageButton.BorderSizePixel = 0
+    ImageButton.ClipsDescendants = false
+    ImageButton.AutoButtonColor = false
+    ImageButton.ZIndex = 2
+    ImageButton.Parent = storage
+    buttonMaid:GiveTask(ImageButton)
+    new("UICorner", ImageButton).CornerRadius = ud(1, 0)
+    local Aspect = new("UIAspectRatioConstraint", ImageButton)
+    Aspect.AspectRatio = 1
+    pcall(function() Aspect.AspectType = Enum.AspectType.ScaleWithParentSize end)
+
+    local outerStroke = new("UIStroke", ImageButton)
+    outerStroke.Color = rgb(255, 255, 255)
+    outerStroke.Thickness = 2
+    outerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local Stroke = new("UIGradient", outerStroke)
+    Stroke.Name = "@Stroke"
+    Stroke.Color = isGold and __GOLD_NORMAL_COLOR or __NORMAL_COLOR
+    local innerStroke = new("UIStroke", ImageButton)
+    innerStroke.Color = rgb(105, 105, 112)
+    innerStroke.Transparency = 0.5
+    innerStroke.Thickness = 1
+    innerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local innerGradient = Stroke:Clone()
+    innerGradient.Name = "@InnerStroke"
+    innerGradient.Rotation = 180
+    innerGradient.Parent = innerStroke
+
+    local TextLabel = new("TextLabel", ImageButton)
+    TextLabel.Name = "@Text"
+    TextLabel.Size = ud2(0.76, 0, 0.76, 0)
+    TextLabel.Position = ud2(0.5, 0, 0.5, 0)
+    TextLabel.AnchorPoint = v2(0.5, 0.5)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.Font = Enum.Font.Gotham
+    TextLabel.Text = text
+    TextLabel.TextColor3 = pclr(1, 1, 1)
+    TextLabel.TextSize = 13
+    TextLabel.TextWrapped = true
+    TextLabel.ZIndex = 3
+
+    local ripple = new("Frame")
+    ripple.Name = "@ripple"
+    ripple.BackgroundColor3 = isGold and rgb(255, 215, 0) or rgb(0, 155, 255)
+    ripple.BackgroundTransparency = 0.45
+    ripple.Size = ud2(0, 0, 0, 0)
+    ripple.AnchorPoint = v2(0.5, 0.5)
+    ripple.Visible = false
+    ripple.ZIndex = 2
+    ripple.Parent = ImageButton
+    new("UICorner", ripple).CornerRadius = ud(1, 0)
+
+    local rec = {
+        id = id, btn = ImageButton, stroke = Stroke, ripple = ripple,
+        onClick = clickFunc, isGold = isGold and true or false,
+        hover = 0, press = 0, targetHover = 0, targetPress = 0,
+        rot = 0, x = 0.08, y = 0.88,
+    }
+
+    buttonMaid:GiveTask(ImageButton.InputBegan:Connect(function(input)
+        if input.UserInputType ~= MOUSE1 and input.UserInputType ~= TOUCH then return end
+        rec.targetPress = 1
+        dragState = {
+            rec = rec,
+            input = input,
+            dragInput = nil,
+            isMouse = input.UserInputType == MOUSE1,
+            startInput = input.Position,
+            startX = rec.x, startY = rec.y,
+            moved = false,
+        }
+        local absPos = ImageButton.AbsolutePosition
+        ripple.Position = ud2(0, input.Position.X - absPos.X, 0, input.Position.Y - absPos.Y)
+        ripple.Size = ud2(0, 0, 0, 0)
+        ripple.BackgroundTransparency = 0.45
+        ripple.Visible = true
+        TweenService:Create(ripple, tinfo(0.4, EASING.Sine, EDIR.Out), {
+            Size = ud2(0, 45, 0, 45), BackgroundTransparency = 1,
+        }):Play()
+    end))
+
+    buttonMaid:GiveTask(ImageButton.InputChanged:Connect(function(input)
+        if input.UserInputType ~= MOUSEMOV and input.UserInputType ~= TOUCH then return end
+        if dragState and dragState.rec == rec then dragState.dragInput = input end
+    end))
+    buttonMaid:GiveTask(ImageButton.MouseEnter:Connect(function() rec.targetHover = 1 end))
+    buttonMaid:GiveTask(ImageButton.MouseLeave:Connect(function() rec.targetHover = 0 end))
+
+    BindableButtons.Buttons[id] = ImageButton
+    BindableButtons.Maids[id] = buttonMaid
+    BindableButtons.recs[id] = rec
+    insert(BindableButtons.order, id)
+    BindableButtons.Count = #BindableButtons.order
+    BindableButtons.relayout()
+    return ImageButton
+end
+
+function BindableButtons.DeleteBButton(id)
+    local maid = BindableButtons.Maids[id]
+    if maid then maid:Destroy() end
+    BindableButtons.Maids[id] = nil
+    BindableButtons.Buttons[id] = nil
+    BindableButtons.recs[id] = nil
+    for i = 1, #BindableButtons.order do
+        if BindableButtons.order[i] == id then
+            table.remove(BindableButtons.order, i)
+            break
+        end
+    end
+    BindableButtons.Count = #BindableButtons.order
+    if dragState and dragState.rec and dragState.rec.id == id then dragState = nil end
+    BindableButtons.relayout()
+end
+
+function BindableButtons.UpdateBButtonText(id, text, isWaiting, isGold)
+    local btn = BindableButtons.Buttons[id]
+    if not btn then return end
+    local textLabel = btn:FindFirstChild("@Text")
+    if textLabel then textLabel.Text = text end
+    local stroke = btn:FindFirstChild("@Stroke", true)
+    if stroke then
+        if isGold then
+            stroke.Color = isWaiting and __GOLD_WAIT_COLOR or __GOLD_NORMAL_COLOR
+        else
+            stroke.Color = isWaiting and __WAIT_COLOR or __NORMAL_COLOR
+        end
+    end
+end
+
+function BindableButtons.resetLayout()
+    clearTable(config.bindPositions)
+    saveConfig()
+    BindableButtons.relayout()
+end
+
+function BindableButtons.clearAll()
+    local ids = {}
+    for id in pairs(BindableButtons.Buttons) do insert(ids, id) end
+    for _, id in ipairs(ids) do BindableButtons.DeleteBButton(id) end
+end
+
+-- ====== Status HUD disabled by user request ======
+-- Fling state remains fully functional; these no-op hooks preserve the action flow without creating a HUD.
+local StatusHUD = { Set = function() end }
+local function hudApplyPosition() end
+
+-- ====== Цели для флинга ======
+local function isValidTarget(player)
+    if not player or player == LocalPlayer or not player.Parent then return false end
+    if state.whitelist[player.UserId] then return false end
+    local char = player.Character
+    if not char then return false end
+    if not char:FindFirstChild("HumanoidRootPart") then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Health <= 0 then return false end
+    return true
+end
+
+local function getSelectedOrFirst()
+    if isValidTarget(state.resetSelPlr) then return state.resetSelPlr end
+    for _, player in ipairs(state.selectedPlayers) do
+        if isValidTarget(player) then return player end
+    end
+    return nil
+end
+
+local function findNearest()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local best, bestDist = nil, math.huge
+    local players = Players:GetPlayers()
+    for i = 1, #players do
+        local player = players[i]
+        if isValidTarget(player) then
+            local tr = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            if tr then
+                local d = (root.Position - tr.Position).Magnitude
+                if d < bestDist then best, bestDist = player, d end
+            end
+        end
+    end
+    return best
+end
+
+-- ====== Кэш ролей MM2 (для Sheriff / Murderer) ======
+local roleRemote = nil
+local roleRemoteTried = -1e9
+local function getRoleRemote()
+    if roleRemote and roleRemote.Parent then return roleRemote end
+    local t = now()
+    if (t - roleRemoteTried) < 5 then return roleRemote end
+    roleRemoteTried = t
+    pcall(function()
+        local remote = ReplicatedStorage:FindFirstChild("GetPlayerData", true)
+        if remote and remote:IsA("RemoteFunction") then roleRemote = remote end
+    end)
+    return roleRemote
+end
+
+local roleCache = { data = nil, timestamp = 0 }
+local function getCachedRoleData()
+    local t = now()
+    local ttl = config.roleCacheTTL or 0.8
+    if roleCache.data and (t - roleCache.timestamp) < ttl then return roleCache.data end
+    local remote = getRoleRemote()
+    if remote then
+        local ok, result = pcall(function() return remote:InvokeServer() end)
+        if ok and type(result) == "table" then
+            roleCache.data, roleCache.timestamp = result, t
+            return result
+        end
+    end
+    roleCache.timestamp = t
+    return roleCache.data
+end
+
+local function invalidateRoleCache()
+    roleCache.data = nil
+    roleCache.timestamp = 0
+end
+
+local function hasGunModel(char)
+    if not char then return false end
+    if char:FindFirstChild("Gun") or char:FindFirstChild("Revolver") then return true end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        local name = tool.Name:lower()
+        if name:find("gun", 1, true) or name:find("revolver", 1, true) then return true end
+    end
+    return false
+end
+
+local function quickScanSheriff()
+    local players = Players:GetPlayers()
+    for i = 1, #players do
+        local player = players[i]
+        if player ~= LocalPlayer and not state.whitelist[player.UserId] then
+            if hasGunModel(player.Character) then return player end
+            local bp = player:FindFirstChild("Backpack")
+            if bp and (bp:FindFirstChild("Gun") or bp:FindFirstChild("Revolver")) then
+                return player
+            end
+        end
+    end
+    return nil
+end
+
+local function findTargetByRole(roleName)
+    local roleData = getCachedRoleData()
+    if not roleData then return nil end
+    for playerName, data in pairs(roleData) do
+        if type(data) == "table" and data.Role == roleName and not data.Killed and not data.Dead then
+            local p = Players:FindFirstChild(playerName)
+            if p and p ~= LocalPlayer and not state.whitelist[p.UserId] then return p end
+        end
+    end
+    return nil
+end
+
+local sheriffCache = { player = nil, at = 0 }
+local function findSheriff()
+    local t = now()
+    if sheriffCache.player and (t - sheriffCache.at) < 0.35 and isValidTarget(sheriffCache.player) then
+        return sheriffCache.player
+    end
+    local found = quickScanSheriff()
+    if not found then found = findTargetByRole("Sheriff") end
+    sheriffCache.player, sheriffCache.at = (isValidTarget(found) and found or nil), t
+    return sheriffCache.player
+end
+
+local function findMurderer()
+    local byRole = findTargetByRole("Murderer")
+    if byRole then return byRole end
+    local players = Players:GetPlayers()
+    for i = 1, #players do
+        local player = players[i]
+        if player ~= LocalPlayer and not state.whitelist[player.UserId] then
+            local char = player.Character
+            if char then
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool then
+                    local name = tool.Name:lower()
+                    if name:find("knife", 1, true) or name:find("murderer", 1, true) then
+                        return player
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ====== Fling ядро (K1LAS1K / zqyDSUWX) ======
+local flingBV = nil
+local flingOldPos = nil
+local flingFPDH = nil
+pcall(function() flingFPDH = Workspace.FallenPartsDestroyHeight end)
+if type(flingFPDH) ~= "number" or flingFPDH ~= flingFPDH then flingFPDH = -500 end
+pcall(function() if getgenv then getgenv().FPDH = flingFPDH end end)
+
+local currentFling = nil
+local massFlingThread = nil
+
+local function CleanupFlingPhysics()
+    if flingBV then pcall(function() flingBV:Destroy() end) flingBV=nil end
+    pcall(function() Workspace.FallenPartsDestroyHeight = flingFPDH end)
+    pcall(function() if getgenv and getgenv().FPDH then Workspace.FallenPartsDestroyHeight=getgenv().FPDH end end)
+    local char = LocalPlayer and LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true) end) end
+    if hum and hum.RootPart then
+        pcall(function() Workspace.CurrentCamera.CameraSubject = hum end)
+    end
+end
+
+local function cancelCurrentFling()
+    if massFlingThread then pcall(task.cancel, massFlingThread); massFlingThread=nil end
+    if currentFling and currentFling.cancel then pcall(currentFling.cancel) end
+    currentFling=nil
+    CleanupFlingPhysics()
+    BindableButtons.ResetActive=false
+    StatusHUD.Set("idle")
+end
+
+-- основная функция - один таргет
+local function SkidFling(TargetPlayer)
+    if not TargetPlayer or not TargetPlayer.Parent then return false end
+    if TargetPlayer == LocalPlayer or state.whitelist[TargetPlayer.UserId] then return false end
+
+    -- кулдаун
+    local last = state.lastResetAt[TargetPlayer.UserId]
+    if last and (now()-last) < (config.targetCooldown or 0) then return false end
+    state.lastResetAt[TargetPlayer.UserId]=now()
+
+    cancelCurrentFling()
+
+    local Character = LocalPlayer and LocalPlayer.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    local RootPart = Humanoid and Humanoid.RootPart
+    local TCharacter = TargetPlayer.Character
+    local THumanoid = TCharacter and TCharacter:FindFirstChildOfClass("Humanoid")
+    local TRootPart = THumanoid and THumanoid.RootPart or nil
+    local THead = TCharacter and TCharacter:FindFirstChild("Head")
+    local Accessory = TCharacter and TCharacter:FindFirstChildOfClass("Accessory")
+    local Handle = Accessory and Accessory:FindFirstChild("Handle") or nil
+
+    if not (Character and Humanoid and RootPart and TCharacter) then return false end
+    if not TCharacter:FindFirstChildWhichIsA("BasePart") then return false end
+
+    if RootPart.Velocity.Magnitude < 50 then
+        flingOldPos = RootPart.CFrame
+        pcall(function() if getgenv then getgenv().OldPos = flingOldPos end end)
+    end
+    if THumanoid and THumanoid.Sit then
+        Notify("Fling", TargetPlayer.Name.." is sitting",2)
+        return false
+    end
+
+    if THead then pcall(function() Workspace.CurrentCamera.CameraSubject = THead end)
+    elseif Handle then pcall(function() Workspace.CurrentCamera.CameraSubject = Handle end)
+    elseif THumanoid and TRootPart then pcall(function() Workspace.CurrentCamera.CameraSubject = THumanoid end) end
+
+    local power = config.flingPower or 1
+    local velMult = power==1 and 1 or (power==2 and 1.5 or 2)
+    local rotMult = velMult
+
+    local savedDestroy = Workspace.FallenPartsDestroyHeight
+    Workspace.FallenPartsDestroyHeight = 0/0 -- NaN trick
+    if flingBV and flingBV.Parent then pcall(function() flingBV:Destroy() end) end
+    flingBV = new("BodyVelocity")
+    flingBV.Velocity = v3(0,0,0)
+    flingBV.MaxForce = v3(9e9,9e9,9e9)
+    flingBV.Parent = RootPart
+    pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false) end)
+
+    local startTime = now()
+    local done=false
+    local flingObj={ bv=flingBV, conn=nil, watchdog=nil }
+    local function cleanup(success, manual)
+        if done then return end
+        done=true
+        if currentFling==flingObj then currentFling=nil end
+        if flingObj.conn then pcall(function() flingObj.conn:Disconnect() end) end
+        if flingObj.watchdog then pcall(task.cancel, flingObj.watchdog) end
+        if flingBV then pcall(function() flingBV:Destroy() end) flingBV=nil end
+        pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true) end)
+        pcall(function() Workspace.CurrentCamera.CameraSubject = Humanoid end)
+        if config.autoReturn and flingOldPos then
+            local tries=0
+            repeat
+                if not RootPart or not RootPart.Parent then break end
+                pcall(function()
+                    RootPart.CFrame = flingOldPos * cfr(0,.5,0)
+                    Character:SetPrimaryPartCFrame(flingOldPos * cfr(0,.5,0))
+                    Humanoid:ChangeState("GettingUp")
+                    for _, part in pairs(Character:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.Velocity, part.RotVelocity = V3_ZERO, V3_ZERO
+                        end
+                    end
+                end)
+                task.wait()
+                tries=tries+1
+                if tries>20 then break end
+            until (RootPart.Position - flingOldPos.p).Magnitude < 25
+        end
+        pcall(function() Workspace.FallenPartsDestroyHeight = flingFPDH end)
+        BindableButtons.ResetActive=false
+        StatusHUD.Set("idle")
+    end
+    flingObj.cancel=function() cleanup(true,true) end
+    currentFling=flingObj
+    BindableButtons.ResetActive=true
+    StatusHUD.Set("active", TargetPlayer.Name)
+    flingObj.watchdog = task.delay((config.flingDuration or 2)+2, function() if not done then cleanup(false) end end)
+
+    local function FPos(BasePart, Pos, Ang)
+        if not RootPart or not RootPart.Parent then return end
+        pcall(function()
+            RootPart.CFrame = cfr(BasePart.Position) * Pos * Ang
+            Character:SetPrimaryPartCFrame(cfr(BasePart.Position) * Pos * Ang)
+            RootPart.Velocity = v3(9e7*velMult, 9e7*10*velMult, 9e7*velMult)
+            RootPart.RotVelocity = v3(9e8*rotMult, 9e8*rotMult, 9e8*rotMult)
+        end)
+    end
+
+    local function SFBasePart(BasePart)
+        local TimeToWait = config.flingDuration or 2
+        local Time = tick()
+        local Angle = 0
+        repeat
+            if done then break end
+            if RootPart and THumanoid and BasePart and BasePart.Parent then
+                if BasePart.Velocity.Magnitude < 50 then
+                    Angle = Angle + 100
+                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0))
+                    task.wait()
+                else
+                    FPos(BasePart, cfr(0,1.5,THumanoid.WalkSpeed), CFrame.Angles(math.rad(90),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,-THumanoid.WalkSpeed), CFrame.Angles(0,0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,1.5,THumanoid.WalkSpeed), CFrame.Angles(math.rad(90),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(math.rad(90),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(0,0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(math.rad(90),0,0))
+                    task.wait()
+                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(0,0,0))
+                    task.wait()
+                end
+            else
+                task.wait()
+            end
+        until Time + TimeToWait < tick()
+    end
+
+    if TRootPart then SFBasePart(TRootPart)
+    elseif THead then SFBasePart(THead)
+    elseif Handle then SFBasePart(Handle)
+    else Notify("Fling", TargetPlayer.Name.." has no valid parts",2) end
+
+    cleanup(true)
+    return true
+end
+
+-- ====== Авто-модули ======
+local function startAutoModule(maidKey, finderFunc, intervalFn)
+    if maids[maidKey] then maids[maidKey]:Destroy(); maids[maidKey]=nil end
+    local maid=Maid.new()
+    maids[maidKey]=maid
+    local thread=task.spawn(function()
+        while not maid._destroyed do
+            local target=nil
+            pcall(function() target=finderFunc() if target then SkidFling(target) end end)
+            local base=intervalFn()
+            if target then task.wait(math.max(base, (config.flingDuration or 2)+0.08))
+            else task.wait(base) end
+        end
+    end)
+    maid:GiveTask(thread)
+    return maid
+end
+
+local function stopAutoModule(maidKey)
+    if maids[maidKey] then maids[maidKey]:Destroy(); maids[maidKey]=nil; cancelCurrentFling() end
+end
+
+-- ====== Действия ======
+local ACTIONS={}
+
+ACTIONS.sheriff={
+    name="Sheriff", short="Sh", label="🔫 Sheriff",
+    run=function()
+        local t=findSheriff()
+        if t then SkidFling(t) else Notify("Fling","Sheriff not found",3) end
+    end,
+}
+ACTIONS.murderer={
+    name="Murderer", short="Mur", label="🔪 Murderer",
+    run=function()
+        local t=findMurderer()
+        if t then SkidFling(t) else Notify("Fling","Murderer not found",3) end
+    end,
+}
+ACTIONS.selected={
+    name="Selected", short="Sel", label="🎯 Selected",
+    run=function()
+        local t=getSelectedOrFirst()
+        if t then SkidFling(t) else Notify("Fling","No valid selected player",2) end
+    end,
+}
+ACTIONS.all={
+    name="All", short="All", label="👥 Everyone",
+    run=function()
+        if massFlingThread then Notify("Fling","Mass fling already running",2) return end
+        massFlingThread=task.spawn(function()
+            local players=Players:GetPlayers()
+            for i=1,#players do
+                local p=players[i]
+                if isValidTarget(p) then
+                    SkidFling(p)
+                    task.wait((config.flingDuration or 2)+0.1)
+                end
+            end
+            massFlingThread=nil
+        end)
+        Notify("Fling","Flinging all...",2)
+    end,
+}
+ACTIONS.nearest={
+    name="Nearest", short="Nrst", label="📍 Nearest",
+    run=function()
+        local t=findNearest()
+        if t then SkidFling(t) else Notify("Fling","No valid target nearby",2) end
+    end,
+}
+ACTIONS.start={
+    name="Start", short="Go", label="▶ Start",
+    run=function()
+        if maids.loopPlr then Notify("Fling","Loop already active - stop it first",2) return end
+        local count=#state.selectedPlayers
+        if count==0 and not isValidTarget(state.resetSelPlr) then Notify("Fling","No targets for loop",2) return end
+        Notify("Fling","Use 🤖 Auto → Loop toggle for continuous",3)
+        for _,p in ipairs(state.selectedPlayers) do if isValidTarget(p) then SkidFling(p); task.wait(0.2) end end
+        if isValidTarget(state.resetSelPlr) then SkidFling(state.resetSelPlr) end
+    end,
+}
+ACTIONS.cancel={
+    name="Cancel", short="Can", label="⏹ Cancel",
+    run=function() cancelCurrentFling(); Notify("Fling","Cancelled",2) end,
+}
+
+local ACTION_ORDER={"sheriff","murderer","selected","all","nearest","start","cancel"}
+
+local function runAction(id)
+    local a=ACTIONS[id]
+    if not a then return end
+    local ok,err=xpcall(a.run, debug.traceback)
+    if not ok then warn("["..BRAND.."][action:"..id.."] "..tostring(err)); Notify("Error","Action failed: "..id,3) end
+end
+
+-- ====== Хоткеи ======
+local Keybinds={ capture=nil }
+local IGNORED_KEYS={
+    LeftShift=true, RightShift=true, LeftControl=true, RightControl=true,
+    LeftAlt=true, RightAlt=true, LeftMeta=true, RightMeta=true,
+    CapsLock=true, Unknown=true, Escape=true,
+}
+local function keyName(id)
+    local k=config.keybinds[id]
+    return (k and k~="") and k or "—"
+end
+
+RootMaid:GiveTask(UserInputService.InputBegan:Connect(function(input, processed)
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    local name=input.KeyCode.Name
+    if Keybinds.capture then
+        if IGNORED_KEYS[name] then return end
+        local id=Keybinds.capture
+        Keybinds.capture=nil
+        config.keybinds[id]=name
+        saveConfig()
+        Notify("Hotkey", ACTIONS[id].name.." → "..name,3)
+        return
+    end
+    if processed then return end
+    for _,id in ipairs(ACTION_ORDER) do
+        if config.keybinds[id]==name then runAction(id); break end
+    end
+end))
+
+-- ====== МЕНЮ ======
+
+-- ⚡ Fling
+local actionSection = AddSection("⚡ Fling")
+actionSection:AddButton("🔫 Sheriff", function() runAction("sheriff") end)
+actionSection:AddButton("🔪 Murderer", function() runAction("murderer") end)
+actionSection:AddButton("🎯 Selected", function() runAction("selected") end)
+actionSection:AddButton("👥 Everyone", function() runAction("all") end)
+actionSection:AddButton("📍 Nearest", function() runAction("nearest") end)
+actionSection:AddButton("▶ Start (list)", function() runAction("start") end)
+actionSection:AddButton("⏹ Cancel", function() runAction("cancel") end)
+actionSection:AddPlayerDropdown("▸ Fling player", function(p)
+    if p and p ~= LocalPlayer then
+        state.resetSelPlr = p
+        if state.whitelist[p.UserId] then Notify("Whitelist", p.Name.." is whitelisted!",3)
+        else SkidFling(p); Notify("Fling","Flinging "..p.Name,2) end
+    end
+end)
+
+-- 🤖 Auto
+local autoSection = AddSection("🤖 Auto")
+autoSection:AddToggle("Auto Sheriff", function(enabled)
+    if enabled then
+        startAutoModule("autoSheriff", findSheriff, function() return config.autoSheriffDelay end)
+    else
+        stopAutoModule("autoSheriff")
+    end
+end)
+autoSection:AddToggle("Auto Murderer", function(enabled)
+    if enabled then
+        startAutoModule("autoMurderer", findMurderer, function() return config.autoMurdererDelay end)
+    else
+        stopAutoModule("autoMurderer")
+    end
+end)
+autoSection:AddToggle("Loop", function(enabled)
+    if not enabled then stopAutoModule("loopPlr") return end
+    local idx=1
+    startAutoModule("loopPlr", function()
+        if isValidTarget(state.resetSelPlr) then return state.resetSelPlr end
+        local list=state.selectedPlayers
+        for _=1,#list do
+            idx=((idx-1)%#list)+1
+            local p=list[idx]
+            if isValidTarget(p) then return p end
+        end
+        return nil
+    end, function() return config.loopInterval end)
+end)
+autoSection:AddToggle("Aura", function(enabled)
+    if not enabled then stopAutoModule("aura") return end
+    startAutoModule("aura", function()
+        local char=LocalPlayer.Character
+        local root=char and char:FindFirstChild("HumanoidRootPart")
+        if not root then return nil end
+        local myPos=root.Position
+        local maxSq=(config.auraStuds or 15)^2
+        local best,bestDist=nil,maxSq
+        local players=Players:GetPlayers()
+        for i=1,#players do
+            local player=players[i]
+            if isValidTarget(player) then
+                local tr=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                if tr then
+                    local d=(myPos-tr.Position).Magnitude
+                    local dsq=d*d
+                    if dsq<=bestDist then best,bestDist=player,dsq end
+                end
+            end
+        end
+        return best
+    end, function() return config.auraInterval end)
+end)
+autoSection:AddToggle("Click", function(enabled)
+    if maids.clickFling then maids.clickFling:Destroy(); maids.clickFling=nil end
+    if not enabled then return end
+    maids.clickFling=Maid.new()
+    local camera=Workspace.CurrentCamera
+    local rayParams=RaycastParams.new()
+    rayParams.FilterType=Enum.RaycastFilterType.Exclude
+    rayParams.IgnoreWater=true
+    local function resolveTarget()
+        local char=LocalPlayer.Character
+        rayParams.FilterDescendantsInstances=char and {char} or {}
+        local mouse=LocalPlayer:GetMouse()
+        if camera and mouse then
+            local unit=camera:ViewportPointToRay(mouse.X, mouse.Y, 1000)
+            local hit=Workspace:Raycast(unit.Origin, unit.Direction*1000, rayParams)
+            if hit and hit.Instance then
+                local model=hit.Instance:FindFirstAncestorWhichIsA("Model")
+                local player=model and Players:GetPlayerFromCharacter(model)
+                if player then return player end
+            end
+        end
+        local target=mouse and mouse.Target
+        local model=target and target:FindFirstAncestorWhichIsA("Model")
+        local player=model and Players:GetPlayerFromCharacter(model)
+        return player or nil
+    end
+    local function onInput(input, processed)
+        if processed then return end
+        if input.UserInputType ~= MOUSE1 and input.UserInputType ~= TOUCH then return end
+        local ok, player=pcall(resolveTarget)
+        if not ok or not player or player==LocalPlayer then return end
+        state.resetSelPlr=player
+        if state.whitelist[player.UserId] then Notify("Click", player.Name.." is whitelisted!",3)
+        else SkidFling(player); Notify("Click","Flinging "..player.Name,2) end
+    end
+    maids.clickFling:GiveTask(UserInputService.InputBegan:Connect(onInput))
+end)
+
+-- 📋 Lists
+local listSection = AddSection("📋 Lists")
+listSection:AddPlayerDropdown("🎯 Select", function(p)
+    if p and p ~= LocalPlayer then state.resetSelPlr=p; Notify("Selected", p.Name.." set",3) end
+end)
+listSection:AddPlayerDropdown("➕ Loop", function(p)
+    if p and p ~= LocalPlayer then
+        state.resetSelPlr=p
+        if not state.selectedSet[p.UserId] then
+            state.selectedSet[p.UserId]=true
+            insert(state.selectedPlayers,p)
+            Notify("Selected", p.Name.." added",3)
+        end
+    end
+end)
+listSection:AddButton("🧹 Clear loop", function()
+    clearTable(state.selectedPlayers); clearTable(state.selectedSet)
+    Notify("Selected","Cleared",3)
+end)
+listSection:AddPlayerDropdown("🛡 Whitelist", function(p)
+    if p and p ~= LocalPlayer then state.whitelist[p.UserId]=p.Name; Notify("Whitelist", p.Name.." added",3); saveConfig() end
+end)
+listSection:AddPlayerDropdown("🛡 Un-whitelist", function(p)
+    if p and state.whitelist[p.UserId] then state.whitelist[p.UserId]=nil; Notify("Whitelist", p.Name.." removed",3); saveConfig()
+    elseif p then Notify("Whitelist", p.Name.." is not whitelisted",3) end
+end)
+listSection:AddButton("🧹 Clear WL", function() clearTable(state.whitelist); Notify("Whitelist","Cleared",3); saveConfig() end)
+
+-- ⚙️ Tuning
+local settingsSection = AddSection("⚙️ Tuning")
+settingsSection:AddSlider("Fling Duration", 1, 5, config.flingDuration, function(v) config.flingDuration=v; saveConfig() end)
+settingsSection:AddSlider("Fling Power", 1, 3, config.flingPower, function(v) config.flingPower=v; saveConfig() end)
+settingsSection:AddSlider("Aura Radius", 5, 50, config.auraStuds, function(v) config.auraStuds=v; saveConfig() end)
+settingsSection:AddSlider("Loop Interval", 0.1, 1.0, config.loopInterval, function(v) config.loopInterval=v; saveConfig() end)
+settingsSection:AddSlider("Aura Interval", 0.1, 1.0, config.auraInterval, function(v) config.auraInterval=v; saveConfig() end)
+settingsSection:AddSlider("Target Cooldown", 0, 3, config.targetCooldown, function(v) config.targetCooldown=v; saveConfig() end)
+settingsSection:AddSlider("Auto Sheriff Delay", 0.1, 1.0, config.autoSheriffDelay, function(v) config.autoSheriffDelay=v; saveConfig() end)
+settingsSection:AddSlider("Auto Murderer Delay", 0.1, 1.0, config.autoMurdererDelay, function(v) config.autoMurdererDelay=v; saveConfig() end)
+settingsSection:AddSlider("Role Cache TTL", 0.2, 3.0, config.roleCacheTTL, function(v) config.roleCacheTTL=v; saveConfig() end)
+settingsSection:AddToggle("Auto Return", function(enabled) config.autoReturn=enabled and true or false; saveConfig() end)
+settingsSection:AddToggle("Notifications", function(enabled) config.notifications=enabled and true or false; saveConfig() end)
+
+-- 🔘 Binds
+local floatSection = AddSection("🔘 Binds")
+floatSection:AddToggle("SFX 🔇", function(bool) Audio.setMuted(bool) end)
+
+local function toggleBindButton(actionId)
+    return function(enabled)
+        local id="bind_"..actionId
+        if enabled then
+            BindableButtons.AddBButton(id, ACTIONS[actionId].short, function() runAction(actionId) end, actionId=="selected")
+        else
+            BindableButtons.DeleteBButton(id)
+        end
+    end
+end
+
+for _,id in ipairs(ACTION_ORDER) do
+    floatSection:AddToggle("Bind "..ACTIONS[id].name, toggleBindButton(id))
+end
+floatSection:AddSlider("Bind Size (%)", 5, 25, math.floor((config.bindButtonSize or 0.11)*100), function(value)
+    BindableButtons.setSize(value/100)
+end)
+floatSection:AddButton("🧩 Reset bind layout", function() BindableButtons.resetLayout(); Notify("Binds","Layout reset",2) end)
+floatSection:AddButton("🛑 Panic", function()
+    cancelCurrentFling()
+    for _,key in ipairs({"loopPlr","clickFling","aura","autoSheriff","autoMurderer"}) do stopAutoModule(key) end
+    BindableButtons.clearAll()
+    for _,r in ipairs(ODHX.records) do
+        if r.kind=="Toggle" and (r.section=="🤖 Auto" or (r.section=="🔘 Binds" and r.name:sub(1,5)=="Bind ")) then
+            ODHX.Set(r.section,r.name,r.kind,false,false)
+        end
+    end
+    Notify("Panic","All modules stopped",3)
+end)
+
+-- 🔑 Keys
+local keySection = AddSection("🔑 Keys")
+for _,id in ipairs(ACTION_ORDER) do
+    keySection:AddToggle("Key "..ACTIONS[id].name.." ["..keyName(id).."]", function(enabled)
+        if enabled then Keybinds.capture=id; Notify("Hotkey","Press a key for "..ACTIONS[id].name.."...",5)
+        else config.keybinds[id]=nil; if Keybinds.capture==id then Keybinds.capture=nil end; saveConfig(); Notify("Hotkey", ACTIONS[id].name.." key cleared",3) end
+    end)
+end
+keySection:AddButton("🧹 Clear keys", function() clearTable(config.keybinds); Keybinds.capture=nil; saveConfig(); Notify("Hotkey","All hotkeys cleared",3) end)
+
+-- ====== Пометить свои карточки ======
+markOwnCards()
+
+RootMaid:GiveTask(task.spawn(function()
+    for _,delay in ipairs({1.5,2.5,3.0,5.0}) do
+        task.wait(delay)
+        pcall(markOwnCards)
+        pcall(purgeForeign, true)
+    end
+end))
+
+-- ====== Init ======
+Audio.init()
+-- Fling HUD intentionally disabled.
+BindableButtons.setSize(config.bindButtonSize or 0.11)
+hudApplyPosition()
+if configLoaded then Notify(BRAND, VERSION.." loaded (config restored)",3)
+else Notify(BRAND, VERSION.." loaded. Duplicates auto-cleaned.",3) end
+if headlessMode then Notify(BRAND,"Menu API missing — headless mode (binds/hotkeys work)",5) end
+
+RootMaid:GiveTask(Players.PlayerRemoving:Connect(function(player)
+    if not player then return end
+    state.lastResetAt[player.UserId]=nil
+    state.selectedSet[player.UserId]=nil
+    for i=#state.selectedPlayers,1,-1 do if state.selectedPlayers[i]==player then table.remove(state.selectedPlayers,i) end end
+    if state.resetSelPlr==player then state.resetSelPlr=nil end
+    if sheriffCache and sheriffCache.player==player then sheriffCache.player=nil end
+    invalidateRoleCache()
+end))
+RootMaid:GiveTask(Players.PlayerAdded:Connect(function() invalidateRoleCache() end))
+
+-- ====== Очистка ======
+RootMaid:GiveTask(function()
+    persistDisabled=true
+    if saveThread then pcall(task.cancel, saveThread) end
+    saveThread,saveQueued=nil,false
+    cancelCurrentFling()
+    for _,m in pairs(maids) do if m then m:Destroy() end end
+    clearTable(maids)
+    clearTable(state.whitelist)
+    clearTable(state.selectedPlayers)
+    clearTable(state.selectedSet)
+    clearTable(state.lastResetAt)
+    Keybinds.capture=nil
+    BindableButtons.clearAll()
+    pcall(removeMySections)
+    pcall(function() if storageGui then storageGui:Destroy() end; storageGui=nil end)
+end)
+
+local function unload()
+    RootMaid:DoCleaning()
+end
+
+pcall(function()
+    if type(getgenv) ~= "function" then return end
+    local g=getgenv()
+    if type(g)~="table" then return end
+    rawset(g, UNLOAD_GLOBAL, ODHX.Stop)
+end)
+
+ODHX.Bind("⚙️ Tuning", "Auto Return", "Toggle", function() return config.autoReturn end)
+ODHX.Bind("⚙️ Tuning", "Notifications", "Toggle", function() return config.notifications end)
+ODHX.Bind("🔘 Binds", "SFX 🔇", "Toggle", function() return config.muteSounds end)
+ODHX.Bind("⚙️ Tuning", "Fling Duration", "Slider", function() return config.flingDuration end)
+ODHX.Bind("⚙️ Tuning", "Fling Power", "Slider", function() return config.flingPower end)
+ODHX.Bind("⚙️ Tuning", "Aura Radius", "Slider", function() return config.auraStuds end)
+ODHX.Bind("⚙️ Tuning", "Loop Interval", "Slider", function() return config.loopInterval end)
+ODHX.Bind("⚙️ Tuning", "Aura Interval", "Slider", function() return config.auraInterval end)
+ODHX.Bind("⚙️ Tuning", "Target Cooldown", "Slider", function() return config.targetCooldown end)
+ODHX.Bind("⚙️ Tuning", "Auto Sheriff Delay", "Slider", function() return config.autoSheriffDelay end)
+ODHX.Bind("⚙️ Tuning", "Auto Murderer Delay", "Slider", function() return config.autoMurdererDelay end)
+ODHX.Bind("⚙️ Tuning", "Role Cache TTL", "Slider", function() return config.roleCacheTTL end)
+ODHX.Bind("🔘 Binds", "Bind Size (%)", "Slider", function() return config.bindButtonSize*100 end)
+ODHX.cleanup=unload
+ODHX.Finish()
+
+    end, function(__error) return tostring(__error) end)
+    if not __pluginOk then
+        warn("[Noir embedded plugin: fling_мой.lua.txt] " .. tostring(__pluginError))
+        notify("fling_мой.lua.txt failed to load: " .. tostring(__pluginError), 7)
     end
 end
