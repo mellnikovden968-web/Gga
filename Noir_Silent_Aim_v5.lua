@@ -411,58 +411,52 @@ restore.MouseButton1Click:Connect(function()
 end)
 
 local content = New("ScrollingFrame", { Parent = win, Position = UDim2.fromOffset(275, 110), Size = UDim2.new(1, -300, 1, -130),
-    BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 7, ScrollBarImageColor3 = C.accent,
-    CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollingDirection = Enum.ScrollingDirection.Y,
-    ScrollingEnabled = true, Active = true, ElasticBehavior = Enum.ElasticBehavior.WhenScrollable, VerticalScrollBarInset = Enum.ScrollBarInset.Always })
-local cols = {}
-for i = 1, 2 do
-    cols[i] = New("Frame", { Parent = content, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = cols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+    BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
+    CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.None,
+    ScrollingDirection = Enum.ScrollingDirection.Y, ScrollingEnabled = false, Active = false,
+    ElasticBehavior = Enum.ElasticBehavior.Never, VerticalScrollBarInset = Enum.ScrollBarInset.Always })
+local cols, configContent, configCols, visualContent, visualCols, mainContent, mainCols, worldContent, worldCols, emotesContent, emotesCols, miscContent, miscCols
+
+do
+-- Each tab owns two real ScrollingFrames.  The previous outer canvas made both columns move
+-- together; these independent rails allow the left and right sections to be scrolled separately.
+local function makeDualScrollColumns(parent)
+    local columns = {}
+    for i = 1, 2 do
+        columns[i] = New("ScrollingFrame", { Parent = parent, Name = "NoirColumn" .. tostring(i),
+            Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 1, 0),
+            BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 5, ScrollBarImageColor3 = C.accent,
+            CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            ScrollingDirection = Enum.ScrollingDirection.Y, ScrollingEnabled = true, Active = true,
+            ElasticBehavior = Enum.ElasticBehavior.WhenScrollable, VerticalScrollBarInset = Enum.ScrollBarInset.Always })
+        New("UIListLayout", { Parent = columns[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+        New("UIPadding", { Parent = columns[i], PaddingBottom = UDim.new(0, 16) })
+    end
+    return columns
 end
-local configContent = content:Clone(); configContent.Name = "ConfigContent"; configContent.Parent = win; configContent.Visible = false; configContent:ClearAllChildren()
-local configCols = {}
-for i = 1, 2 do
-    configCols[i] = New("Frame", { Parent = configContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = configCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+local function configureDualScrollPage(page)
+    page.ScrollingEnabled = false
+    page.Active = false
+    page.ScrollBarThickness = 0
+    page.AutomaticCanvasSize = Enum.AutomaticSize.None
+    page.CanvasSize = UDim2.fromOffset(0, 0)
 end
+
+cols = makeDualScrollColumns(content)
+configContent = content:Clone(); configContent.Name = "ConfigContent"; configContent.Parent = win; configContent.Visible = false; configContent:ClearAllChildren(); configureDualScrollPage(configContent)
+configCols = makeDualScrollColumns(configContent)
 content.Position = UDim2.fromOffset(282, 104); content.Size = UDim2.new(1, -306, 1, -128); content.Visible = false
 configContent.Position = content.Position; configContent.Size = content.Size
-local visualContent = content:Clone(); visualContent.Name = "VisualContent"; visualContent.Parent = win; visualContent.Visible = false; visualContent:ClearAllChildren()
-local visualCols = {}
-for i = 1, 2 do
-    visualCols[i] = New("Frame", { Parent = visualContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = visualCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
-end
-local mainContent = content:Clone(); mainContent.Name = "MainContent"; mainContent.Parent = win; mainContent.Visible = false; mainContent:ClearAllChildren()
-local mainCols = {}
-for i = 1, 2 do
-    mainCols[i] = New("Frame", { Parent = mainContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = mainCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
-end
-local worldContent = content:Clone(); worldContent.Name = "WorldContent"; worldContent.Parent = win; worldContent.Visible = false; worldContent:ClearAllChildren()
-local worldCols = {}
-for i = 1, 2 do
-    worldCols[i] = New("Frame", { Parent = worldContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = worldCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
-end
-local emotesContent = content:Clone(); emotesContent.Name = "EmotesContent"; emotesContent.Parent = win; emotesContent.Visible = false; emotesContent:ClearAllChildren()
-local emotesCols = {}
-for i = 1, 2 do
-    emotesCols[i] = New("Frame", { Parent = emotesContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = emotesCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
-end
-local miscContent = content:Clone(); miscContent.Name = "MiscContent"; miscContent.Parent = win; miscContent.Visible = false; miscContent:ClearAllChildren()
-local miscCols = {}
-for i = 1, 2 do
-    miscCols[i] = New("Frame", { Parent = miscContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = miscCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+visualContent = content:Clone(); visualContent.Name = "VisualContent"; visualContent.Parent = win; visualContent.Visible = false; visualContent:ClearAllChildren(); configureDualScrollPage(visualContent)
+visualCols = makeDualScrollColumns(visualContent)
+mainContent = content:Clone(); mainContent.Name = "MainContent"; mainContent.Parent = win; mainContent.Visible = false; mainContent:ClearAllChildren(); configureDualScrollPage(mainContent)
+mainCols = makeDualScrollColumns(mainContent)
+worldContent = content:Clone(); worldContent.Name = "WorldContent"; worldContent.Parent = win; worldContent.Visible = false; worldContent:ClearAllChildren(); configureDualScrollPage(worldContent)
+worldCols = makeDualScrollColumns(worldContent)
+emotesContent = content:Clone(); emotesContent.Name = "EmotesContent"; emotesContent.Parent = win; emotesContent.Visible = false; emotesContent:ClearAllChildren(); configureDualScrollPage(emotesContent)
+emotesCols = makeDualScrollColumns(emotesContent)
+miscContent = content:Clone(); miscContent.Name = "MiscContent"; miscContent.Parent = win; miscContent.Visible = false; miscContent:ClearAllChildren(); configureDualScrollPage(miscContent)
+miscCols = makeDualScrollColumns(miscContent)
 end
 
 local dashboard = New("Frame", { Parent = win, Position = content.Position, Size = content.Size, BackgroundTransparency = 1 })
@@ -592,18 +586,11 @@ selectPage("home")
 local sectionCount, mainSectionCount, worldSectionCount, visualSectionCount, emotesSectionCount, miscSectionCount, configSectionCount = 0, 0, 0, 0, 0, 0, 0
 local sectionPanels, controls = {}, {}
 function refreshCanvas()
+    -- Canvas lengths are automatic on the independent left/right rails.  Keep every outer page
+    -- pinned at zero so a swipe can never move both columns together.
     task.defer(function()
-        content.CanvasSize = UDim2.fromOffset(0, math.max(cols[1].AbsoluteSize.Y, cols[2].AbsoluteSize.Y) + 165)
-        configContent.CanvasSize = UDim2.fromOffset(0, math.max(configCols[1].AbsoluteSize.Y, configCols[2].AbsoluteSize.Y) + 165)
-        visualContent.CanvasSize = UDim2.fromOffset(0, math.max(visualCols[1].AbsoluteSize.Y, visualCols[2].AbsoluteSize.Y) + 165)
-        mainContent.CanvasSize = UDim2.fromOffset(0, math.max(mainCols[1].AbsoluteSize.Y, mainCols[2].AbsoluteSize.Y) + 165)
-        worldContent.CanvasSize = UDim2.fromOffset(0, math.max(worldCols[1].AbsoluteSize.Y, worldCols[2].AbsoluteSize.Y) + 130)
-        miscContent.CanvasSize = UDim2.fromOffset(0, math.max(miscCols[1].AbsoluteSize.Y, miscCols[2].AbsoluteSize.Y) + 165)
-        local embeddedEmotes = emotesContent:FindFirstChild("NoirEmotesNative") or emotesContent:FindFirstChild("NoirEmbeddedEmotesCanvas")
-        if embeddedEmotes then
-            emotesContent.CanvasSize = UDim2.fromOffset(0, embeddedEmotes.Position.Y.Offset + embeddedEmotes.Size.Y.Offset + 16)
-        else
-            emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(emotesCols[1].AbsoluteSize.Y, emotesCols[2].AbsoluteSize.Y) + 165)
+        for _, page in ipairs({ content, configContent, visualContent, mainContent, worldContent, emotesContent, miscContent }) do
+            if page and page.Parent then page.CanvasSize = UDim2.fromOffset(0, 0) end
         end
     end)
 end
@@ -1607,7 +1594,7 @@ function leadTime(profile)
     -- smoothly adds up to 75ms while keeping a strict 300ms safety ceiling.
     local simulationCap = settings.maxSimulationMs / 1000
     if settings.adaptive then
-        simulationCap = math.min(.30, simulationCap + math.clamp(observedPing - .10, 0, .25) * .30)
+        simulationCap = math.min(.30, simulationCap + math.clamp(observedPing - .10, 0, .25) * .45)
     end
     return math.clamp(prediction, 0.02, simulationCap)
 end
@@ -1655,19 +1642,23 @@ function calculateAim(part)
     end
     local horizontal = config.horizontalMultiplier / 100
     local vertical = config.verticalMultiplier / 100
-    local yVelocity = config.predictJump and velocity.Y * vertical or 0
-    local predictedVelocity = Vector3.new(velocity.X * horizontal, yVelocity, velocity.Z * horizontal)
     local time = leadTime()
-    local displacement = predictedVelocity * time
+    -- Horizontal Omega values remain a velocity multiplier.  For a jumping character, however,
+    -- the vertical Omega multiplier must affect both initial velocity and gravity time.  Applying
+    -- it only to velocity (the previous code) over-led every jump arc, especially at 250–400 ms.
+    local displacement = Vector3.new(velocity.X * horizontal * time, 0, velocity.Z * horizontal * time)
     if config.predictLag then
         local horizontalAcceleration = Vector3.new(acceleration.X, 0, acceleration.Z)
         displacement = displacement + horizontalAcceleration * (0.5 * time * time)
     end
     if config.predictJump then
+        local verticalTime = time * vertical
+        local verticalDisplacement = velocity.Y * verticalTime
         local humanoid = part.Parent and part.Parent:FindFirstChildWhichIsA("Humanoid")
         if humanoid and humanoid.FloorMaterial == Enum.Material.Air then
-            displacement = displacement + Vector3.new(0, -0.5 * Workspace.Gravity * time * time, 0)
+            verticalDisplacement = verticalDisplacement - 0.5 * Workspace.Gravity * verticalTime * verticalTime
         end
+        displacement = displacement + Vector3.new(0, verticalDisplacement, 0)
     end
     if displacement.Magnitude > 18 then displacement = displacement.Unit * 18 end
     local offset = Vector3.new(part.Size.X * config.offsetX / 100, part.Size.Y * config.offsetY / 100, part.Size.Z * config.offsetZ / 100)
@@ -3387,7 +3378,9 @@ task.defer(function()
         local camera = Workspace.CurrentCamera
         local viewport = camera and camera.ViewportSize
         local shortEdge = viewport and math.min(viewport.X, viewport.Y) or 720
-        return math.clamp(math.floor(shortEdge * aim.bindSize + .5), 34, 148)
+        -- CoreGui Offset pixels are density-scaled on this mobile client.  Half-scale here makes
+        -- the visible 8 setting match the neighbouring Shift/Desync-sized round binds.
+        return math.clamp(math.floor(shortEdge * aim.bindSize * .5 + .5), 24, 96)
     end
     local function updateBindSize()
         local button = aim.bindButton
