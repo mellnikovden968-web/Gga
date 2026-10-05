@@ -2496,11 +2496,33 @@ task.defer(function()
     local function hideOriginalLeftArm(character)
         restoreOriginalLeftArm()
         if not character then return end
+        local leftLimbs = {}
         if character:FindFirstChild("Left Arm") then
-            hideOriginalPart(character:FindFirstChild("Left Arm"))
+            local limb = character:FindFirstChild("Left Arm")
+            leftLimbs[limb] = true
+            hideOriginalPart(limb)
         else
             for _, name in ipairs({ "LeftUpperArm", "LeftLowerArm", "LeftHand" }) do
-                hideOriginalPart(character:FindFirstChild(name))
+                local limb = character:FindFirstChild(name)
+                if limb then leftLimbs[limb] = true; hideOriginalPart(limb) end
+            end
+        end
+        -- Hide only cosmetic handles whose own AccessoryWeld is attached to a left limb.  A
+        -- torso/cape accessory is therefore never hidden just because it happens to be nearby.
+        for _, accessory in ipairs(character:GetChildren()) do
+            if accessory:IsA("Accessory") then
+                local leftBound = false
+                for _, joint in ipairs(accessory:GetDescendants()) do
+                    if joint:IsA("JointInstance") and (leftLimbs[joint.Part0] or leftLimbs[joint.Part1]) then
+                        leftBound = true
+                        break
+                    end
+                end
+                if leftBound then
+                    for _, piece in ipairs(accessory:GetDescendants()) do
+                        if piece:IsA("BasePart") then hideOriginalPart(piece) end
+                    end
+                end
             end
         end
     end
@@ -2563,10 +2585,18 @@ task.defer(function()
         -- retaining the right arm's exact live pose and the same reload animation.
         return torso.CFrame * CFrame.new(-.16, .035, .018) * CFrame.new(-p.X, p.Y, p.Z) * CFrame.Angles(rx, -ry, -rz)
     end
-    local function addSource(source)
+    local function addSource(source, sleeveLimb)
         if source and source:IsA("BasePart") and not runtime.sourceSet[source] then
             local clone = cleanClone(source)
             if clone then
+                -- Roblox does not bake a player's shirt/layered-clothing pixels onto an isolated
+                -- copied arm in a ViewportFrame. For this Noir outfit, retain accessory/shirt
+                -- copies when supported and apply the matching dark sleeve fallback to the two
+                -- arm segments, never to the hand/glove.
+                if sleeveLimb then
+                    clone.Color = Color3.fromRGB(20, 21, 24)
+                    clone.Material = Enum.Material.SmoothPlastic
+                end
                 runtime.sourceSet[source] = true
                 runtime.entries[#runtime.entries + 1] = { source = source, clone = clone }
             end
@@ -2619,7 +2649,9 @@ task.defer(function()
             end
         end
         addClothingAndSleeveCosmetics(character, rightArmParts)
-        for _, limb in ipairs(rightArmParts) do addSource(limb) end
+        for _, limb in ipairs(rightArmParts) do
+            addSource(limb, limb.Name ~= "RightHand")
+        end
         -- Hide only the original left limb locally while the read-only projected replacement is
         -- enabled. The saved LocalTransparencyModifier is restored exactly on disable/reload.
         hideOriginalLeftArm(character)
@@ -6785,7 +6817,7 @@ do
         local runtime = getgenv().__NoirCameraProjectedDual
         if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
     end)
-    combatAim:AddLabel("Local projected second Gun arm: mirrors the live raise/reload pose, copies sleeve cosmetics, and locally hides the original left limb. No parts are added to Character/Workspace.")
+    combatAim:AddLabel("Local projected second Gun arm: mirrors live raise/reload, uses a dark sleeve fallback for isolated avatar clothing, and hides the original left limb locally. No parts are added to Character/Workspace.")
     combatAim:AddParagraph("GUN TRIGGER BOT", "Shoots once when the centre cursor/crosshair points at the Murderer. Works with mobile Shift Lock; move off target and back to arm the next shot.")
     combatAim:AddToggle("Gun Trigger Bot", function(v) config.gunTriggerBot = v == true end)
     combatAim:AddToggle("Gun Trigger Bot Wall Check", function(v) config.gunTriggerBotWallCheck = v == true end)
@@ -6831,7 +6863,7 @@ do
         local runtime = getgenv().__NoirCameraProjectedDual
         if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
     end)
-    combatKnife:AddLabel("Local projected second Knife arm: mirrors the live animation, copies sleeve cosmetics, and locally hides the original left limb. No parts are added to Character/Workspace.")
+    combatKnife:AddLabel("Local projected second Knife arm: mirrors live animation, uses a dark sleeve fallback for isolated avatar clothing, and hides the original left limb locally. No parts are added to Character/Workspace.")
     combatKnife:AddToggle("Disable Stab", function(v) config.knifeDisableStab = v == true end)
     combatKnife:AddToggle("Instant Throw", function(v) config.knifeInstantThrow = v == true end)
     combatKnife:AddToggle("Fast Throw", function(v) config.knifeFastThrow = v == true end)
