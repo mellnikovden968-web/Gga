@@ -2018,7 +2018,8 @@ task.defer(function()
 
     local runtime = { stopped = false, connections = {}, bindConnections = {}, gui = nil, button = nil,
         dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
-        dualOriginalC0 = nil, dualOriginalTransform = nil, poseBind = "NoirKnifeDualArmPose", nextAction = 0 }
+        dualOriginalC0 = nil, dualOriginalTransform = nil, ghostModel = nil, ghostParts = {}, hiddenParts = {}, dualTorso = nil,
+        poseBind = "NoirKnifeDualArmPose", nextAction = 0 }
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
         runtime.connections[#runtime.connections + 1] = connection
@@ -2122,42 +2123,71 @@ task.defer(function()
         if not silent then notify(count > 0 and ("Knife action sent to " .. tostring(count) .. " target(s)") or "Knife action: no valid target", 3) end
         return count
     end
+    local function armPartPairs(character)
+        local pairs = {}
+        if character and character:FindFirstChild("Right Arm") then
+            pairs[#pairs + 1] = { character:FindFirstChild("Right Arm"), character:FindFirstChild("Left Arm") }
+        else
+            for _, suffix in ipairs({ "UpperArm", "LowerArm", "Hand" }) do
+                local source, target = character and character:FindFirstChild("Right" .. suffix), character and character:FindFirstChild("Left" .. suffix)
+                if source and target then pairs[#pairs + 1] = { source, target } end
+            end
+        end
+        return pairs
+    end
+    local function cleanVisualClone(part)
+        local clone = part:Clone()
+        for _, child in ipairs(clone:GetDescendants()) do
+            if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then child:Destroy() end
+        end
+        clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = true, false, false, false, true
+        clone.CastShadow = false
+        return clone
+    end
     local function destroyDualVisual()
-        if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
-        if runtime.dualLeftShoulder and runtime.dualLeftShoulder.Parent then pcall(function()
-            if runtime.dualOriginalC0 then runtime.dualLeftShoulder.C0 = runtime.dualOriginalC0 end
-            runtime.dualLeftShoulder.Transform = runtime.dualOriginalTransform or CFrame.new()
-        end) end
-        runtime.dualVisual, runtime.dualSource, runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder = nil, nil, nil, nil, nil
-        runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil
+        if runtime.ghostModel and runtime.ghostModel.Parent then runtime.ghostModel:Destroy() end
+        for part, original in pairs(runtime.hiddenParts) do if part and part.Parent then pcall(function() part.LocalTransparencyModifier = original end) end end
+        table.clear(runtime.hiddenParts); table.clear(runtime.ghostParts)
+        runtime.ghostModel, runtime.dualVisual, runtime.dualSource, runtime.dualTorso = nil, nil, nil, nil
+        runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder, runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil, nil, nil, nil
     end
     local function refreshDualEffect()
         if not config.knifeDualEffect then destroyDualVisual(); return end
-        local character = LocalPlayer.Character
-        local tool = equippedKnife()
+        local character, tool = LocalPlayer.Character, equippedKnife()
         local handle = tool and tool:FindFirstChild("Handle", true)
-        local leftHand, rightHand = limbFor(character, "Left"), limbFor(character, "Right")
-        if not handle or not handle:IsA("BasePart") or not leftHand or not leftHand:IsA("BasePart") then destroyDualVisual(); return end
-        if runtime.dualVisual and runtime.dualVisual.Parent and runtime.dualSource == handle and runtime.dualLimb == leftHand then return end
+        local torso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"))
+        local pairs = armPartPairs(character)
+        if not handle or not handle:IsA("BasePart") or not torso or #pairs == 0 then destroyDualVisual(); return end
+        if runtime.ghostModel and runtime.ghostModel.Parent and runtime.dualSource == handle and runtime.dualTorso == torso then return end
         destroyDualVisual()
-        local ok, visual = pcall(function()
-            local clone = handle:Clone()
-            for _, child in ipairs(clone:GetDescendants()) do
-                if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then child:Destroy() end
+        local ok = pcall(function()
+            local model = Instance.new("Model")
+            model.Name, model.Parent = "NoirKnifeDualArms", character
+            for index, entry in ipairs(pairs) do
+                local source, hidden = entry[1], entry[2]
+                runtime.hiddenParts[hidden] = hidden.LocalTransparencyModifier
+                hidden.LocalTransparencyModifier = 1
+                local clone = cleanVisualClone(source)
+                clone.Name, clone.Parent = "NoirKnifeGhostArm" .. tostring(index), model
+                runtime.ghostParts[clone] = source
             end
-            clone.Name = "NoirKnifeDualEffect"
-            clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = false, false, false, false, true
-            local gripOffset = rightHand and rightHand.CFrame:ToObjectSpace(handle.CFrame) or CFrame.new(0, -.42, 0)
-            clone.CFrame = leftHand.CFrame * gripOffset
-            clone.Parent = character
-            local weld = Instance.new("WeldConstraint")
-            weld.Part0, weld.Part1, weld.Parent = leftHand, clone, clone
-            return clone
+            local weapon = cleanVisualClone(handle)
+            weapon.Name, weapon.Parent = "NoirKnifeDualEffect", model
+            runtime.ghostModel, runtime.dualVisual, runtime.dualSource, runtime.dualTorso = model, weapon, handle, torso
         end)
-        runtime.dualVisual, runtime.dualSource, runtime.dualLimb = ok and visual or nil, ok and handle or nil, ok and leftHand or nil
-        runtime.dualLeftShoulder, runtime.dualRightShoulder = shoulderFor(character, "Left"), shoulderFor(character, "Right")
-        if runtime.dualLeftShoulder then runtime.dualOriginalC0, runtime.dualOriginalTransform = runtime.dualLeftShoulder.C0, runtime.dualLeftShoulder.Transform end
-        if runtime.dualLeftShoulder then runtime.dualOriginalC0, runtime.dualOriginalTransform = runtime.dualLeftShoulder.C0, runtime.dualLeftShoulder.Transform end
+        if not ok then destroyDualVisual() end
+    end
+    local function updateGhostDual()
+        local torso, weapon = runtime.dualTorso, runtime.dualVisual
+        if not torso or not torso.Parent or not weapon or not weapon.Parent then return end
+        local function mirrored(source)
+            local relative = torso.CFrame:ToObjectSpace(source.CFrame)
+            local p = relative.Position
+            local x, y, z = relative:ToOrientation()
+            return torso.CFrame * CFrame.new(-p.X, p.Y, p.Z) * CFrame.Angles(x, -y, -z)
+        end
+        for clone, source in pairs(runtime.ghostParts) do if clone and clone.Parent and source and source.Parent then clone.CFrame = mirrored(source) end end
+        if runtime.dualSource and runtime.dualSource.Parent then weapon.CFrame = mirrored(runtime.dualSource) end
     end
     local function disconnectKnifeBind()
         for _, connection in ipairs(runtime.bindConnections) do pcall(function() connection:Disconnect() end) end
@@ -2231,20 +2261,7 @@ task.defer(function()
     pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
     RunService:BindToRenderStep(runtime.poseBind, Enum.RenderPriority.Last.Value, function()
         if runtime.stopped or not config.knifeDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
-        local left, right = runtime.dualLeftShoulder, runtime.dualRightShoulder
-        if left and right and left.Parent and right.Parent and left.Part0 and left.Part1 and right.Part0 and right.Part1 then
-            pcall(function()
-                -- Solve the left Motor6D from the current WORLD CFrame of the raised right arm.
-                -- Mirroring its position around the torso puts the real second arm in the same
-                -- raised pose, rather than merely rotating a lower arm transform.
-                local source = right.Part0.CFrame:ToObjectSpace(right.Part1.CFrame)
-                local px, py, pz = source.Position.X, source.Position.Y, source.Position.Z
-                local rx, ry, rz = source:ToOrientation()
-                local mirroredWorld = left.Part0.CFrame * CFrame.new(-px, py, pz) * CFrame.Angles(rx, -ry, -rz)
-                left.Transform = CFrame.new()
-                left.C0 = left.Part0.CFrame:ToObjectSpace(mirroredWorld * left.C1)
-            end)
-        end
+        pcall(updateGhostDual)
     end)
     runtime.connections[#runtime.connections + 1] = RunService.Heartbeat:Connect(function()
         if runtime.stopped then return end
@@ -2331,7 +2348,8 @@ task.defer(function()
     if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
 
     local runtime = { stopped = false, connections = {}, dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
-        dualOriginalC0 = nil, dualOriginalTransform = nil, poseBind = "NoirGunDualArmPose", lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
+        dualOriginalC0 = nil, dualOriginalTransform = nil, ghostModel = nil, ghostParts = {}, hiddenParts = {}, dualTorso = nil,
+        poseBind = "NoirGunDualArmPose", lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
     local function equippedGun()
         local character = LocalPlayer.Character
         return character and character:FindFirstChild("Gun") or nil
@@ -2340,44 +2358,71 @@ task.defer(function()
         local joint = character and (character:FindFirstChild(side .. "Shoulder", true) or character:FindFirstChild(side .. " Shoulder", true))
         return joint and joint:IsA("Motor6D") and joint or nil
     end
+    local function armPartPairs(character)
+        local pairs = {}
+        if character and character:FindFirstChild("Right Arm") then
+            pairs[#pairs + 1] = { character:FindFirstChild("Right Arm"), character:FindFirstChild("Left Arm") }
+        else
+            for _, suffix in ipairs({ "UpperArm", "LowerArm", "Hand" }) do
+                local source, target = character and character:FindFirstChild("Right" .. suffix), character and character:FindFirstChild("Left" .. suffix)
+                if source and target then pairs[#pairs + 1] = { source, target } end
+            end
+        end
+        return pairs
+    end
+    local function cleanVisualClone(part)
+        local clone = part:Clone()
+        for _, child in ipairs(clone:GetDescendants()) do
+            if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then child:Destroy() end
+        end
+        clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = true, false, false, false, true
+        clone.CastShadow = false
+        return clone
+    end
     local function destroyDual()
-        if runtime.dualVisual and runtime.dualVisual.Parent then runtime.dualVisual:Destroy() end
-        if runtime.dualLeftShoulder and runtime.dualLeftShoulder.Parent then pcall(function()
-            if runtime.dualOriginalC0 then runtime.dualLeftShoulder.C0 = runtime.dualOriginalC0 end
-            runtime.dualLeftShoulder.Transform = runtime.dualOriginalTransform or CFrame.new()
-        end) end
-        runtime.dualVisual, runtime.dualSource, runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder = nil, nil, nil, nil, nil
-        runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil
+        if runtime.ghostModel and runtime.ghostModel.Parent then runtime.ghostModel:Destroy() end
+        for part, original in pairs(runtime.hiddenParts) do if part and part.Parent then pcall(function() part.LocalTransparencyModifier = original end) end end
+        table.clear(runtime.hiddenParts); table.clear(runtime.ghostParts)
+        runtime.ghostModel, runtime.dualVisual, runtime.dualSource, runtime.dualTorso = nil, nil, nil, nil
+        runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder, runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil, nil, nil, nil
     end
     local function refreshDual()
         if not config.gunDualEffect then destroyDual(); return end
-        local character = LocalPlayer.Character
-        local gun = equippedGun()
+        local character, gun = LocalPlayer.Character, equippedGun()
         local handle = gun and gun:FindFirstChild("Handle", true)
-        local leftHand = character and (character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftLowerArm"))
-        local rightHand = character and (character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm") or character:FindFirstChild("RightLowerArm"))
-        if not handle or not handle:IsA("BasePart") or not leftHand or not leftHand:IsA("BasePart") then destroyDual(); return end
-        if runtime.dualVisual and runtime.dualVisual.Parent and runtime.dualSource == handle and runtime.dualLimb == leftHand then return end
+        local torso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"))
+        local pairs = armPartPairs(character)
+        if not handle or not handle:IsA("BasePart") or not torso or #pairs == 0 then destroyDual(); return end
+        if runtime.ghostModel and runtime.ghostModel.Parent and runtime.dualSource == handle and runtime.dualTorso == torso then return end
         destroyDual()
-        local ok, visual = pcall(function()
-            local clone = handle:Clone()
-            for _, child in ipairs(clone:GetDescendants()) do
-                if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then child:Destroy() end
+        local ok = pcall(function()
+            local model = Instance.new("Model")
+            model.Name, model.Parent = "NoirGunDualArms", character
+            for index, entry in ipairs(pairs) do
+                local source, hidden = entry[1], entry[2]
+                runtime.hiddenParts[hidden] = hidden.LocalTransparencyModifier
+                hidden.LocalTransparencyModifier = 1
+                local clone = cleanVisualClone(source)
+                clone.Name, clone.Parent = "NoirGunGhostArm" .. tostring(index), model
+                runtime.ghostParts[clone] = source
             end
-            clone.Name = "NoirGunDualEffect"
-            clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = false, false, false, false, true
-            -- Transfer the real gun's wrist-relative grip from the right hand to the left hand.
-            -- The duplicate is welded to the left limb, not to the original Handle, so one gun
-            -- visibly remains in each hand instead of both being stacked in the right hand.
-            local gripOffset = rightHand and rightHand.CFrame:ToObjectSpace(handle.CFrame) or CFrame.new(0, -.45, 0)
-            clone.CFrame = leftHand.CFrame * gripOffset
-            clone.Parent = character
-            local weld = Instance.new("WeldConstraint")
-            weld.Part0, weld.Part1, weld.Parent = leftHand, clone, clone
-            return clone
+            local weapon = cleanVisualClone(handle)
+            weapon.Name, weapon.Parent = "NoirGunDualEffect", model
+            runtime.ghostModel, runtime.dualVisual, runtime.dualSource, runtime.dualTorso = model, weapon, handle, torso
         end)
-        runtime.dualVisual, runtime.dualSource, runtime.dualLimb = ok and visual or nil, ok and handle or nil, ok and leftHand or nil
-        runtime.dualLeftShoulder, runtime.dualRightShoulder = shoulderFor(character, "Left"), shoulderFor(character, "Right")
+        if not ok then destroyDual() end
+    end
+    local function updateGhostDual()
+        local torso, weapon = runtime.dualTorso, runtime.dualVisual
+        if not torso or not torso.Parent or not weapon or not weapon.Parent then return end
+        local function mirrored(source)
+            local relative = torso.CFrame:ToObjectSpace(source.CFrame)
+            local p = relative.Position
+            local x, y, z = relative:ToOrientation()
+            return torso.CFrame * CFrame.new(-p.X, p.Y, p.Z) * CFrame.Angles(x, -y, -z)
+        end
+        for clone, source in pairs(runtime.ghostParts) do if clone and clone.Parent and source and source.Parent then clone.CFrame = mirrored(source) end end
+        if runtime.dualSource and runtime.dualSource.Parent then weapon.CFrame = mirrored(runtime.dualSource) end
     end
     local function murdererTarget()
         local target = selectTarget("Murderer")
@@ -2408,17 +2453,7 @@ task.defer(function()
     pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
     RunService:BindToRenderStep(runtime.poseBind, Enum.RenderPriority.Last.Value, function()
         if runtime.stopped or not config.gunDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
-        local left, right = runtime.dualLeftShoulder, runtime.dualRightShoulder
-        if left and right and left.Parent and right.Parent and left.Part0 and left.Part1 and right.Part0 and right.Part1 then
-            pcall(function()
-                local source = right.Part0.CFrame:ToObjectSpace(right.Part1.CFrame)
-                local px, py, pz = source.Position.X, source.Position.Y, source.Position.Z
-                local rx, ry, rz = source:ToOrientation()
-                local mirroredWorld = left.Part0.CFrame * CFrame.new(-px, py, pz) * CFrame.Angles(rx, -ry, -rz)
-                left.Transform = CFrame.new()
-                left.C0 = left.Part0.CFrame:ToObjectSpace(mirroredWorld * left.C1)
-            end)
-        end
+        pcall(updateGhostDual)
     end)
     runtime.connections[#runtime.connections + 1] = RunService.RenderStepped:Connect(function()
         if runtime.stopped then return end
