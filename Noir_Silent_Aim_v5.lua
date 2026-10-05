@@ -2162,7 +2162,9 @@ task.defer(function()
         destroyDualVisual()
         local ok = pcall(function()
             local model = Instance.new("Model")
-            model.Name, model.Parent = "NoirKnifeDualArms", character
+            -- Never parent anchored cosmetic parts to Character: some MM2 anti-physics checks
+            -- treat that as a rig mutation.  Workspace keeps these client-only visuals isolated.
+            model.Name, model.Parent = "NoirKnifeDualArms", Workspace
             for index, entry in ipairs(pairs) do
                 local source, hidden = entry[1], entry[2]
                 runtime.hiddenParts[hidden] = hidden.LocalTransparencyModifier
@@ -2397,7 +2399,8 @@ task.defer(function()
         destroyDual()
         local ok = pcall(function()
             local model = Instance.new("Model")
-            model.Name, model.Parent = "NoirGunDualArms", character
+            -- Keep ghost arms out of the Humanoid assembly to avoid any character-physics change.
+            model.Name, model.Parent = "NoirGunDualArms", Workspace
             for index, entry in ipairs(pairs) do
                 local source, hidden = entry[1], entry[2]
                 runtime.hiddenParts[hidden] = hidden.LocalTransparencyModifier
