@@ -10456,7 +10456,7 @@ end)()
 -- END ODH 2026 ADAPTER
 
 --[[
-    ⚡ ULTIMATE FLING • FLING   —   V1.0
+    ⚡ ULTIMATE FLING • FLING   —   V1.1
     Ultimate Fling GUI · Overdrive Hub plugin
     Author: K1LAS1K (original), adapted to ODH 2026
     =========================================================================
@@ -10485,7 +10485,7 @@ local AUTHOR            = "K1LAS1K"
 local BRAND             = "ULTIMATE FLING"
 local PLUGIN_ID         = "fling"
 local PLUGIN_NAME       = BRAND .. " • FLING"
-local VERSION           = "V1.0"
+local VERSION           = "V1.1"
 local VERSION_TAG       = "fling"
 local MARKER_PREFIX     = "@fling_"
 local CONFIG_PATH       = CONFIGS_FOLDER .. "/ODH_FLING_settings.json"
@@ -11779,13 +11779,20 @@ local function SkidFling(TargetPlayer)
     StatusHUD.Set("active", TargetPlayer.Name)
     flingObj.watchdog = task.delay((config.flingDuration or 2)+2, function() if not done then cleanup(false) end end)
 
-    local function FPos(BasePart, Pos, Ang)
+    local function FPos(BasePart, Pos, Ang, slam)
         if not RootPart or not RootPart.Parent then return end
         pcall(function()
             RootPart.CFrame = cfr(BasePart.Position) * Pos * Ang
             Character:SetPrimaryPartCFrame(cfr(BasePart.Position) * Pos * Ang)
-            RootPart.Velocity = v3(9e7*velMult, 9e7*10*velMult, 9e7*velMult)
-            RootPart.RotVelocity = v3(9e8*rotMult, 9e8*rotMult, 9e8*rotMult)
+            if slam then
+                -- вниз в войд: иначе жертва улетает в небо и долго не умирает
+                RootPart.Velocity = v3(9e7*velMult, -9e8*velMult, 9e7*velMult)
+                RootPart.RotVelocity = v3(9e8*rotMult, 9e8*rotMult, 9e8*rotMult)
+                if flingBV then flingBV.Velocity = v3(0, -9e9*velMult, 0) end
+            else
+                RootPart.Velocity = v3(9e7*velMult, 9e7*10*velMult, 9e7*velMult)
+                RootPart.RotVelocity = v3(9e8*rotMult, 9e8*rotMult, 9e8*rotMult)
+            end
         end)
     end
 
@@ -11811,19 +11818,14 @@ local function SkidFling(TargetPlayer)
                     FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0))
                     task.wait()
                 else
-                    FPos(BasePart, cfr(0,1.5,THumanoid.WalkSpeed), CFrame.Angles(math.rad(90),0,0))
+                    -- цель уже летит: жмём вниз в войд, а не ещё раз в небо
+                    FPos(BasePart, cfr(0,-2,0), CFrame.Angles(math.rad(90),0,0), true)
                     task.wait()
-                    FPos(BasePart, cfr(0,-1.5,-THumanoid.WalkSpeed), CFrame.Angles(0,0,0))
+                    FPos(BasePart, cfr(0,-2,0), CFrame.Angles(0,0,0), true)
                     task.wait()
-                    FPos(BasePart, cfr(0,1.5,THumanoid.WalkSpeed), CFrame.Angles(math.rad(90),0,0))
+                    FPos(BasePart, cfr(0,-2,0), CFrame.Angles(math.rad(-90),0,0), true)
                     task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(math.rad(90),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(0,0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(math.rad(90),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(0,0,0))
+                    FPos(BasePart, cfr(0,-2,0), CFrame.Angles(0,0,0), true)
                     task.wait()
                 end
             else
