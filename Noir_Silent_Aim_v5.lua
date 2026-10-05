@@ -2448,17 +2448,15 @@ task.defer(function()
 end)
 
 -- Camera-projected dual-character presentation ------------------------------------------
--- This is deliberately a render-only composition, not a local rig.  The virtual arm/tool live
--- inside a ViewportFrame.WorldModel under ScreenGui; they never enter Character, Workspace,
--- Backpack, or a Tool.  The Viewport camera is copied from the real camera every frame and the
--- virtual arm is projected at its mirrored world CFrame, so it visually sits at the avatar's
--- opposite shoulder instead of occupying a separate HUD card.  Nothing here writes to a real
--- body part, Motor6D, Tool, RemoteEvent, or physics property.
+-- The projected limb is a clone of the complete current avatar inside a ViewportFrame WorldModel.
+-- That is important: an isolated R15 arm has only the white body part, while its shirt, layered
+-- clothing and sleeve accessories are rendered by the complete avatar appearance.  No clone is
+-- ever parented to Character/Workspace; it exists only inside this local UI render scene.
 task.defer(function()
     local prior = getgenv().__NoirCameraProjectedDual
     if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop, prior) end
 
-    local runtime = { stopped = false, gui = nil, viewport = nil, world = nil, camera = nil, model = nil,
+    local runtime = { stopped = false, gui = nil, viewport = nil, world = nil, camera = nil, avatar = nil,
         entries = {}, sourceSet = {}, hiddenParts = {}, kind = nil, tool = nil, character = nil, torso = nil,
         connections = {}, nextRefresh = 0 }
 
@@ -2488,8 +2486,8 @@ task.defer(function()
     local function hideOriginalPart(part)
         if part and part:IsA("BasePart") and runtime.hiddenParts[part] == nil then
             runtime.hiddenParts[part] = part.LocalTransparencyModifier
-            -- LocalTransparencyModifier is a local render property only. It does not reparent,
-            -- resize, weld, animate, or otherwise alter a server-side character part.
+            -- Local-only render masking. This leaves CFrame, joints, geometry and networking
+            -- untouched and is restored exactly when this visual is disabled/reloaded.
             pcall(function() part.LocalTransparencyModifier = 1 end)
         end
     end
@@ -2499,23 +2497,21 @@ task.defer(function()
         local leftLimbs = {}
         if character:FindFirstChild("Left Arm") then
             local limb = character:FindFirstChild("Left Arm")
-            leftLimbs[limb] = true
-            hideOriginalPart(limb)
+            leftLimbs[limb] = true; hideOriginalPart(limb)
         else
             for _, name in ipairs({ "LeftUpperArm", "LeftLowerArm", "LeftHand" }) do
                 local limb = character:FindFirstChild(name)
                 if limb then leftLimbs[limb] = true; hideOriginalPart(limb) end
             end
         end
-        -- Hide only cosmetic handles whose own AccessoryWeld is attached to a left limb.  A
-        -- torso/cape accessory is therefore never hidden just because it happens to be nearby.
+        -- Only hide an accessory when its own weld is bound to a left limb. This avoids hiding
+        -- a torso coat/cape merely because it lies close to the shoulder.
         for _, accessory in ipairs(character:GetChildren()) do
             if accessory:IsA("Accessory") then
                 local leftBound = false
                 for _, joint in ipairs(accessory:GetDescendants()) do
                     if joint:IsA("JointInstance") and (leftLimbs[joint.Part0] or leftLimbs[joint.Part1]) then
-                        leftBound = true
-                        break
+                        leftBound = true; break
                     end
                 end
                 if leftBound then
@@ -2528,7 +2524,7 @@ task.defer(function()
     end
     local function destroyDisplay()
         if runtime.gui then pcall(function() runtime.gui:Destroy() end) end
-        runtime.gui, runtime.viewport, runtime.world, runtime.camera = nil, nil, nil, nil
+        runtime.gui, runtime.viewport, runtime.world, runtime.camera, runtime.avatar = nil, nil, nil, nil, nil
         for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
             local stale = parent and parent:FindFirstChild("NoirCameraProjectedDual")
             if stale then pcall(function() stale:Destroy() end) end
@@ -2541,8 +2537,6 @@ task.defer(function()
         if typeof(parent) ~= "Instance" then return false end
         local gui = New("ScreenGui", { Parent = parent, Name = "NoirCameraProjectedDual", ResetOnSpawn = false,
             IgnoreGuiInset = true, DisplayOrder = 2, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
-        -- Full-screen transparent viewport: this is what allows its one virtual arm to occupy
-        -- exactly the same screen-space as an arm at that mirrored world position.
         local viewport = New("ViewportFrame", { Parent = gui, Name = "ProjectedOppositeArm", Position = UDim2.fromScale(0, 0),
             Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, Active = false,
             Ambient = Color3.fromRGB(185, 190, 200), LightColor = Color3.fromRGB(255, 255, 255),
@@ -2554,121 +2548,141 @@ task.defer(function()
         return true
     end
     local function wipeWorld()
-        for _, entry in ipairs(runtime.entries) do if entry.clone then pcall(function() entry.clone:Destroy() end) end end
         table.clear(runtime.entries); table.clear(runtime.sourceSet)
-        runtime.model = nil
         if runtime.world then
             for _, object in ipairs(runtime.world:GetChildren()) do pcall(function() object:Destroy() end) end
         end
+        runtime.avatar = nil
     end
-    local function cleanClone(source)
-        local ok, clone = pcall(function() return source:Clone() end)
-        if not ok or not clone or not clone:IsA("BasePart") then return nil end
-        for _, child in ipairs(clone:GetDescendants()) do
-            if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("ModuleScript")
-                or child:IsA("JointInstance") or child:IsA("Constraint") or child:IsA("TouchTransmitter") then
-                child:Destroy()
-            end
+    local function relativePath(root, instance)
+        local path, node = {}, instance
+        while node and node ~= root do
+            table.insert(path, 1, node.Name)
+            node = node.Parent
         end
-        clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery = true, false, false, false
-        clone.CastShadow = false
-        clone.Parent = runtime.model or runtime.world
-        return clone
+        return node == root and path or nil
+    end
+    local function fromRelativePath(root, path)
+        local node = root
+        for _, name in ipairs(path or {}) do
+            node = node:FindFirstChild(name)
+            if not node then return nil end
+        end
+        return node
     end
     local function mirrorWorldCFrame(torso, sourceCFrame)
-        -- Mirror the read-only right-side pose around the avatar torso.  This only supplies a
-        -- CFrame to a UI-world clone; no character joint or original part is modified.
         local relative = torso.CFrame:ToObjectSpace(sourceCFrame)
         local p = relative.Position
-        local rx, ry, rz = relative:ToOrientation()
-        -- A slight left-shoulder adjustment separates the virtual arm from the torso while
-        -- retaining the right arm's exact live pose and the same reload animation.
-        return torso.CFrame * CFrame.new(-.16, .035, .018) * CFrame.new(-p.X, p.Y, p.Z) * CFrame.Angles(rx, -ry, -rz)
+        -- Mirror a full orthonormal basis, rather than negating Euler angles.  The old Euler
+        -- shortcut could turn a reloading Gun upside down. S*R*S keeps a proper rotation matrix.
+        local function reflect(vector) return Vector3.new(-vector.X, vector.Y, vector.Z) end
+        local right = -reflect(relative.RightVector)
+        local up = reflect(relative.UpVector)
+        local back = reflect(-relative.LookVector)
+        local mirrored = CFrame.fromMatrix(Vector3.new(-p.X, p.Y, p.Z), right, up, back)
+        return torso.CFrame * CFrame.new(-.13, .02, .01) * mirrored
     end
-    local function addSource(source, sleeveLimb)
-        if source and source:IsA("BasePart") and not runtime.sourceSet[source] then
-            local clone = cleanClone(source)
-            if clone then
-                -- Roblox does not bake a player's shirt/layered-clothing pixels onto an isolated
-                -- copied arm in a ViewportFrame. For this Noir outfit, retain accessory/shirt
-                -- copies when supported and apply the matching dark sleeve fallback to the two
-                -- arm segments, never to the hand/glove.
-                if sleeveLimb then
-                    clone.Color = Color3.fromRGB(20, 21, 24)
-                    clone.Material = Enum.Material.SmoothPlastic
-                end
-                runtime.sourceSet[source] = true
-                runtime.entries[#runtime.entries + 1] = { source = source, clone = clone }
+    local function addMappedSource(appearanceSource, poseSource, appearanceAnchor, poseAnchor)
+        if not (appearanceSource and appearanceSource:IsA("BasePart")) or runtime.sourceSet[appearanceSource] then return end
+        poseSource = poseSource or appearanceSource
+        if not (poseSource and poseSource:IsA("BasePart")) then return end
+        local clone = fromRelativePath(runtime.avatar, relativePath(runtime.character, appearanceSource))
+        if not (clone and clone:IsA("BasePart")) then return end
+        runtime.sourceSet[appearanceSource] = true
+        clone.Transparency = appearanceSource.Transparency
+        clone.LocalTransparencyModifier = 0
+        local localOffset = nil
+        if appearanceAnchor and poseAnchor then localOffset = appearanceAnchor.CFrame:ToObjectSpace(appearanceSource.CFrame) end
+        runtime.entries[#runtime.entries + 1] = { source = poseSource, clone = clone, poseAnchor = poseAnchor, localOffset = localOffset }
+    end
+    local function accessoryBoundToArm(accessory, limbSet)
+        for _, joint in ipairs(accessory:GetDescendants()) do
+            if joint:IsA("JointInstance") then
+                if limbSet[joint.Part0] then return joint.Part0 end
+                if limbSet[joint.Part1] then return joint.Part1 end
             end
         end
+        return nil
     end
-    local function addClothingAndSleeveCosmetics(character, rightArmParts)
-        -- A real avatar's black sleeve is usually classic/layered clothing rather than the
-        -- limb BasePart colour. Keep the relevant appearance objects in this UI-only model.
-        for _, child in ipairs(character:GetChildren()) do
-            if child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") or child:IsA("BodyColors") then
-                local ok, clothing = pcall(function() return child:Clone() end)
-                if ok and clothing then clothing.Parent = runtime.model end
-            end
+    local function addLeftArmAppearance(character, limbPairs, tool)
+        local leftLimbs = {}
+        for _, pair in ipairs(limbPairs) do
+            leftLimbs[pair.left] = true
+            -- Appearance is copied from the real LEFT limb. Its transform is the mirrored
+            -- current RIGHT limb pose, giving a proper left sleeve/glove while it raises.
+            addMappedSource(pair.left, pair.right)
         end
-        for _, candidate in ipairs(character:GetDescendants()) do
-            if candidate:IsA("BasePart") and candidate:FindFirstAncestorOfClass("Accessory") then
-                local closeToRightArm = false
-                for _, armPart in ipairs(rightArmParts) do
-                    if armPart and armPart.Parent and (candidate.Position - armPart.Position).Magnitude <= 1.18 then
-                        closeToRightArm = true
-                        break
+        for _, accessory in ipairs(character:GetChildren()) do
+            if accessory:IsA("Accessory") then
+                local leftAnchor = accessoryBoundToArm(accessory, leftLimbs)
+                if leftAnchor then
+                    local rightAnchor = nil
+                    for _, pair in ipairs(limbPairs) do if pair.left == leftAnchor then rightAnchor = pair.right; break end end
+                    if rightAnchor then
+                        for _, candidate in ipairs(accessory:GetDescendants()) do
+                            if candidate:IsA("BasePart") then addMappedSource(candidate, rightAnchor, leftAnchor, rightAnchor) end
+                        end
                     end
                 end
-                if closeToRightArm then addSource(candidate) end
             end
         end
+        -- The actual held weapon has no left-side source; copy the real Tool geometry and mirror
+        -- its full CFrame using the corrected basis transform above.
+        for _, source in ipairs(tool:GetDescendants()) do if source:IsA("BasePart") then addMappedSource(source, source) end end
+    end
+    local function fullAvatarClone(character)
+        local ok, avatar = pcall(function() return character:Clone() end)
+        if not ok or not avatar or not avatar:IsA("Model") then return nil end
+        for _, object in ipairs(avatar:GetDescendants()) do
+            if object:IsA("Script") or object:IsA("LocalScript") or object:IsA("ModuleScript")
+                or object:IsA("JointInstance") or object:IsA("Constraint") or object:IsA("TouchTransmitter")
+                or object:IsA("RemoteEvent") or object:IsA("RemoteFunction") then
+                object:Destroy()
+            elseif object:IsA("BasePart") then
+                object.Anchored, object.CanCollide, object.CanTouch, object.CanQuery = true, false, false, false
+                object.CastShadow = false
+                object.LocalTransparencyModifier = 0
+                object.Transparency = 1
+            elseif object:IsA("ParticleEmitter") or object:IsA("Trail") or object:IsA("Beam") then
+                object.Enabled = false
+            end
+        end
+        avatar.Name = "MirroredFullAvatarAppearance"
+        avatar.Parent = runtime.world
+        return avatar
     end
     local function rebuild(kind, tool, character)
         if not ensureDisplay() then return end
-        wipeWorld()
+        restoreOriginalLeftArm(); wipeWorld()
         local torso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or character:FindFirstChild("HumanoidRootPart"))
-        if not (torso and torso:IsA("BasePart")) then
+        if not (torso and torso:IsA("BasePart")) then destroyDisplay(); return end
+        runtime.character, runtime.torso = character, torso
+        runtime.avatar = fullAvatarClone(character)
+        if not runtime.avatar then
+            -- Do not replace this with a world/character clone fallback. If a client blocks
+            -- avatar cloning, leave the visual off rather than returning to the unsafe rig path.
+            runtime.character, runtime.torso = nil, nil
             destroyDisplay()
             return
         end
-        restoreOriginalLeftArm()
-        runtime.model = New("Model", { Parent = runtime.world, Name = "MirroredArmAppearance" })
-        -- A Humanoid plus Shirt/Pants lets Roblox render classic avatar clothing on the copied
-        -- arm pieces inside the ViewportFrame; it exists only in that UI WorldModel.
-        New("Humanoid", { Parent = runtime.model, Name = "RenderHumanoid", DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None })
-        -- Right-arm pose is game-authored. The clones read it every rendered frame, including
-        -- Gun reload/raise animations, with no Motor6D Transform/C0 write on the real avatar.
-        local rightArmParts = {}
-        if character:FindFirstChild("Right Arm") then
-            rightArmParts[#rightArmParts + 1] = character:FindFirstChild("Right Arm")
+        local limbPairs = {}
+        if character:FindFirstChild("Left Arm") and character:FindFirstChild("Right Arm") then
+            limbPairs[#limbPairs + 1] = { left = character:FindFirstChild("Left Arm"), right = character:FindFirstChild("Right Arm") }
         else
-            for _, name in ipairs({ "RightUpperArm", "RightLowerArm", "RightHand" }) do
-                local limb = character:FindFirstChild(name)
-                if limb then rightArmParts[#rightArmParts + 1] = limb end
+            for _, suffix in ipairs({ "UpperArm", "LowerArm", "Hand" }) do
+                local left, right = character:FindFirstChild("Left" .. suffix), character:FindFirstChild("Right" .. suffix)
+                if left and right then limbPairs[#limbPairs + 1] = { left = left, right = right } end
             end
         end
-        addClothingAndSleeveCosmetics(character, rightArmParts)
-        for _, limb in ipairs(rightArmParts) do
-            addSource(limb, limb.Name ~= "RightHand")
-        end
-        -- Hide only the original left limb locally while the read-only projected replacement is
-        -- enabled. The saved LocalTransparencyModifier is restored exactly on disable/reload.
+        addLeftArmAppearance(character, limbPairs, tool)
         hideOriginalLeftArm(character)
-        local cap = 64
-        for _, source in ipairs(tool:GetDescendants()) do
-            if #runtime.entries >= cap then break end
-            if source:IsA("BasePart") then addSource(source) end
-        end
-        runtime.kind, runtime.tool, runtime.character, runtime.torso = kind, tool, character, torso
+        runtime.kind, runtime.tool = kind, tool
     end
     function runtime:Refresh()
         if runtime.stopped then return end
         local kind, tool, character = desiredTool()
         if not kind or not tool or not tool.Parent then
-            restoreOriginalLeftArm()
-            if runtime.gui then destroyDisplay() end
-            wipeWorld()
+            restoreOriginalLeftArm(); wipeWorld(); destroyDisplay()
             runtime.kind, runtime.tool, runtime.character, runtime.torso = nil, nil, nil, nil
             return
         end
@@ -2679,19 +2693,19 @@ task.defer(function()
     local function render()
         if runtime.stopped then return end
         local now = os.clock()
-        if now >= runtime.nextRefresh then
-            runtime.nextRefresh = now + .45
-            runtime:Refresh()
-        end
+        if now >= runtime.nextRefresh then runtime.nextRefresh = now + .45; runtime:Refresh() end
         local realCamera, torso = Workspace.CurrentCamera, runtime.torso
         if not (runtime.viewport and runtime.camera and realCamera and torso and torso.Parent) then return end
-        -- Copy the real camera after Roblox has updated it; camera and virtual world now share
-        -- the same projection, so the clone is composited at the avatar rather than in a panel.
         runtime.camera.CFrame = realCamera.CFrame
         runtime.camera.FieldOfView = realCamera.FieldOfView
+        -- The right-side animation is sampled after the game update. Left-side appearance
+        -- pieces follow that pose with their own left-arm offsets, preserving a natural sleeve.
         for _, entry in ipairs(runtime.entries) do
             if entry.source and entry.source.Parent and entry.clone and entry.clone.Parent then
-                pcall(function() entry.clone.CFrame = mirrorWorldCFrame(torso, entry.source.CFrame) end)
+                pcall(function()
+                    local target = entry.poseAnchor and mirrorWorldCFrame(torso, entry.poseAnchor.CFrame) or mirrorWorldCFrame(torso, entry.source.CFrame)
+                    entry.clone.CFrame = entry.localOffset and (target * entry.localOffset) or target
+                end)
             end
         end
     end
@@ -2701,8 +2715,7 @@ task.defer(function()
         runtime.stopped = true
         for _, connection in ipairs(runtime.connections) do pcall(function() connection:Disconnect() end) end
         table.clear(runtime.connections)
-        restoreOriginalLeftArm()
-        wipeWorld(); destroyDisplay()
+        restoreOriginalLeftArm(); wipeWorld(); destroyDisplay()
     end
     getgenv().__NoirCameraProjectedDual = runtime
     runtime:Refresh()
@@ -6817,7 +6830,7 @@ do
         local runtime = getgenv().__NoirCameraProjectedDual
         if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
     end)
-    combatAim:AddLabel("Local projected second Gun arm: mirrors live raise/reload, uses a dark sleeve fallback for isolated avatar clothing, and hides the original left limb locally. No parts are added to Character/Workspace.")
+    combatAim:AddLabel("Full-avatar projected LEFT arm: copies your left sleeve/glove, mirrors the live right Gun pose with reload-safe rotation, and hides the original left limb locally.")
     combatAim:AddParagraph("GUN TRIGGER BOT", "Shoots once when the centre cursor/crosshair points at the Murderer. Works with mobile Shift Lock; move off target and back to arm the next shot.")
     combatAim:AddToggle("Gun Trigger Bot", function(v) config.gunTriggerBot = v == true end)
     combatAim:AddToggle("Gun Trigger Bot Wall Check", function(v) config.gunTriggerBotWallCheck = v == true end)
@@ -6863,7 +6876,7 @@ do
         local runtime = getgenv().__NoirCameraProjectedDual
         if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
     end)
-    combatKnife:AddLabel("Local projected second Knife arm: mirrors live animation, uses a dark sleeve fallback for isolated avatar clothing, and hides the original left limb locally. No parts are added to Character/Workspace.")
+    combatKnife:AddLabel("Full-avatar projected LEFT arm: copies your left sleeve/glove, mirrors the live right Knife pose, and hides the original left limb locally.")
     combatKnife:AddToggle("Disable Stab", function(v) config.knifeDisableStab = v == true end)
     combatKnife:AddToggle("Instant Throw", function(v) config.knifeInstantThrow = v == true end)
     combatKnife:AddToggle("Fast Throw", function(v) config.knifeFastThrow = v == true end)
