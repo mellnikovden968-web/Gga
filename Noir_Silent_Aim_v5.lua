@@ -1107,11 +1107,20 @@ local config = {
     lockShootButton = false,
     -- Native Silent Aim gun utilities.
     gunDualEffect = false,
+    -- Presentation-only dual visuals. These are rendered inside a ScreenGui ViewportFrame,
+    -- never in Character or Workspace, so they cannot take part in MM2 physics/validation.
+    gunDualHudVisual = false,
+    knifeDualHudVisual = false,
     gunTriggerBot = false,
     gunTriggerBotWallCheck = true,
     gunTriggerBotPrediction = true,
     selectedPlayer = nil,
 }
+
+-- Disable legacy Dual Effect preference values that could invoke unsafe client rig visuals.
+NoirPersistence.data.toggles["SILENT AIM::Use Gun Dual Effect"] = false
+NoirPersistence.data.toggles["KNIFE SILENT AIM::Use Knife Dual Effect"] = false
+NoirPersistence.Save()
 
 local murderer, sheriff, hero
 local cachedPing = 0.05
@@ -2152,32 +2161,9 @@ task.defer(function()
         runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder, runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil, nil, nil, nil
     end
     local function refreshDualEffect()
-        if not config.knifeDualEffect then destroyDualVisual(); return end
-        local character, tool = LocalPlayer.Character, equippedKnife()
-        local handle = tool and tool:FindFirstChild("Handle", true)
-        local torso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"))
-        local pairs = armPartPairs(character)
-        if not handle or not handle:IsA("BasePart") or not torso or #pairs == 0 then destroyDualVisual(); return end
-        if runtime.ghostModel and runtime.ghostModel.Parent and runtime.dualSource == handle and runtime.dualTorso == torso then return end
+        -- Disabled: mirrored rig/weapon visuals trigger MM2 character validation on some clients.
+        config.knifeDualEffect = false
         destroyDualVisual()
-        local ok = pcall(function()
-            local model = Instance.new("Model")
-            -- Never parent anchored cosmetic parts to Character: some MM2 anti-physics checks
-            -- treat that as a rig mutation.  Workspace keeps these client-only visuals isolated.
-            model.Name, model.Parent = "NoirKnifeDualArms", Workspace
-            for index, entry in ipairs(pairs) do
-                local source, hidden = entry[1], entry[2]
-                runtime.hiddenParts[hidden] = hidden.LocalTransparencyModifier
-                hidden.LocalTransparencyModifier = 1
-                local clone = cleanVisualClone(source)
-                clone.Name, clone.Parent = "NoirKnifeGhostArm" .. tostring(index), model
-                runtime.ghostParts[clone] = source
-            end
-            local weapon = cleanVisualClone(handle)
-            weapon.Name, weapon.Parent = "NoirKnifeDualEffect", model
-            runtime.ghostModel, runtime.dualVisual, runtime.dualSource, runtime.dualTorso = model, weapon, handle, torso
-        end)
-        if not ok then destroyDualVisual() end
     end
     local function updateGhostDual()
         local torso, weapon = runtime.dualTorso, runtime.dualVisual
@@ -2389,31 +2375,9 @@ task.defer(function()
         runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder, runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil, nil, nil, nil
     end
     local function refreshDual()
-        if not config.gunDualEffect then destroyDual(); return end
-        local character, gun = LocalPlayer.Character, equippedGun()
-        local handle = gun and gun:FindFirstChild("Handle", true)
-        local torso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"))
-        local pairs = armPartPairs(character)
-        if not handle or not handle:IsA("BasePart") or not torso or #pairs == 0 then destroyDual(); return end
-        if runtime.ghostModel and runtime.ghostModel.Parent and runtime.dualSource == handle and runtime.dualTorso == torso then return end
+        -- Disabled: mirrored rig/weapon visuals trigger MM2 character validation on some clients.
+        config.gunDualEffect = false
         destroyDual()
-        local ok = pcall(function()
-            local model = Instance.new("Model")
-            -- Keep ghost arms out of the Humanoid assembly to avoid any character-physics change.
-            model.Name, model.Parent = "NoirGunDualArms", Workspace
-            for index, entry in ipairs(pairs) do
-                local source, hidden = entry[1], entry[2]
-                runtime.hiddenParts[hidden] = hidden.LocalTransparencyModifier
-                hidden.LocalTransparencyModifier = 1
-                local clone = cleanVisualClone(source)
-                clone.Name, clone.Parent = "NoirGunGhostArm" .. tostring(index), model
-                runtime.ghostParts[clone] = source
-            end
-            local weapon = cleanVisualClone(handle)
-            weapon.Name, weapon.Parent = "NoirGunDualEffect", model
-            runtime.ghostModel, runtime.dualVisual, runtime.dualSource, runtime.dualTorso = model, weapon, handle, torso
-        end)
-        if not ok then destroyDual() end
     end
     local function updateGhostDual()
         local torso, weapon = runtime.dualTorso, runtime.dualVisual
@@ -2481,6 +2445,206 @@ task.defer(function()
     end
     getgenv().__NoirGunTriggerRuntime = runtime
     refreshDual()
+end)
+
+-- Safe dual presentation layer --------------------------------------------------------
+-- IMPORTANT: this is intentionally NOT a Character/Workspace dual-wield implementation.
+-- It only draws a local ViewportFrame in the HUD.  No character part is hidden, cloned into
+-- the data model, welded, re-parented or written to; no RemoteEvent is called from this layer.
+-- That gives a raised two-hand weapon presentation without the MM2 removal caused by the prior
+-- physical and Workspace ghost-rig experiments.  It is local-screen-only by design.
+task.defer(function()
+    local prior = getgenv().__NoirDualHudPresentation
+    if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop, prior) end
+
+    local runtime = { stopped = false, gui = nil, viewport = nil, world = nil, camera = nil,
+        header = nil, signature = nil, connections = {}, nextCheck = 0 }
+
+    local function uiParent()
+        if typeof(guiParent) == "Instance" and guiParent.Parent then return guiParent end
+        return LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    end
+    local function activeTool()
+        local character = LocalPlayer.Character
+        if not character then return nil, nil end
+        -- Only the currently equipped item may be presented.  This avoids inventing a weapon
+        -- when no matching MM2 tool exists and makes the overlay follow a real skin/model.
+        if config.gunDualHudVisual then
+            local gun = character:FindFirstChild("Gun")
+            if gun and gun:IsA("Tool") then return "GUN", gun end
+        end
+        if config.knifeDualHudVisual then
+            local knife = character:FindFirstChild("Knife")
+            if knife and knife:IsA("Tool") then return "KNIFE", knife end
+        end
+        return nil, nil
+    end
+    local function destroyGui()
+        if runtime.gui then pcall(function() runtime.gui:Destroy() end) end
+        runtime.gui, runtime.viewport, runtime.world, runtime.camera, runtime.header, runtime.signature = nil, nil, nil, nil, nil, nil
+        for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+            local stale = parent and parent:FindFirstChild("NoirDualHudPresentation")
+            if stale and stale ~= runtime.gui then pcall(function() stale:Destroy() end) end
+        end
+    end
+    local function clearWorld()
+        if runtime.world then
+            for _, child in ipairs(runtime.world:GetChildren()) do child:Destroy() end
+        end
+    end
+    local function ensureGui()
+        if runtime.gui and runtime.gui.Parent and runtime.viewport and runtime.viewport.Parent then return true end
+        destroyGui()
+        local parent = uiParent()
+        if typeof(parent) ~= "Instance" then return false end
+        local gui = New("ScreenGui", { Parent = parent, Name = "NoirDualHudPresentation", ResetOnSpawn = false,
+            IgnoreGuiInset = true, DisplayOrder = 72, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+        local panel = New("Frame", { Parent = gui, Name = "Presentation", AnchorPoint = Vector2.new(1, 1),
+            Position = NoirPersistence.GetPosition("dual_hud_presentation_v1", UDim2.new(1, -12, 1, -18)),
+            Size = UDim2.fromOffset(230, 244), BackgroundColor3 = Color3.fromRGB(7, 9, 12),
+            BackgroundTransparency = .31, BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 3 })
+        corner(panel, 18); stroke(panel, C.border, .47)
+        local header = New("TextButton", { Parent = panel, Name = "DragHeader", Size = UDim2.new(1, 0, 0, 31),
+            BackgroundColor3 = Color3.fromRGB(15, 18, 23), BackgroundTransparency = .17, BorderSizePixel = 0,
+            AutoButtonColor = false, Text = "DUAL HUD  •  LOCAL PRESENTATION", TextColor3 = C.text,
+            TextSize = 10, Font = Enum.Font.GothamBold, ZIndex = 5 })
+        New("UIGradient", { Parent = header, Rotation = 0, Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 30, 38)), ColorSequenceKeypoint.new(.52, Color3.fromRGB(53, 64, 76)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 25, 32)),
+        }) })
+        local viewport = New("ViewportFrame", { Parent = panel, Name = "RaisedHands", Position = UDim2.fromOffset(0, 31),
+            Size = UDim2.new(1, 0, 1, -31), BackgroundTransparency = 1, BorderSizePixel = 0,
+            Ambient = Color3.fromRGB(170, 180, 195), LightColor = Color3.fromRGB(255, 255, 255),
+            LightDirection = Vector3.new(-1, -1, -1), ZIndex = 4 })
+        local world = New("WorldModel", { Parent = viewport, Name = "LocalOnlyWorld" })
+        local camera = New("Camera", { Parent = viewport, Name = "PresentationCamera", FieldOfView = 27,
+            CFrame = CFrame.lookAt(Vector3.new(0, .35, 13), Vector3.new(0, .35, 0)) })
+        viewport.CurrentCamera = camera
+        runtime.gui, runtime.viewport, runtime.world, runtime.camera, runtime.header = gui, viewport, world, camera, header
+
+        -- Dragging is restricted to the tiny title strip: it never performs an in-world action.
+        local dragging, moved, start, origin, dragInput = false, false, nil, nil, nil
+        runtime.connections[#runtime.connections + 1] = header.InputBegan:Connect(function(input)
+            if not isPrimaryPress(input) then return end
+            dragging, moved, start, origin = true, false, input.Position, panel.Position
+        end)
+        runtime.connections[#runtime.connections + 1] = header.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+        end)
+        runtime.connections[#runtime.connections + 1] = UIS.InputChanged:Connect(function(input)
+            if not dragging or input ~= dragInput or not panel.Parent then return end
+            local delta = input.Position - start
+            if delta.Magnitude > 7 then moved = true end
+            panel.Position = UDim2.new(origin.X.Scale, origin.X.Offset + delta.X, origin.Y.Scale, origin.Y.Offset + delta.Y)
+        end)
+        runtime.connections[#runtime.connections + 1] = UIS.InputEnded:Connect(function(input)
+            if not dragging or not isPrimaryPress(input) then return end
+            dragging = false
+            if moved then NoirPersistence.SetPosition("dual_hud_presentation_v1", panel.Position) end
+        end)
+        return true
+    end
+    local function colourFromCharacter()
+        local character = LocalPlayer.Character
+        local hand = character and (character:FindFirstChild("LeftHand") or character:FindFirstChild("Left Arm")
+            or character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm"))
+        if hand and hand:IsA("BasePart") then return hand.Color, hand.Material end
+        return Color3.fromRGB(235, 206, 184), Enum.Material.SmoothPlastic
+    end
+    local function part(parent, name, size, cf, colour, material, shape)
+        local p = New("Part", { Parent = parent, Name = name, Anchored = true, CanCollide = false, CanTouch = false,
+            CanQuery = false, CastShadow = false, Size = size, CFrame = cf, Color = colour, Material = material,
+            TopSurface = Enum.SurfaceType.Smooth, BottomSurface = Enum.SurfaceType.Smooth })
+        if shape then p.Shape = shape end
+        return p
+    end
+    local function copyWeapon(tool, root, itemCFrame)
+        local handle = tool:FindFirstChild("Handle", true)
+        if not (handle and handle:IsA("BasePart")) then return 0 end
+        local copied = 0
+        for _, source in ipairs(tool:GetDescendants()) do
+            if source:IsA("BasePart") and copied < 70 then
+                local ok, clone = pcall(function() return source:Clone() end)
+                if ok and clone and clone:IsA("BasePart") then
+                    -- Strip every runtime/physics relation.  The copy lives exclusively inside
+                    -- the ViewportFrame's WorldModel, not Workspace or the player character.
+                    for _, child in ipairs(clone:GetDescendants()) do
+                        if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("ModuleScript")
+                            or child:IsA("JointInstance") or child:IsA("Constraint") or child:IsA("TouchTransmitter") then
+                            child:Destroy()
+                        end
+                    end
+                    clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery = true, false, false, false
+                    clone.CastShadow = false
+                    clone.CFrame = itemCFrame * handle.CFrame:ToObjectSpace(source.CFrame)
+                    clone.Parent = root
+                    copied += 1
+                end
+            end
+        end
+        return copied
+    end
+    local function addFallbackWeapon(root, itemCFrame, kind)
+        local metal = kind == "GUN" and Color3.fromRGB(63, 68, 78) or Color3.fromRGB(185, 189, 198)
+        if kind == "GUN" then
+            part(root, "Slide", Vector3.new(.34, .30, 1.45), itemCFrame * CFrame.new(0, .12, -.1), metal, Enum.Material.Metal)
+            part(root, "Grip", Vector3.new(.30, .74, .38), itemCFrame * CFrame.new(0, -.42, .26) * CFrame.Angles(math.rad(-18), 0, 0), Color3.fromRGB(31, 34, 40), Enum.Material.SmoothPlastic)
+            part(root, "Sight", Vector3.new(.12, .13, .25), itemCFrame * CFrame.new(0, .34, -.35), Color3.fromRGB(210, 215, 224), Enum.Material.Metal)
+        else
+            part(root, "Blade", Vector3.new(.12, .20, 2.15), itemCFrame * CFrame.new(0, .10, -.82), metal, Enum.Material.Metal)
+            part(root, "Guard", Vector3.new(.75, .12, .12), itemCFrame * CFrame.new(0, 0, .27), Color3.fromRGB(46, 49, 56), Enum.Material.Metal)
+            part(root, "Grip", Vector3.new(.23, .25, .72), itemCFrame * CFrame.new(0, -.02, .61), Color3.fromRGB(32, 34, 39), Enum.Material.SmoothPlastic)
+        end
+    end
+    local function build(toolKind, tool)
+        if not ensureGui() then return end
+        clearWorld()
+        local world = runtime.world
+        if not world then return end
+        local skin, skinMaterial = colourFromCharacter()
+        local weaponType = toolKind == "GUN" and "GUN" or "KNIFE"
+        runtime.header.Text = "DUAL HUD  •  " .. weaponType .. "  •  LOCAL ONLY"
+
+        -- Two symmetric, deliberately raised arms. They are UI scene parts, not avatar parts.
+        for _, side in ipairs({ -1, 1 }) do
+            local angle = side == -1 and math.rad(-23) or math.rad(23)
+            local shoulder = CFrame.new(.82 * side, -.77, .15) * CFrame.Angles(0, 0, angle)
+            local forearmCF = shoulder * CFrame.new(0, .60, 0)
+            local handCF = shoulder * CFrame.new(0, 1.24, 0)
+            part(world, side < 0 and "LeftForearm" or "RightForearm", Vector3.new(.42, 1.23, .44), forearmCF, skin, skinMaterial)
+            part(world, side < 0 and "LeftHand" or "RightHand", Vector3.new(.49, .42, .48), handCF, skin, skinMaterial, Enum.PartType.Ball)
+            local itemCF = handCF * CFrame.new(0, .47, -.12) * CFrame.Angles(0, side == -1 and math.rad(180) or 0, 0)
+            if copyWeapon(tool, world, itemCF) == 0 then addFallbackWeapon(world, itemCF, weaponType) end
+        end
+        runtime.signature = toolKind .. "\0" .. tostring(tool)
+    end
+    function runtime:Refresh()
+        if runtime.stopped then return end
+        local kind, tool = activeTool()
+        if not kind or not tool or not tool.Parent then
+            destroyGui()
+            return
+        end
+        local signature = kind .. "\0" .. tostring(tool)
+        if signature ~= runtime.signature or not runtime.gui or not runtime.gui.Parent then build(kind, tool) end
+    end
+    runtime.connections[#runtime.connections + 1] = RunService.RenderStepped:Connect(function()
+        if runtime.stopped then return end
+        local now = os.clock()
+        if now >= runtime.nextCheck then
+            runtime.nextCheck = now + .65
+            runtime:Refresh()
+        end
+    end)
+    function runtime:Stop()
+        if runtime.stopped then return end
+        runtime.stopped = true
+        for _, connection in ipairs(runtime.connections) do pcall(function() connection:Disconnect() end) end
+        table.clear(runtime.connections)
+        destroyGui()
+    end
+    getgenv().__NoirDualHudPresentation = runtime
+    runtime:Refresh()
 end)
 
 function shootTarget()
@@ -6584,10 +6748,15 @@ do
         local runtime = getgenv().__NoirGunTriggerRuntime
         if type(runtime) == "table" and type(runtime.RefreshDual) == "function" then pcall(runtime.RefreshDual, runtime) end
     end
-    combatAim:AddToggle("Use Gun Dual Effect", function(v)
-        config.gunDualEffect = v == true
-        refreshGunDualEffect()
+    -- Legacy world/character Dual Effect remains hard-disabled.  The option below is a
+    -- local ScreenGui ViewportFrame only: it cannot alter the avatar or be seen by other players.
+    NoirPersistence.data.toggles["SILENT AIM::Use Gun Dual Effect"] = false
+    combatAim:AddToggle("Gun Dual HUD Visual", function(v)
+        config.gunDualHudVisual = v == true
+        local runtime = getgenv().__NoirDualHudPresentation
+        if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
     end)
+    combatAim:AddLabel("Safe local presentation: two raised Gun visuals in a movable HUD panel. It never adds parts to Character/Workspace and is visible only to you.")
     combatAim:AddParagraph("GUN TRIGGER BOT", "Shoots once when the centre cursor/crosshair points at the Murderer. Works with mobile Shift Lock; move off target and back to arm the next shot.")
     combatAim:AddToggle("Gun Trigger Bot", function(v) config.gunTriggerBot = v == true end)
     combatAim:AddToggle("Gun Trigger Bot Wall Check", function(v) config.gunTriggerBotWallCheck = v == true end)
@@ -6625,7 +6794,15 @@ do
         local runtime = getgenv().__NoirKnifeUtilityRuntime
         if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
     end
-    combatKnife:AddToggle("Use Knife Dual Effect", function(v) config.knifeDualEffect = v == true; refreshKnifeUtilities() end)
+    -- Legacy world/character Dual Effect remains hard-disabled.  This is UI-only and does
+    -- not attempt to imitate or unlock MM2's server-owned Dual Wield inventory effect.
+    NoirPersistence.data.toggles["KNIFE SILENT AIM::Use Knife Dual Effect"] = false
+    combatKnife:AddToggle("Knife Dual HUD Visual", function(v)
+        config.knifeDualHudVisual = v == true
+        local runtime = getgenv().__NoirDualHudPresentation
+        if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
+    end)
+    combatKnife:AddLabel("Safe local presentation: two raised Knife visuals in a movable HUD panel. It never adds parts to Character/Workspace and is visible only to you.")
     combatKnife:AddToggle("Disable Stab", function(v) config.knifeDisableStab = v == true end)
     combatKnife:AddToggle("Instant Throw", function(v) config.knifeInstantThrow = v == true end)
     combatKnife:AddToggle("Fast Throw", function(v) config.knifeFastThrow = v == true end)
