@@ -1107,10 +1107,6 @@ local config = {
     lockShootButton = false,
     -- Native Silent Aim gun utilities.
     gunDualEffect = false,
-    -- Pure camera-projected presentation switches.  They only render a ViewportFrame overlay;
-    -- no BasePart is ever inserted into Character or Workspace.
-    gunDualCharacterVisual = false,
-    knifeDualCharacterVisual = false,
     gunTriggerBot = false,
     gunTriggerBotWallCheck = true,
     gunTriggerBotPrediction = true,
@@ -1120,6 +1116,12 @@ local config = {
 -- Disable legacy Dual Effect preference values that could invoke unsafe client rig visuals.
 NoirPersistence.data.toggles["SILENT AIM::Use Gun Dual Effect"] = false
 NoirPersistence.data.toggles["KNIFE SILENT AIM::Use Knife Dual Effect"] = false
+-- Stop and remove a renderer left behind by an earlier injected version before this safe build runs.
+do
+    local oldProjectedDual = getgenv().__NoirCameraProjectedDual
+    if type(oldProjectedDual) == "table" and type(oldProjectedDual.Stop) == "function" then pcall(oldProjectedDual.Stop, oldProjectedDual) end
+    getgenv().__NoirCameraProjectedDual = nil
+end
 NoirPersistence.Save()
 
 local murderer, sheriff, hero
@@ -2445,303 +2447,6 @@ task.defer(function()
     end
     getgenv().__NoirGunTriggerRuntime = runtime
     refreshDual()
-end)
-
--- Camera-projected dual-character presentation ------------------------------------------
--- A complete clone of the *current local avatar* is rendered only inside a ViewportFrame.
--- Keeping its torso, Humanoid, Shirt/Pants, layered clothing and accessories together lets
--- Roblox render the real outfit on the copied left arm; isolated R15 parts expose white skin.
--- The clone never enters Character or Workspace. Its left limb is the only part whose pose is
--- overridden, using the live right-arm animation as a mirrored target.
-task.defer(function()
-    local prior = getgenv().__NoirCameraProjectedDual
-    if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop, prior) end
-
-    local runtime = { stopped = false, gui = nil, viewport = nil, world = nil, camera = nil, avatar = nil,
-        entries = {}, entryBySource = {}, hiddenParts = {}, kind = nil, tool = nil, character = nil, torso = nil,
-        phase = "idle", transitionStart = 0, transitionDuration = .20, connections = {}, nextRefresh = 0 }
-
-    local function displayParent()
-        if typeof(guiParent) == "Instance" and guiParent.Parent then return guiParent end
-        return LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    end
-    local function desiredTool()
-        local character = LocalPlayer.Character
-        if not character then return nil, nil, nil end
-        if config.gunDualCharacterVisual then
-            local gun = character:FindFirstChild("Gun")
-            if gun and gun:IsA("Tool") then return "Gun", gun, character end
-        end
-        if config.knifeDualCharacterVisual then
-            local knife = character:FindFirstChild("Knife")
-            if knife and knife:IsA("Tool") then return "Knife", knife, character end
-        end
-        return nil, nil, character
-    end
-    local function restoreOriginalLeftArm()
-        for part, previous in pairs(runtime.hiddenParts) do
-            if part and part.Parent then pcall(function() part.LocalTransparencyModifier = previous end) end
-        end
-        table.clear(runtime.hiddenParts)
-    end
-    local function hideOriginalPart(part)
-        if part and part:IsA("BasePart") and runtime.hiddenParts[part] == nil then
-            runtime.hiddenParts[part] = part.LocalTransparencyModifier
-            pcall(function() part.LocalTransparencyModifier = 1 end)
-        end
-    end
-    local function limbSet(character, side)
-        local set = {}
-        local r6 = character:FindFirstChild(side .. " Arm")
-        if r6 and r6:IsA("BasePart") then set[r6] = true
-        else
-            for _, suffix in ipairs({ "UpperArm", "LowerArm", "Hand" }) do
-                local limb = character:FindFirstChild(side .. suffix)
-                if limb and limb:IsA("BasePart") then set[limb] = true end
-            end
-        end
-        return set
-    end
-    local function boundLimb(accessory, set)
-        for _, joint in ipairs(accessory:GetDescendants()) do
-            if joint:IsA("JointInstance") then
-                if set[joint.Part0] then return joint.Part0 end
-                if set[joint.Part1] then return joint.Part1 end
-            end
-        end
-        return nil
-    end
-    local function hideOriginalLeftArm(character)
-        restoreOriginalLeftArm()
-        local left = limbSet(character, "Left")
-        for limb in pairs(left) do hideOriginalPart(limb) end
-        for _, accessory in ipairs(character:GetChildren()) do
-            if accessory:IsA("Accessory") and boundLimb(accessory, left) then
-                for _, part in ipairs(accessory:GetDescendants()) do if part:IsA("BasePart") then hideOriginalPart(part) end end
-            end
-        end
-    end
-    local function destroyDisplay()
-        if runtime.gui then pcall(function() runtime.gui:Destroy() end) end
-        runtime.gui, runtime.viewport, runtime.world, runtime.camera, runtime.avatar = nil, nil, nil, nil, nil
-        for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
-            local stale = parent and parent:FindFirstChild("NoirCameraProjectedDual")
-            if stale then pcall(function() stale:Destroy() end) end
-        end
-    end
-    local function ensureDisplay()
-        if runtime.gui and runtime.gui.Parent and runtime.viewport and runtime.world and runtime.camera then return true end
-        destroyDisplay()
-        local parent = displayParent()
-        if typeof(parent) ~= "Instance" then return false end
-        local gui = New("ScreenGui", { Parent = parent, Name = "NoirCameraProjectedDual", ResetOnSpawn = false,
-            IgnoreGuiInset = true, DisplayOrder = 2, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
-        local viewport = New("ViewportFrame", { Parent = gui, Name = "ProjectedOppositeArm", Position = UDim2.fromScale(0, 0),
-            Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, Active = false,
-            Ambient = Color3.fromRGB(185, 190, 200), LightColor = Color3.fromRGB(255, 255, 255),
-            LightDirection = Vector3.new(-1, -1, -1), ZIndex = 1 })
-        local world = New("WorldModel", { Parent = viewport, Name = "RenderOnlyWorld" })
-        local camera = New("Camera", { Parent = viewport, Name = "RenderOnlyCamera", FieldOfView = 70 })
-        viewport.CurrentCamera = camera
-        runtime.gui, runtime.viewport, runtime.world, runtime.camera = gui, viewport, world, camera
-        return true
-    end
-    local function wipeWorld()
-        table.clear(runtime.entries); table.clear(runtime.entryBySource)
-        if runtime.world then for _, object in ipairs(runtime.world:GetChildren()) do pcall(function() object:Destroy() end) end end
-        runtime.avatar = nil
-    end
-    local function relativePath(root, item)
-        local path, node = {}, item
-        while node and node ~= root do table.insert(path, 1, node.Name); node = node.Parent end
-        return node == root and path or nil
-    end
-    local function sourceAtPath(root, path)
-        local node = root
-        for _, name in ipairs(path or {}) do node = node:FindFirstChild(name); if not node then return nil end end
-        return node
-    end
-    local function mirrorWorldCFrame(torso, sourceCFrame)
-        local relative = torso.CFrame:ToObjectSpace(sourceCFrame)
-        local p = relative.Position
-        -- Proper S*R*S reflection: it preserves an upright Gun/Knife through raise and reload.
-        local function reflect(v) return Vector3.new(-v.X, v.Y, v.Z) end
-        local right, up, back = -reflect(relative.RightVector), reflect(relative.UpVector), reflect(-relative.LookVector)
-        return torso.CFrame * CFrame.new(-.13, .02, .01) * CFrame.fromMatrix(Vector3.new(-p.X, p.Y, p.Z), right, up, back)
-    end
-    local function makeAvatarClone(character)
-        local ok, avatar = pcall(function() return character:Clone() end)
-        if not ok or not avatar or not avatar:IsA("Model") then return nil end
-        for _, object in ipairs(avatar:GetDescendants()) do
-            if object:IsA("Script") or object:IsA("LocalScript") or object:IsA("ModuleScript")
-                or object:IsA("JointInstance") or object:IsA("Constraint") or object:IsA("TouchTransmitter")
-                or object:IsA("RemoteEvent") or object:IsA("RemoteFunction") then
-                object:Destroy()
-            elseif object:IsA("BasePart") then
-                object.Anchored, object.CanCollide, object.CanTouch, object.CanQuery = true, false, false, false
-                object.CastShadow = false
-                object.LocalTransparencyModifier = 0
-            elseif object:IsA("ParticleEmitter") or object:IsA("Trail") or object:IsA("Beam") then
-                object.Enabled = false
-            end
-        end
-        avatar.Name = "ProjectedAvatarAppearance"
-        avatar.Parent = runtime.world
-        return avatar
-    end
-    local function addAllMappedParts(character, avatar)
-        for _, clone in ipairs(avatar:GetDescendants()) do
-            if clone:IsA("BasePart") then
-                local source = sourceAtPath(character, relativePath(avatar, clone))
-                if source and source:IsA("BasePart") then
-                    clone.Transparency, clone.LocalTransparencyModifier = source.Transparency, 0
-                    local entry = { source = source, clone = clone, mode = "follow", baseTransparency = clone.Transparency,
-                        restCFrame = source.CFrame, lastTarget = source.CFrame, exitCFrame = source.CFrame }
-                    runtime.entries[#runtime.entries + 1] = entry
-                    runtime.entryBySource[source] = entry
-                else
-                    clone.Transparency = 1
-                end
-            end
-        end
-    end
-    local function assignLeftOverrides(character, tool)
-        local left, right = limbSet(character, "Left"), limbSet(character, "Right")
-        local pairs = {}
-        if character:FindFirstChild("Left Arm") and character:FindFirstChild("Right Arm") then
-            pairs[character:FindFirstChild("Left Arm")] = character:FindFirstChild("Right Arm")
-        else
-            for _, suffix in ipairs({ "UpperArm", "LowerArm", "Hand" }) do
-                local l, r = character:FindFirstChild("Left" .. suffix), character:FindFirstChild("Right" .. suffix)
-                if l and r then pairs[l] = r end
-            end
-        end
-        for leftPart, rightPart in pairs(pairs) do
-            local entry = runtime.entryBySource[leftPart]
-            if entry then
-                entry.mode, entry.poseSource, entry.restCFrame = "mirror", rightPart, leftPart.CFrame
-                entry.lastTarget, entry.exitCFrame = entry.restCFrame, entry.restCFrame
-            end
-        end
-        -- Move every cosmetic piece bound to the left limb with the corresponding mirrored right
-        -- limb. This retains the original clothing/accessory mesh rather than tinting a white arm.
-        for _, accessory in ipairs(character:GetChildren()) do
-            if accessory:IsA("Accessory") then
-                local leftAnchor = boundLimb(accessory, left)
-                local rightAnchor = leftAnchor and pairs[leftAnchor] or nil
-                if rightAnchor then
-                    for _, source in ipairs(accessory:GetDescendants()) do
-                        if source:IsA("BasePart") then
-                            local entry = runtime.entryBySource[source]
-                            if entry then
-                                entry.mode, entry.poseSource = "offset", rightAnchor
-                                entry.offset = leftAnchor.CFrame:ToObjectSpace(source.CFrame)
-                                entry.restCFrame, entry.lastTarget, entry.exitCFrame = source.CFrame, source.CFrame, source.CFrame
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        -- The current Tool is mirrored into the virtual left hand. Every other clone part follows
-        -- its real source exactly, visually overlaying the local avatar's existing clothing.
-        for _, source in ipairs(tool:GetDescendants()) do
-            if source:IsA("BasePart") then
-                local entry = runtime.entryBySource[source]
-                if entry then
-                    entry.mode, entry.poseSource = "mirror", source
-                    local target = mirrorWorldCFrame(runtime.torso, source.CFrame)
-                    entry.restCFrame, entry.lastTarget, entry.exitCFrame = target, target, target
-                end
-            end
-        end
-    end
-    local function beginLowering()
-        if runtime.phase == "lowering" or runtime.phase == "idle" then return end
-        for _, entry in ipairs(runtime.entries) do
-            if entry.mode ~= "follow" then entry.exitCFrame = entry.lastTarget or entry.clone.CFrame end
-        end
-        runtime.phase, runtime.transitionStart = "lowering", os.clock()
-    end
-    local function finishLowering()
-        restoreOriginalLeftArm(); wipeWorld(); destroyDisplay()
-        runtime.kind, runtime.tool, runtime.character, runtime.torso, runtime.phase = nil, nil, nil, nil, "idle"
-    end
-    local function rebuild(kind, tool, character)
-        if not ensureDisplay() then return end
-        restoreOriginalLeftArm(); wipeWorld()
-        local torso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or character:FindFirstChild("HumanoidRootPart"))
-        if not (torso and torso:IsA("BasePart")) then destroyDisplay(); return end
-        runtime.character, runtime.torso = character, torso
-        local avatar = makeAvatarClone(character)
-        if not avatar then
-            runtime.character, runtime.torso = nil, nil
-            destroyDisplay()
-            return
-        end
-        runtime.avatar = avatar
-        addAllMappedParts(character, avatar)
-        assignLeftOverrides(character, tool)
-        if #runtime.entries == 0 then wipeWorld(); destroyDisplay(); runtime.character, runtime.torso = nil, nil; return end
-        runtime.kind, runtime.tool, runtime.phase, runtime.transitionStart = kind, tool, "raising", os.clock()
-        hideOriginalLeftArm(character)
-    end
-    function runtime:Refresh()
-        if runtime.stopped then return end
-        local kind, tool, character = desiredTool()
-        if not kind or not tool or not tool.Parent then
-            if runtime.kind then beginLowering() end
-            return
-        end
-        if runtime.phase == "lowering" or kind ~= runtime.kind or tool ~= runtime.tool or character ~= runtime.character or not runtime.gui or not runtime.gui.Parent then
-            restoreOriginalLeftArm(); wipeWorld(); destroyDisplay()
-            runtime.kind, runtime.tool, runtime.character, runtime.torso, runtime.phase = nil, nil, nil, nil, "idle"
-            rebuild(kind, tool, character)
-        end
-    end
-    local function smooth(value)
-        value = math.clamp(value, 0, 1)
-        return value * value * (3 - 2 * value)
-    end
-    local function render()
-        if runtime.stopped then return end
-        local now = os.clock()
-        if now >= runtime.nextRefresh then runtime.nextRefresh = now + .18; runtime:Refresh() end
-        local realCamera, torso = Workspace.CurrentCamera, runtime.torso
-        if not (runtime.viewport and runtime.camera and realCamera and torso and torso.Parent) then return end
-        runtime.camera.CFrame, runtime.camera.FieldOfView = realCamera.CFrame, realCamera.FieldOfView
-        local progress, lowering = smooth((now - runtime.transitionStart) / runtime.transitionDuration), runtime.phase == "lowering"
-        for _, entry in ipairs(runtime.entries) do
-            if entry.clone and entry.clone.Parent then
-                pcall(function()
-                    if entry.mode == "follow" then
-                        if entry.source and entry.source.Parent then entry.clone.CFrame = entry.source.CFrame end
-                    elseif lowering then
-                        entry.clone.CFrame = entry.exitCFrame:Lerp(entry.restCFrame, progress)
-                        entry.clone.Transparency = entry.baseTransparency + (1 - entry.baseTransparency) * progress
-                    elseif entry.poseSource and entry.poseSource.Parent then
-                        local target = mirrorWorldCFrame(torso, entry.poseSource.CFrame)
-                        if entry.mode == "offset" and entry.offset then target = target * entry.offset end
-                        entry.lastTarget = target
-                        entry.clone.CFrame = entry.restCFrame:Lerp(target, progress)
-                        entry.clone.Transparency = 1 + (entry.baseTransparency - 1) * progress
-                    end
-                end)
-            end
-        end
-        if lowering and progress >= 1 then finishLowering()
-        elseif runtime.phase == "raising" and progress >= 1 then runtime.phase = "active" end
-    end
-    runtime.connections[#runtime.connections + 1] = RunService.RenderStepped:Connect(render)
-    function runtime:Stop()
-        if runtime.stopped then return end
-        runtime.stopped = true
-        for _, connection in ipairs(runtime.connections) do pcall(function() connection:Disconnect() end) end
-        table.clear(runtime.connections)
-        restoreOriginalLeftArm(); wipeWorld(); destroyDisplay()
-    end
-    getgenv().__NoirCameraProjectedDual = runtime
-    runtime:Refresh()
 end)
 
 function shootTarget()
@@ -6841,19 +6546,6 @@ do
     end
 
     combatAim:AddLabel("GUN UTILITIES • native Noir implementation")
-    local function refreshGunDualEffect()
-        local runtime = getgenv().__NoirGunTriggerRuntime
-        if type(runtime) == "table" and type(runtime.RefreshDual) == "function" then pcall(runtime.RefreshDual, runtime) end
-    end
-    -- The old Character/Workspace Dual Effect remains locked off.  This alternative contains
-    -- only a camera-projected ScreenGui scene and performs no real rig or world mutation.
-    NoirPersistence.data.toggles["SILENT AIM::Use Gun Dual Effect"] = false
-    combatAim:AddToggle("Gun Dual Character Visual", function(v)
-        config.gunDualCharacterVisual = v == true
-        local runtime = getgenv().__NoirCameraProjectedDual
-        if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
-    end)
-    combatAim:AddLabel("Avatar-clone projected LEFT arm: keeps your real clothing/accessory mesh, mirrors the live right Gun pose, and hides the original left limb locally.")
     combatAim:AddParagraph("GUN TRIGGER BOT", "Shoots once when the centre cursor/crosshair points at the Murderer. Works with mobile Shift Lock; move off target and back to arm the next shot.")
     combatAim:AddToggle("Gun Trigger Bot", function(v) config.gunTriggerBot = v == true end)
     combatAim:AddToggle("Gun Trigger Bot Wall Check", function(v) config.gunTriggerBotWallCheck = v == true end)
@@ -6891,15 +6583,6 @@ do
         local runtime = getgenv().__NoirKnifeUtilityRuntime
         if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
     end
-    -- The old Character/Workspace Dual Effect remains locked off.  This alternative contains
-    -- only a camera-projected ScreenGui scene and performs no real rig or world mutation.
-    NoirPersistence.data.toggles["KNIFE SILENT AIM::Use Knife Dual Effect"] = false
-    combatKnife:AddToggle("Knife Dual Character Visual", function(v)
-        config.knifeDualCharacterVisual = v == true
-        local runtime = getgenv().__NoirCameraProjectedDual
-        if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
-    end)
-    combatKnife:AddLabel("Avatar-clone projected LEFT arm: keeps your real clothing/accessory mesh, mirrors the live right Knife pose, and hides the original left limb locally.")
     combatKnife:AddToggle("Disable Stab", function(v) config.knifeDisableStab = v == true end)
     combatKnife:AddToggle("Instant Throw", function(v) config.knifeInstantThrow = v == true end)
     combatKnife:AddToggle("Fast Throw", function(v) config.knifeFastThrow = v == true end)
