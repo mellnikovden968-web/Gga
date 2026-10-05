@@ -10456,7 +10456,7 @@ end)()
 -- END ODH 2026 ADAPTER
 
 --[[
-    ⚡ ULTIMATE FLING • FLING   —   V1.1
+    ⚡ ULTIMATE FLING • FLING   —   V1.2
     Ultimate Fling GUI · Overdrive Hub plugin
     Author: K1LAS1K (original), adapted to ODH 2026
     =========================================================================
@@ -10485,7 +10485,7 @@ local AUTHOR            = "K1LAS1K"
 local BRAND             = "ULTIMATE FLING"
 local PLUGIN_ID         = "fling"
 local PLUGIN_NAME       = BRAND .. " • FLING"
-local VERSION           = "V1.1"
+local VERSION           = "V1.2"
 local VERSION_TAG       = "fling"
 local MARKER_PREFIX     = "@fling_"
 local CONFIG_PATH       = CONFIGS_FOLDER .. "/ODH_FLING_settings.json"
@@ -10627,6 +10627,9 @@ local persistDisabled = false
 local DEFAULTS = {
     flingDuration     = 2,
     flingPower        = 1,
+    flingMethod       = "Auto", -- Auto = Fling then Sweep; Fling = original; Sweep = vertical
+    predictionStuds   = 8,
+    startStuds        = 5,
     autoReturn        = true,
     loopInterval      = 0.4,
     auraInterval      = 0.4,
@@ -10697,6 +10700,7 @@ end
 local function serializeConfig()
     return {
         flingDuration = config.flingDuration, flingPower = config.flingPower,
+        flingMethod = config.flingMethod, predictionStuds = config.predictionStuds, startStuds = config.startStuds,
         autoReturn = config.autoReturn,
         loopInterval = config.loopInterval, auraInterval = config.auraInterval,
         auraStuds = config.auraStuds, bindButtonSize = config.bindButtonSize,
@@ -10713,7 +10717,7 @@ end
 local function applyLoaded(data)
     if type(data) ~= "table" then return false end
     local scalars = {
-        "flingDuration", "flingPower", "autoReturn",
+        "flingDuration", "flingPower", "flingMethod", "predictionStuds", "startStuds", "autoReturn",
         "loopInterval", "auraInterval", "auraStuds",
         "bindButtonSize", "targetCooldown",
         "autoSheriffDelay", "autoMurdererDelay", "roleCacheTTL",
@@ -10726,6 +10730,10 @@ local function applyLoaded(data)
     -- clamp after load
     if type(config.flingDuration)=="number" then config.flingDuration=math.clamp(math.floor(config.flingDuration+0.5),1,5) end
     if type(config.flingPower)=="number" then config.flingPower=math.clamp(math.floor(config.flingPower+0.5),1,3) end
+    if type(config.predictionStuds)=="number" then config.predictionStuds=math.clamp(config.predictionStuds,0,20) end
+    if type(config.startStuds)=="number" then config.startStuds=math.clamp(config.startStuds,-5,20) end
+    local METHODS = { Auto=true, Fling=true, Sweep=true }
+    if type(config.flingMethod)~="string" or not METHODS[config.flingMethod] then config.flingMethod="Auto" end
     if type(data.keybinds) == "table" then config.keybinds = data.keybinds end
     if type(data.bindPositions) == "table" then config.bindPositions = data.bindPositions end
     if type(data.hudPos) == "table" and type(data.hudPos.x) == "number" and type(data.hudPos.y) == "number" then
@@ -11692,7 +11700,6 @@ local function SkidFling(TargetPlayer)
     if not TargetPlayer or not TargetPlayer.Parent then return false end
     if TargetPlayer == LocalPlayer or state.whitelist[TargetPlayer.UserId] then return false end
 
-    -- кулдаун
     local last = state.lastResetAt[TargetPlayer.UserId]
     if last and (now()-last) < (config.targetCooldown or 0) then return false end
     state.lastResetAt[TargetPlayer.UserId]=now()
@@ -11728,19 +11735,35 @@ local function SkidFling(TargetPlayer)
     local power = config.flingPower or 1
     local velMult = power==1 and 1 or (power==2 and 1.5 or 2)
     local rotMult = velMult
+    local duration = tonumber(config.flingDuration) or 2
+    if duration < 0.5 then duration = 0.5 end
+    local predStuds = tonumber(config.predictionStuds) or 8
+    local startStuds = tonumber(config.startStuds) or 5
+    local downForce = 50000 * velMult
 
+    Humanoid.PlatformStand = true
     local savedDestroy = Workspace.FallenPartsDestroyHeight
-    Workspace.FallenPartsDestroyHeight = 0/0 -- NaN trick
+    if type(savedDestroy) ~= "number" or savedDestroy ~= savedDestroy then savedDestroy = -500 end
+    Workspace.FallenPartsDestroyHeight = -100000
+
     if flingBV and flingBV.Parent then pcall(function() flingBV:Destroy() end) end
     flingBV = new("BodyVelocity")
-    flingBV.Velocity = v3(0,0,0)
-    flingBV.MaxForce = v3(9e9,9e9,9e9)
+    flingBV.Name = "FlingVel"
+    flingBV.Velocity = v3(0, -downForce, 0)
+    flingBV.MaxForce = v3(math.huge, math.huge, math.huge)
     flingBV.Parent = RootPart
+    local flingBG = new("BodyGyro")
+    flingBG.MaxTorque = v3(math.huge, math.huge, math.huge)
+    flingBG.P = 1000000
+    flingBG.D = 500
+    flingBG.CFrame = RootPart.CFrame
+    flingBG.Parent = RootPart
     pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false) end)
 
     local startTime = now()
     local done=false
     local flingObj={ bv=flingBV, conn=nil, watchdog=nil }
+
     local function cleanup(success, manual)
         if done then return end
         done=true
@@ -11748,6 +11771,8 @@ local function SkidFling(TargetPlayer)
         if flingObj.conn then pcall(function() flingObj.conn:Disconnect() end) end
         if flingObj.watchdog then pcall(task.cancel, flingObj.watchdog) end
         if flingBV then pcall(function() flingBV:Destroy() end) flingBV=nil end
+        if flingBG then pcall(function() flingBG:Destroy() end) flingBG=nil end
+        pcall(function() Humanoid.PlatformStand = false end)
         pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true) end)
         pcall(function() Workspace.CurrentCamera.CameraSubject = Humanoid end)
         if config.autoReturn and flingOldPos then
@@ -11769,7 +11794,11 @@ local function SkidFling(TargetPlayer)
                 if tries>20 then break end
             until (RootPart.Position - flingOldPos.p).Magnitude < 25
         end
-        pcall(function() Workspace.FallenPartsDestroyHeight = flingFPDH end)
+        pcall(function()
+            local h = flingFPDH
+            if type(h) ~= "number" or h ~= h then h = -500 end
+            Workspace.FallenPartsDestroyHeight = h
+        end)
         BindableButtons.ResetActive=false
         StatusHUD.Set("idle")
     end
@@ -11777,69 +11806,63 @@ local function SkidFling(TargetPlayer)
     currentFling=flingObj
     BindableButtons.ResetActive=true
     StatusHUD.Set("active", TargetPlayer.Name)
-    flingObj.watchdog = task.delay((config.flingDuration or 2)+2, function() if not done then cleanup(false) end end)
+    flingObj.watchdog = task.delay(duration + 2, function() if not done then cleanup(false) end end)
 
-    local function FPos(BasePart, Pos, Ang, slam)
-        if not RootPart or not RootPart.Parent then return end
+    flingObj.conn = RunService.Heartbeat:Connect(function()
+        if done then return end
+        local elapsed = now() - startTime
+        local liveChar = TargetPlayer.Character
+        if elapsed > duration or not Character.Parent or not RootPart.Parent
+            or not liveChar or liveChar ~= TCharacter then
+            cleanup(true)
+            return
+        end
+        local liveHum = liveChar:FindFirstChildOfClass("Humanoid")
+        local liveRoot = liveChar:FindFirstChild("HumanoidRootPart") or TRootPart
+        local liveHead = liveChar:FindFirstChild("Head")
+        if not (liveRoot and liveRoot.Parent) then cleanup(true) return end
+
+        local vel = liveRoot.AssemblyLinearVelocity
+        local ping = 0.08
         pcall(function()
-            RootPart.CFrame = cfr(BasePart.Position) * Pos * Ang
-            Character:SetPrimaryPartCFrame(cfr(BasePart.Position) * Pos * Ang)
-            if slam then
-                -- вниз в войд: иначе жертва улетает в небо и долго не умирает
-                RootPart.Velocity = v3(9e7*velMult, -9e8*velMult, 9e7*velMult)
-                RootPart.RotVelocity = v3(9e8*rotMult, 9e8*rotMult, 9e8*rotMult)
-                if flingBV then flingBV.Velocity = v3(0, -9e9*velMult, 0) end
-            else
-                RootPart.Velocity = v3(9e7*velMult, 9e7*10*velMult, 9e7*velMult)
-                RootPart.RotVelocity = v3(9e8*rotMult, 9e8*rotMult, 9e8*rotMult)
-            end
+            local p = LocalPlayer:GetNetworkPing()
+            if type(p)=="number" and p==p then ping = math.max(p, 0.05) end
         end)
-    end
+        local look = ping * 1.5
+        local goal = liveRoot.Position + v3(vel.X, 0, vel.Z) * look
+        if predStuds > 0 then
+            local h = v3(vel.X, 0, vel.Z)
+            if h.Magnitude > 0.2 then goal = goal + h.Unit * predStuds end
+        end
+        if liveHum and liveHum.MoveDirection.Magnitude > 0.1 then
+            goal = goal + liveHum.MoveDirection * ((liveHum.WalkSpeed or 16) * ping)
+        end
 
-    local function SFBasePart(BasePart)
-        local TimeToWait = config.flingDuration or 2
-        local Time = tick()
-        local Angle = 0
-        repeat
-            if done then break end
-            if RootPart and THumanoid and BasePart and BasePart.Parent then
-                if BasePart.Velocity.Magnitude < 50 then
-                    Angle = Angle + 100
-                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                else
-                    -- цель уже летит: жмём вниз в войд, а не ещё раз в небо
-                    FPos(BasePart, cfr(0,-2,0), CFrame.Angles(math.rad(90),0,0), true)
-                    task.wait()
-                    FPos(BasePart, cfr(0,-2,0), CFrame.Angles(0,0,0), true)
-                    task.wait()
-                    FPos(BasePart, cfr(0,-2,0), CFrame.Angles(math.rad(-90),0,0), true)
-                    task.wait()
-                    FPos(BasePart, cfr(0,-2,0), CFrame.Angles(0,0,0), true)
-                    task.wait()
-                end
-            else
-                task.wait()
-            end
-        until Time + TimeToWait < tick()
-    end
+        local topY = (liveHead and liveHead.Parent) and (liveHead.Position.Y + startStuds) or (goal.Y + startStuds + 0.5)
+        local botY = goal.Y - 3.5
+        local t = math.clamp(elapsed / duration, 0, 1)
+        local spin = elapsed * 14
+        local radius = 1.8 * (1 - t) + 0.25
+        local pos = v3(
+            goal.X + math.cos(spin) * radius,
+            topY + (botY - topY) * t,
+            goal.Z + math.sin(spin) * radius
+        )
+        local cf = cfr(pos) * CFrame.Angles(math.pi / 2, spin, 0)
+        RootPart.CFrame = cf
+        pcall(function() Character:SetPrimaryPartCFrame(cf) end)
+        RootPart.AssemblyLinearVelocity = v3(0, -downForce, 0)
+        RootPart.AssemblyAngularVelocity = v3(0, 12000 * velMult, 0)
+        local toT = goal - RootPart.Position
+        if flingBV then
+            flingBV.Velocity = (toT.Magnitude > 0.05) and (toT.Unit * downForce) or v3(0, -downForce, 0)
+        end
+        if flingBG then flingBG.CFrame = cf end
+    end)
 
-    if TRootPart then SFBasePart(TRootPart)
-    elseif THead then SFBasePart(THead)
-    elseif Handle then SFBasePart(Handle)
-    else Notify("Fling", TargetPlayer.Name.." has no valid parts",2) end
-
-    cleanup(true)
+    local timeout = now() + duration + 1
+    while not done and now() < timeout do task.wait() end
+    if not done then cleanup(true) end
     return true
 end
 
@@ -12112,6 +12135,8 @@ listSection:AddButton("🧹 Clear WL", function() clearTable(state.whitelist); N
 local settingsSection = AddSection("⚙️ Tuning")
 settingsSection:AddSlider("Fling Duration", 1, 5, config.flingDuration, function(v) config.flingDuration=v; saveConfig() end)
 settingsSection:AddSlider("Fling Power", 1, 3, config.flingPower, function(v) config.flingPower=v; saveConfig() end)
+settingsSection:AddSlider("Prediction", 0, 20, config.predictionStuds, function(v) config.predictionStuds=v; saveConfig() end)
+settingsSection:AddSlider("Start Height", -5, 20, config.startStuds, function(v) config.startStuds=v; saveConfig() end)
 settingsSection:AddSlider("Aura Radius", 5, 50, config.auraStuds, function(v) config.auraStuds=v; saveConfig() end)
 settingsSection:AddSlider("Loop Interval", 0.1, 1.0, config.loopInterval, function(v) config.loopInterval=v; saveConfig() end)
 settingsSection:AddSlider("Aura Interval", 0.1, 1.0, config.auraInterval, function(v) config.auraInterval=v; saveConfig() end)
@@ -12231,6 +12256,8 @@ ODHX.Bind("⚙️ Tuning", "Notifications", "Toggle", function() return config.n
 ODHX.Bind("🔘 Binds", "SFX 🔇", "Toggle", function() return config.muteSounds end)
 ODHX.Bind("⚙️ Tuning", "Fling Duration", "Slider", function() return config.flingDuration end)
 ODHX.Bind("⚙️ Tuning", "Fling Power", "Slider", function() return config.flingPower end)
+ODHX.Bind("⚙️ Tuning", "Prediction", "Slider", function() return config.predictionStuds end)
+ODHX.Bind("⚙️ Tuning", "Start Height", "Slider", function() return config.startStuds end)
 ODHX.Bind("⚙️ Tuning", "Aura Radius", "Slider", function() return config.auraStuds end)
 ODHX.Bind("⚙️ Tuning", "Loop Interval", "Slider", function() return config.loopInterval end)
 ODHX.Bind("⚙️ Tuning", "Aura Interval", "Slider", function() return config.auraInterval end)
