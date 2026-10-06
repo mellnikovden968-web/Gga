@@ -11808,7 +11808,8 @@ local function SkidFling(TargetPlayer)
     StatusHUD.Set("active", TargetPlayer.Name)
     flingObj.watchdog = task.delay(duration + 2, function() if not done then cleanup(false) end end)
 
-    flingObj.conn = RunService.Heartbeat:Connect(function()
+    local stepSignal = RunService.PreSimulation or RunService.Stepped or RunService.Heartbeat
+    flingObj.conn = stepSignal:Connect(function()
         if done then return end
         local elapsed = now() - startTime
         local liveChar = TargetPlayer.Character
@@ -11823,27 +11824,35 @@ local function SkidFling(TargetPlayer)
         if not (liveRoot and liveRoot.Parent) then cleanup(true) return end
 
         local vel = liveRoot.AssemblyLinearVelocity
-        local ping = 0.08
+        local horiz = v3(vel.X, 0, vel.Z)
+        local speed = horiz.Magnitude
+        local ping = 0.1
         pcall(function()
             local p = LocalPlayer:GetNetworkPing()
-            if type(p)=="number" and p==p then ping = math.max(p, 0.05) end
+            if type(p)=="number" and p==p then ping = math.max(p, 0.06) end
         end)
-        local look = ping * 1.5
-        local goal = liveRoot.Position + v3(vel.X, 0, vel.Z) * look
-        if predStuds > 0 then
-            local h = v3(vel.X, 0, vel.Z)
-            if h.Magnitude > 0.2 then goal = goal + h.Unit * predStuds end
+        -- ведём в точку, где цель будет через пинг + запас, иначе бегущие ускользают
+        local goal = liveRoot.Position + horiz * (ping + 0.18)
+        if liveHum then
+            local md = liveHum.MoveDirection
+            if md.Magnitude > 0.1 then
+                goal = goal + md * ((liveHum.WalkSpeed or 16) * (ping + 0.12))
+            end
         end
-        if liveHum and liveHum.MoveDirection.Magnitude > 0.1 then
-            goal = goal + liveHum.MoveDirection * ((liveHum.WalkSpeed or 16) * ping)
+        if predStuds > 0 and speed > 0.2 then
+            goal = goal + horiz.Unit * (predStuds * math.clamp(speed / 14, 0.5, 2))
+        end
+        if liveHead and liveHead.Parent and (liveRoot.Position - liveHead.Position).Magnitude > 4 then
+            goal = liveHead.Position + v3(horiz.X, 0, horiz.Z) * (ping + 0.18)
         end
 
         local topY = (liveHead and liveHead.Parent) and (liveHead.Position.Y + startStuds) or (goal.Y + startStuds + 0.5)
         local botY = goal.Y - 3.5
-        local pass = 0.22
+        local pass = 0.12
         local t = (elapsed % pass) / pass
-        local spin = elapsed * 55
-        local radius = 1.4 * (1 - t) + 0.2
+        local spin = elapsed * 110
+        -- на бегу не орбитим сбоку — сидим на предсказанной точке
+        local radius = (speed > 8) and 0.1 or (1.0 * (1 - t) + 0.12)
         local pos = v3(
             goal.X + math.cos(spin) * radius,
             topY + (botY - topY) * t,
@@ -11853,7 +11862,7 @@ local function SkidFling(TargetPlayer)
         RootPart.CFrame = cf
         pcall(function() Character:SetPrimaryPartCFrame(cf) end)
         RootPart.AssemblyLinearVelocity = v3(0, -downForce, 0)
-        RootPart.AssemblyAngularVelocity = v3(0, 55000 * velMult, 0)
+        RootPart.AssemblyAngularVelocity = v3(0, 90000 * velMult, 0)
         local toT = goal - RootPart.Position
         if flingBV then
             flingBV.Velocity = (toT.Magnitude > 0.05) and (toT.Unit * downForce) or v3(0, -downForce, 0)
