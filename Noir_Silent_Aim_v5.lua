@@ -11739,7 +11739,7 @@ local function SkidFling(TargetPlayer)
     if duration < 0.5 then duration = 0.5 end
     local predStuds = tonumber(config.predictionStuds) or 8
     local startStuds = tonumber(config.startStuds) or 5
-    local downForce = 25000 * velMult
+    local downForce = 50000 * velMult
 
     Humanoid.PlatformStand = true
     local savedDestroy = Workspace.FallenPartsDestroyHeight
@@ -11826,47 +11826,40 @@ local function SkidFling(TargetPlayer)
 
         local vel = liveRoot.AssemblyLinearVelocity
         local horiz = v3(vel.X, 0, vel.Z)
-        local speed = horiz.Magnitude
         local ping = 0.08
         pcall(function()
             local p = LocalPlayer:GetNetworkPing()
             if type(p)=="number" and p==p then ping = math.max(p, 0.05) end
         end)
-        local lead = horiz * (ping + 0.1)
+        local lead = horiz * (ping + 0.08)
         if liveHum then
             local md = liveHum.MoveDirection
             if md.Magnitude > 0.1 then
                 lead = lead + md * ((liveHum.WalkSpeed or 16) * ping)
             end
         end
-        if predStuds > 0 and speed > 0.2 then
-            lead = lead + horiz.Unit * math.min(predStuds, 8)
+        if predStuds > 0 and horiz.Magnitude > 0.2 then
+            lead = lead + horiz.Unit * math.min(predStuds * 0.5, 6)
         end
-        if lead.Magnitude > 8 then lead = lead.Unit * 8 end
+        if lead.Magnitude > 6 then lead = lead.Unit * 6 end
         local goal = liveRoot.Position + lead
 
+        -- как рабочий reset: проход сквозь хитбокс сверху вниз, мы В цели, не рядом
         local topY = (liveHead and liveHead.Parent) and (liveHead.Position.Y + startStuds) or (goal.Y + startStuds + 0.5)
-        local botY = goal.Y - 2.5
-        local pass = 0.12
+        local botY = goal.Y - 3
+        local pass = 0.45
         local t = (elapsed % pass) / pass
-        local spin = elapsed * 110
-        local radius = (speed > 8) and 0.15 or (0.9 * (1 - t) + 0.15)
-        local y = topY + (botY - topY) * t
-        if flingOldPos and y < flingOldPos.Y - 12 then y = flingOldPos.Y - 12 end
-        local pos = v3(
-            goal.X + math.cos(spin) * radius,
-            y,
-            goal.Z + math.sin(spin) * radius
-        )
+        local spin = elapsed * 90
+        local pos = v3(goal.X, topY + (botY - topY) * t, goal.Z)
         local cf = cfr(pos) * CFrame.Angles(math.pi / 2, spin, 0)
         RootPart.CFrame = cf
         pcall(function() Character:SetPrimaryPartCFrame(cf) end)
-        -- не ставим себе -50000: один кадр после конца = ты в войде
-        RootPart.AssemblyAngularVelocity = v3(0, 40000 * velMult, 0)
+        RootPart.AssemblyLinearVelocity = v3(0, -downForce, 0)
+        RootPart.AssemblyAngularVelocity = v3(7500 * velMult, 7500 * velMult, 7500 * velMult)
         local toT = goal - RootPart.Position
         if flingBV then
-            local dir = (toT.Magnitude > 0.05) and toT.Unit or v3(0, -1, 0)
-            flingBV.Velocity = v3(dir.X * downForce, -math.abs(downForce), dir.Z * downForce)
+            if toT.Magnitude > 0.05 then flingBV.Velocity = toT.Unit * downForce
+            else flingBV.Velocity = v3(0, -downForce, 0) end
         end
         if flingBG then flingBG.CFrame = cf end
     end)
