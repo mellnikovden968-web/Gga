@@ -12580,11 +12580,16 @@ local function toImage(value)
     if id then return "rbxassetid://" .. id end
     return ""
 end
+local function raw(t, key)
+    if type(t) ~= "table" then return nil end
+    local ok, value = pcall(rawget, t, key)
+    return ok and value or nil
+end
 
 local function itemImage(data)
     if type(data) ~= "table" then return "" end
     for _, key in ipairs({ "Image", "ImageId", "ImageID", "Icon", "Thumbnail", "TextureId", "AssetId", "ItemImage", "Picture", "image" }) do
-        local img = toImage(data[key])
+        local img = toImage(raw(data, key))
         if img ~= "" then return img end
     end
     return ""
@@ -12593,14 +12598,14 @@ end
 local function itemKind(data, key)
     local typ = ""
     if type(data) == "table" then
-        typ = string.lower(tostring(data.ItemType or data.itemType or data.Type or data.WeaponType or data.Class or ""))
+        typ = string.lower(tostring(raw(data, "ItemType") or raw(data, "itemType") or raw(data, "Type") or raw(data, "WeaponType") or raw(data, "Class") or ""))
     end
     if typ == "pet" or typ == "box" or typ == "crate" or typ == "effect" or typ == "emote" or typ == "perk" or typ == "misc" or typ == "toy" then
         return nil
     end
     if string.find(typ, "gun", 1, true) or typ == "ranged" then return "Gun" end
     if string.find(typ, "knife", 1, true) or typ == "melee" then return "Knife" end
-    local n = string.lower(tostring((type(data) == "table" and (data.ItemName or data.Name)) or key or ""))
+    local n = string.lower(tostring((type(data) == "table" and (raw(data, "ItemName") or raw(data, "Name"))) or key or ""))
     if n == "" then return nil end
     if string.find(n, "knife", 1, true) or string.find(n, "blade", 1, true) or string.find(n, "axe", 1, true) or string.find(n, "sword", 1, true) or string.find(n, "scythe", 1, true) then
         return "Knife"
@@ -12636,37 +12641,44 @@ local function addItem(name, kind, rarity, image)
             return
         end
     end
+    if string.sub(string.lower(name), 1, 6) == "chroma" then rarity = "Chroma" end
     list[#list + 1] = { name = name, kind = kind, rarity = rarity or "Common", image = image or "" }
 end
 
 local function harvestEntry(data, key)
     if type(data) ~= "table" then return end
-    local name = data.ItemName or data.itemName or data.Name or data.DisplayName or (type(key) == "string" and key or nil)
+    local name = raw(data, "ItemName") or raw(data, "itemName") or raw(data, "Name") or raw(data, "DisplayName") or (type(key) == "string" and key or nil)
     local kind = itemKind(data, name)
     if not kind or type(name) ~= "string" then return end
-    addItem(name, kind, normalizeRarity(data.Rarity or data.rarity or data.Tier), itemImage(data))
+    local rarity = normalizeRarity(raw(data, "Rarity") or raw(data, "rarity") or raw(data, "Tier"))
+    if string.sub(string.lower(name), 1, 6) == "chroma" then rarity = "Chroma" end
+    addItem(name, kind, rarity, itemImage(data))
 end
 
 local function isItemDictionary(t)
     if type(t) ~= "table" then return false end
     local hits = 0
     for _, key in ipairs(MARKERS) do
-        if rawget(t, key) ~= nil then hits += 1 end
+        if raw(t, key) ~= nil then hits += 1 end
     end
     return hits >= 2
 end
 
 local function harvestTable(t)
     if type(t) ~= "table" then return end
-    if isItemDictionary(t) then
-        for key, value in pairs(t) do harvestEntry(value, key) end
-        return
-    end
-    harvestEntry(t, nil)
-    local bucket = t.Item or t.Items or t.Weapons or t.Skins
-    if type(bucket) == "table" then
-        for key, value in pairs(bucket) do harvestEntry(value, key) end
-    end
+    pcall(function()
+        if isItemDictionary(t) then
+            for key, value in pairs(t) do harvestEntry(value, key) end
+            return
+        end
+        harvestEntry(t, nil)
+        for _, key in ipairs({ "Item", "Items", "Weapons", "Skins", "Database" }) do
+            local bucket = raw(t, key)
+            if type(bucket) == "table" then
+                for name, value in pairs(bucket) do harvestEntry(value, name) end
+            end
+        end
+    end)
 end
 
 local function indexTemplates()
@@ -12704,7 +12716,7 @@ local function pullEnvTables()
         for _, inst in ipairs(ReplicatedStorage:GetDescendants()) do
             if inst:IsA("ModuleScript") then
                 local name = string.lower(inst.Name)
-                if string.find(name, "data", 1, true) or string.find(name, "item", 1, true) or string.find(name, "weapon", 1, true) or string.find(name, "skin", 1, true) or name == "database" then
+                if name == "database" or name == "itemdata" or name == "items" or name == "weapondata" or name == "skindata" then
                     local ok, mod = pcall(require, inst)
                     if ok then harvestTable(mod) end
                 end
@@ -12722,19 +12734,19 @@ local function pullGarbage()
         scanned += 1
         if scanned > 90000 then break end
         if type(object) == "table" then
-            if isItemDictionary(object) then
-                harvestTable(object)
-            else
-                local typ = object.ItemType or object.itemType
-                if type(typ) == "string" then harvestEntry(object, object.ItemName or object.Name) end
-            end
+            pcall(function()
+                if isItemDictionary(object) then
+                    harvestTable(object)
+                elseif type(raw(object, "ItemType")) == "string" or type(raw(object, "itemType")) == "string" then
+                    harvestEntry(object, raw(object, "ItemName") or raw(object, "Name"))
+                end
+            end)
         end
         if scanned % 4000 == 0 then task.wait() end
     end
 end
 
 local function pullHttpFallback()
-    if (#state.catalog.Knife + #state.catalog.Gun) > 80 then return end
     local raw
     pcall(function()
         raw = game:HttpGet("https://raw.githubusercontent.com/timez170/mm2-values/main/values.json")
@@ -12747,17 +12759,19 @@ local function pullHttpFallback()
     for _, row in ipairs(items) do
         if type(row) == "table" and type(row.name) == "string" then
             local kind = itemKind({ ItemName = row.name, Rarity = row.category }, row.name) or "Knife"
-            addItem(row.name, kind, normalizeRarity(row.category), "")
+            local rarity = normalizeRarity(row.category)
+            if string.sub(string.lower(row.name), 1, 6) == "chroma" then rarity = "Chroma" end
+            addItem(row.name, kind, rarity, "")
         end
     end
 end
 
 local function rebuildCatalog()
     state.catalog.Knife, state.catalog.Gun = {}, {}
-    pullEnvTables()
-    pullGarbage()
-    pullHttpFallback()
-    indexTemplates()
+    pcall(pullEnvTables)
+    pcall(pullGarbage)
+    pcall(pullHttpFallback)
+    pcall(indexTemplates)
     local function sortList(list)
         table.sort(list, function(a, b)
             if a.rarity == b.rarity then return string.lower(a.name) < string.lower(b.name) end
@@ -12867,21 +12881,24 @@ local function characterTools(kind)
 end
 
 local function writePlayerData(kind, skinName)
+    if type(skinName) ~= "string" or skinName == "" then return end
     local pd = playerData()
-    if not pd then return end
+    if type(pd) ~= "table" then return end
     pcall(function()
-        local weapons = pd.Weapons or pd.weapons
+        if kind == "Gun" then
+            pd.Gun, pd.gun, pd.EquippedGun = skinName, skinName, skinName
+        else
+            pd.Knife, pd.knife, pd.EquippedKnife = skinName, skinName, skinName
+        end
+        local weapons = raw(pd, "Weapons") or raw(pd, "weapons")
         if type(weapons) ~= "table" then return end
-        if type(weapons.Owned) == "table" and weapons.Owned[skinName] == nil then weapons.Owned[skinName] = 1 end
-        local equipped = weapons.Equipped or weapons.equipped
+        if type(raw(weapons, "Owned")) == "table" then weapons.Owned[skinName] = weapons.Owned[skinName] or 1 end
+        local equipped = raw(weapons, "Equipped") or raw(weapons, "equipped")
         if type(equipped) == "table" then
-            if kind == "Gun" then
-                equipped.Gun = skinName
-                equipped.gun = skinName
-            else
-                equipped.Knife = skinName
-                equipped.knife = skinName
-            end
+            if kind == "Gun" then equipped.Gun = skinName; equipped.gun = skinName else equipped.Knife = skinName; equipped.knife = skinName end
+        end
+        if type(raw(weapons, "Current")) == "table" then
+            if kind == "Gun" then weapons.Current.Gun = skinName else weapons.Current.Knife = skinName end
         end
     end)
 end
@@ -12928,22 +12945,29 @@ text(header, "SKINCHANGER", 18, UDim2.fromOffset(4, 8))
 text(header, "Full MM2 dump with rarity and icons. Tap a skin to apply.", 12, UDim2.fromOffset(4, 32), true)
 
 local function makeToggle(parent, label, position, initial, callback)
-    local holder = New("Frame", { Parent = parent, Position = position, Size = UDim2.fromOffset(168, 34), BackgroundTransparency = 1 })
-    local name = New("TextLabel", { Parent = holder, Size = UDim2.new(1, -72, 1, 0), BackgroundTransparency = 1, Text = label, TextColor3 = C.text, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
-    local pill = New("TextButton", { Parent = holder, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(58, 28), BackgroundColor3 = initial and C.accent or C.off, Text = "", AutoButtonColor = false })
-    corner(pill, 14); stroke(pill, C.border, .5)
-    local dot = New("Frame", { Parent = pill, Position = initial and UDim2.fromOffset(30, 3) or UDim2.fromOffset(3, 3), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = Color3.new(1, 1, 1) })
+    local holder = New("TextButton", { Parent = parent, Position = position, Size = UDim2.fromOffset(176, 40), BackgroundTransparency = 1, Text = "", AutoButtonColor = false })
+    New("TextLabel", { Parent = holder, Size = UDim2.new(1, -72, 1, 0), BackgroundTransparency = 1, Text = label, TextColor3 = C.text, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+    local pill = New("Frame", { Parent = holder, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(58, 30), BackgroundColor3 = initial and C.accent or C.off })
+    corner(pill, 15); stroke(pill, C.border, .5)
+    local dot = New("Frame", { Parent = pill, Position = initial and UDim2.fromOffset(30, 4) or UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = Color3.new(1, 1, 1) })
     corner(dot, 11)
-    local on = initial
+    local on = initial == true
+    local last = 0
     local function set(v)
         on = v == true
         pill.BackgroundColor3 = on and C.accent or C.off
-        dot.Position = on and UDim2.fromOffset(30, 3) or UDim2.fromOffset(3, 3)
+        dot.Position = on and UDim2.fromOffset(30, 4) or UDim2.fromOffset(4, 4)
         callback(on)
     end
-    pill.MouseButton1Click:Connect(function() set(not on) end)
-    pill.Activated:Connect(function() set(not on) end)
-    set(initial)
+    local function tap()
+        local now = os.clock()
+        if now - last < .22 then return end
+        last = now
+        set(not on)
+    end
+    holder.MouseButton1Click:Connect(tap)
+    holder.Activated:Connect(tap)
+    set(initial == true)
     return set
 end
 
@@ -13023,11 +13047,11 @@ local function rebuildGrid()
         local function fire()
             if state.kind == "Gun" then state.selectedGun = item.name else state.selectedKnife = item.name end
             save()
-            if state.enabled then
+            if not state.enabled then
+                notify("Turn Enable on first", 2)
+            else
                 applyKind(state.kind)
                 notify("Skin: " .. item.name, 2)
-            else
-                notify("Enable Skinchanger first", 2)
             end
             rebuildGrid()
         end
