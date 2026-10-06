@@ -212,6 +212,7 @@ do
         { "aim",    16898613777, Vector2.new(967, 759), "Combat" },
         { "world",  16898613509, Vector2.new(771, 563), "World" },
         { "visual", 16898613353, Vector2.new(771, 563), "Visuals" },
+        { "skins",  16898613353, Vector2.new(771, 563), "Skins" },
         { "emotes", 16898613777, Vector2.new(967, 759), "Emotes" },
         { "misc",   16898613509, Vector2.new(820, 147), "Misc" },
     }
@@ -242,6 +243,16 @@ do
             glyphPart(UDim2.fromOffset(15, 20), UDim2.fromOffset(20, 4), 2)
             glyphPart(UDim2.fromOffset(19, 27), UDim2.fromOffset(4, 8), 2)
             glyphPart(UDim2.fromOffset(27, 27), UDim2.fromOffset(4, 8), 2)
+        elseif d[1] == "skins" then
+            ic.Visible = false
+            glyphs = {}
+            local function glyphPart(position, size, rounded)
+                local part = New("Frame", { Parent = b, Position = position, Size = size, BackgroundColor3 = C.dim, BorderSizePixel = 0 })
+                if rounded then corner(part, rounded) end
+                glyphs[#glyphs + 1] = part
+            end
+            glyphPart(UDim2.fromOffset(22, 10), UDim2.fromOffset(8, 24), 3)
+            glyphPart(UDim2.fromOffset(20, 8), UDim2.fromOffset(12, 6), 2)
         elseif d[1] == "misc" then
             -- Requested Misc mark: a circular outline containing three dots.
             ic.Visible = false
@@ -516,6 +527,11 @@ local activePage = "home"
 local selectPage
 do
     local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent, emotes = emotesContent, misc = miscContent }
+    pcall(function()
+        getgenv().__NoirRegisterPage = function(name, object)
+            if type(name) == "string" and typeof(object) == "Instance" then pageObjects[name] = object end
+        end
+    end)
     local pageBasePosition = content.Position
     local pageTransitionId = 0
     local function pageScaleFor(object)
@@ -12456,3 +12472,536 @@ ODHX.Finish()
         notify("fling_мой.lua.txt failed to load: " .. tostring(__pluginError), 7)
     end
 end
+
+getgenv().__NoirSkinContext = {
+    win = win, template = visualContent, C = C, New = New, corner = corner, stroke = stroke, text = text,
+    notify = notify, persistence = NoirPersistence, localPlayer = LocalPlayer, players = Players,
+    runService = RunService, replicatedStorage = ReplicatedStorage, workspace = Workspace,
+}
+task.defer(function()
+    local compiler = loadstring
+    if type(compiler) ~= "function" then return end
+    local source = [==[
+local CTX = getgenv().__NoirSkinContext
+if type(CTX) ~= "table" or not CTX.win then return end
+
+local Players = CTX.players
+local LocalPlayer = CTX.localPlayer
+local RunService = CTX.runService
+local ReplicatedStorage = CTX.replicatedStorage
+local Workspace = CTX.workspace
+local New = CTX.New
+local C = CTX.C
+local corner = CTX.corner
+local stroke = CTX.stroke
+local text = CTX.text
+local notify = CTX.notify
+local persistence = CTX.persistence
+
+local RARITIES = { "Common", "Uncommon", "Rare", "Legendary", "Godly", "Ancient", "Unique", "Chroma", "Vintage" }
+local RARITY_COLOR = {
+    Common = Color3.fromRGB(175, 178, 186),
+    Uncommon = Color3.fromRGB(72, 210, 118),
+    Rare = Color3.fromRGB(64, 140, 255),
+    Legendary = Color3.fromRGB(176, 86, 255),
+    Godly = Color3.fromRGB(255, 72, 96),
+    Ancient = Color3.fromRGB(255, 186, 64),
+    Unique = Color3.fromRGB(255, 92, 176),
+    Chroma = Color3.fromRGB(72, 255, 230),
+    Vintage = Color3.fromRGB(196, 148, 92),
+}
+
+local state = {
+    enabled = false,
+    keep = true,
+    kind = "Knife",
+    query = "",
+    rarity = nil,
+    selectedKnife = nil,
+    selectedGun = nil,
+    catalog = { Knife = {}, Gun = {} },
+    cards = {},
+    templates = {},
+    applying = false,
+}
+
+pcall(function()
+    local saved = persistence and persistence.data and persistence.data.skins
+    if type(saved) == "table" then
+        state.enabled = saved.enabled == true
+        state.keep = saved.keep ~= false
+        state.kind = saved.kind == "Gun" and "Gun" or "Knife"
+        state.selectedKnife = saved.knife
+        state.selectedGun = saved.gun
+    end
+end)
+
+local function save()
+    if not (persistence and persistence.data) then return end
+    persistence.data.skins = {
+        enabled = state.enabled,
+        keep = state.keep,
+        kind = state.kind,
+        knife = state.selectedKnife,
+        gun = state.selectedGun,
+    }
+    if persistence.Save then pcall(persistence.Save) end
+end
+
+local function database()
+    local db
+    pcall(function()
+        if type(getrenv) == "function" then
+            local g = getrenv()._G
+            db = g and g.Database
+        end
+    end)
+    if type(db) == "table" then return db end
+    pcall(function()
+        for _, inst in ipairs(ReplicatedStorage:GetDescendants()) do
+            if inst:IsA("ModuleScript") and (inst.Name == "Database" or inst.Name == "ItemData" or inst.Name == "Items") then
+                local ok, mod = pcall(require, inst)
+                if ok and type(mod) == "table" then db = mod.Item and mod or (mod.Database or mod) break end
+            end
+        end
+    end)
+    return type(db) == "table" and db or nil
+end
+
+local function playerData()
+    local pd
+    pcall(function()
+        if type(getrenv) == "function" then
+            local g = getrenv()._G
+            pd = g and g.PlayerData
+        end
+    end)
+    return type(pd) == "table" and pd or nil
+end
+
+local function itemKind(data, key)
+    local typ = string.lower(tostring((type(data) == "table" and (data.ItemType or data.Type or data.WeaponType)) or ""))
+    if typ == "" then
+        local n = string.lower(tostring(key or ""))
+        if string.find(n, "gun", 1, true) then return "Gun" end
+        if string.find(n, "knife", 1, true) then return "Knife" end
+        return nil
+    end
+    if string.find(typ, "gun", 1, true) or typ == "ranged" then return "Gun" end
+    if string.find(typ, "knife", 1, true) or typ == "melee" or typ == "weapon" then return "Knife" end
+    return nil
+end
+
+local function itemImage(data)
+    if type(data) ~= "table" then return "" end
+    local img = data.Image or data.ImageId or data.Icon or data.Thumbnail or data.TextureId
+    if type(img) == "number" then return "rbxassetid://" .. tostring(img) end
+    if type(img) == "string" and img ~= "" then
+        if tonumber(img) then return "rbxassetid://" .. img end
+        return img
+    end
+    return ""
+end
+
+local function addItem(name, kind, rarity, image)
+    if type(name) ~= "string" or name == "" or name == "N/A" then return end
+    local list = state.catalog[kind]
+    if not list then return end
+    for _, item in ipairs(list) do if item.name == name then return end end
+    list[#list + 1] = {
+        name = name,
+        kind = kind,
+        rarity = rarity or "Common",
+        image = image or "",
+    }
+end
+
+local function indexTemplates()
+    table.clear(state.templates)
+    local function consider(inst)
+        if not inst or inst.Name == "" then return end
+        if inst:IsA("Tool") or inst:IsA("Model") or inst:IsA("MeshPart") or inst:IsA("BasePart") then
+            if state.templates[inst.Name] == nil then state.templates[inst.Name] = inst end
+        end
+    end
+    for _, root in ipairs({ ReplicatedStorage, game:GetService("Lighting"), Workspace }) do
+        pcall(function()
+            for _, inst in ipairs(root:GetDescendants()) do consider(inst) end
+        end)
+    end
+end
+
+local function rebuildCatalog()
+    state.catalog.Knife, state.catalog.Gun = {}, {}
+    local db = database()
+    local items = db and (db.Item or db.Items or db.Weapons)
+    if type(items) == "table" then
+        for key, data in pairs(items) do
+            if type(data) == "table" then
+                local kind = itemKind(data, key)
+                if kind then
+                    addItem(tostring(data.ItemName or data.Name or key), kind, tostring(data.Rarity or data.Tier or "Common"), itemImage(data))
+                end
+            elseif type(key) == "string" then
+                local kind = itemKind(nil, key)
+                if kind then addItem(key, kind, "Common", "") end
+            end
+        end
+    end
+    indexTemplates()
+    for name, inst in pairs(state.templates) do
+        local lname = string.lower(name)
+        if string.find(lname, "gun", 1, true) then
+            addItem(name, "Gun", "Common", "")
+        elseif inst:IsA("Tool") and inst:FindFirstChild("KnifeThrown", true) then
+            addItem(name, "Knife", "Common", "")
+        elseif string.find(lname, "knife", 1, true) or string.find(lname, "blade", 1, true) or string.find(lname, "sword", 1, true) then
+            addItem(name, "Knife", "Common", "")
+        end
+    end
+    local function sortList(list)
+        table.sort(list, function(a, b) return string.lower(a.name) < string.lower(b.name) end)
+    end
+    sortList(state.catalog.Knife)
+    sortList(state.catalog.Gun)
+end
+
+local function copyMesh(fromPart, toPart)
+    if not (fromPart and toPart and fromPart:IsA("BasePart") and toPart:IsA("BasePart")) then return end
+    pcall(function()
+        toPart.Color = fromPart.Color
+        toPart.Material = fromPart.Material
+        toPart.Reflectance = fromPart.Reflectance
+        toPart.Transparency = math.min(fromPart.Transparency, 0.35)
+    end)
+    if fromPart:IsA("MeshPart") and toPart:IsA("MeshPart") then
+        pcall(function()
+            toPart.MeshId = fromPart.MeshId
+            toPart.TextureID = fromPart.TextureID
+            toPart.Size = fromPart.Size
+        end)
+    end
+    local srcMesh = fromPart:FindFirstChildOfClass("SpecialMesh")
+    if srcMesh then
+        local dst = toPart:FindFirstChildOfClass("SpecialMesh")
+        if not dst then dst = Instance.new("SpecialMesh"); dst.Parent = toPart end
+        pcall(function()
+            dst.MeshType = srcMesh.MeshType
+            dst.MeshId = srcMesh.MeshId
+            dst.TextureId = srcMesh.TextureId
+            dst.Scale = srcMesh.Scale
+            dst.Offset = srcMesh.Offset
+            dst.VertexColor = srcMesh.VertexColor
+        end)
+    end
+    for _, ch in ipairs(fromPart:GetChildren()) do
+        if ch:IsA("Decal") or ch:IsA("Texture") then
+            local clone = ch:Clone()
+            clone.Parent = toPart
+        end
+    end
+end
+
+local function stripVisuals(tool)
+    local handle = tool:FindFirstChild("Handle")
+    for _, child in ipairs(tool:GetChildren()) do
+        if child ~= handle and not child:IsA("Script") and not child:IsA("LocalScript") and not child:IsA("RemoteEvent") and not child:IsA("RemoteFunction") and not child:IsA("Sound") and not child:IsA("BindableEvent") then
+            if child:IsA("BasePart") or child:IsA("Model") or child:IsA("Folder") or child:IsA("SpecialMesh") or child:IsA("Weld") or child:IsA("WeldConstraint") then
+                pcall(function() child:Destroy() end)
+            end
+        end
+    end
+end
+
+local function applyTemplateToTool(template, tool)
+    if not template or not tool then return false end
+    local handle = tool:FindFirstChild("Handle")
+    if not handle or not handle:IsA("BasePart") then return false end
+    stripVisuals(tool)
+    local srcHandle = template:FindFirstChild("Handle", true)
+    if template:IsA("BasePart") then srcHandle = template end
+    if srcHandle and srcHandle:IsA("BasePart") then copyMesh(srcHandle, handle) end
+    if template:IsA("Model") or template:IsA("Tool") then
+        for _, part in ipairs(template:GetDescendants()) do
+            if part:IsA("BasePart") and part ~= srcHandle and part.Name ~= "HumanoidRootPart" then
+                local clone = part:Clone()
+                clone.CanCollide = false
+                clone.Massless = true
+                clone.Parent = tool
+                local weld = Instance.new("WeldConstraint")
+                weld.Part0 = handle
+                weld.Part1 = clone
+                weld.Parent = clone
+                pcall(function()
+                    clone.CFrame = handle.CFrame * srcHandle.CFrame:ToObjectSpace(part.CFrame)
+                end)
+            end
+        end
+    end
+    return true
+end
+
+local function characterTools(kind)
+    local character = LocalPlayer.Character
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local name = kind == "Gun" and "Gun" or "Knife"
+    local list = {}
+    if character then
+        local equipped = character:FindFirstChild(name)
+        if equipped and equipped:IsA("Tool") then list[#list + 1] = equipped end
+        for _, child in ipairs(character:GetChildren()) do
+            if child:IsA("Model") and child.Name ~= "HumanoidRootPart" then
+                if child:FindFirstChild("Handle", true) and not child:FindFirstChildWhichIsA("Humanoid") then
+                    list[#list + 1] = child
+                end
+            end
+        end
+    end
+    if backpack then
+        local stored = backpack:FindFirstChild(name)
+        if stored and stored:IsA("Tool") then list[#list + 1] = stored end
+    end
+    return list
+end
+
+local function writePlayerData(kind, skinName)
+    local pd = playerData()
+    if not pd then return end
+    pcall(function()
+        local weapons = pd.Weapons or pd.weapons
+        if type(weapons) ~= "table" then return end
+        if type(weapons.Owned) == "table" and weapons.Owned[skinName] == nil then weapons.Owned[skinName] = 1 end
+        local equipped = weapons.Equipped or weapons.equipped
+        if type(equipped) == "table" then
+            if kind == "Gun" then
+                equipped.Gun = skinName
+                equipped.gun = skinName
+            else
+                equipped.Knife = skinName
+                equipped.knife = skinName
+            end
+        end
+    end)
+end
+
+local function applyKind(kind)
+    if not state.enabled then return false end
+    local skinName = kind == "Gun" and state.selectedGun or state.selectedKnife
+    if type(skinName) ~= "string" or skinName == "" then return false end
+    writePlayerData(kind, skinName)
+    if not state.templates[skinName] then indexTemplates() end
+    local template = state.templates[skinName]
+    local ok = false
+    for _, tool in ipairs(characterTools(kind)) do
+        if template then
+            if applyTemplateToTool(template, tool) then ok = true end
+        end
+    end
+    return ok
+end
+
+local function applyAll()
+    if state.applying or not state.enabled then return end
+    state.applying = true
+    pcall(function()
+        applyKind("Knife")
+        applyKind("Gun")
+    end)
+    state.applying = false
+end
+
+-- UI
+local page = CTX.template:Clone()
+page.Name = "SkinsContent"
+page:ClearAllChildren()
+page.Parent = CTX.win
+page.Visible = false
+page.ScrollingEnabled = false
+page.ScrollBarThickness = 0
+pcall(function() getgenv().__NoirRegisterPage("skins", page) end)
+
+local root = New("Frame", { Parent = page, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 })
+local header = New("Frame", { Parent = root, Size = UDim2.new(1, 0, 0, 58), BackgroundTransparency = 1 })
+text(header, "SKINCHANGER", 18, UDim2.fromOffset(4, 8))
+text(header, "Dumped skins with icons. Pick one to equip instantly.", 12, UDim2.fromOffset(4, 32), true)
+
+local function makeToggle(parent, label, position, initial, callback)
+    local holder = New("Frame", { Parent = parent, Position = position, Size = UDim2.fromOffset(168, 34), BackgroundTransparency = 1 })
+    local name = New("TextLabel", { Parent = holder, Size = UDim2.new(1, -72, 1, 0), BackgroundTransparency = 1, Text = label, TextColor3 = C.text, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+    local pill = New("TextButton", { Parent = holder, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(58, 28), BackgroundColor3 = initial and C.accent or C.off, Text = "", AutoButtonColor = false })
+    corner(pill, 14); stroke(pill, C.border, .5)
+    local dot = New("Frame", { Parent = pill, Position = initial and UDim2.fromOffset(30, 3) or UDim2.fromOffset(3, 3), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = Color3.new(1, 1, 1) })
+    corner(dot, 11)
+    local on = initial
+    local function set(v)
+        on = v == true
+        pill.BackgroundColor3 = on and C.accent or C.off
+        dot.Position = on and UDim2.fromOffset(30, 3) or UDim2.fromOffset(3, 3)
+        callback(on)
+    end
+    pill.MouseButton1Click:Connect(function() set(not on) end)
+    pill.Activated:Connect(function() set(not on) end)
+    set(initial)
+    return set
+end
+
+makeToggle(header, "Enable", UDim2.new(1, -360, 0, 12), state.enabled, function(v)
+    state.enabled = v
+    save()
+    if v then applyAll() end
+end)
+makeToggle(header, "Keep applied", UDim2.new(1, -176, 0, 12), state.keep, function(v)
+    state.keep = v
+    save()
+end)
+
+local toolbar = New("Frame", { Parent = root, Position = UDim2.fromOffset(0, 62), Size = UDim2.new(1, 0, 0, 86), BackgroundTransparency = 1 })
+local kindBar = New("Frame", { Parent = toolbar, Size = UDim2.fromOffset(188, 34), BackgroundColor3 = C.surface })
+corner(kindBar, 10); stroke(kindBar, C.border, .45)
+local function kindButton(label, x)
+    local b = New("TextButton", { Parent = kindBar, Position = UDim2.fromOffset(x, 3), Size = UDim2.fromOffset(88, 28), BackgroundColor3 = C.surface, Text = label, TextColor3 = C.text, TextSize = 13, Font = Enum.Font.GothamBold, AutoButtonColor = false })
+    corner(b, 8)
+    return b
+end
+local knivesBtn = kindButton("Knives", 4)
+local gunsBtn = kindButton("Guns", 96)
+
+local search = New("TextBox", { Parent = toolbar, Position = UDim2.fromOffset(204, 0), Size = UDim2.new(1, -360, 0, 34), BackgroundColor3 = C.surface, Text = "", PlaceholderText = "Search skins by name...", TextColor3 = C.text, PlaceholderColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
+corner(search, 10); stroke(search, C.border, .45)
+
+local countLabel = New("TextLabel", { Parent = toolbar, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 6), Size = UDim2.fromOffset(140, 22), BackgroundTransparency = 1, Text = "0 of 0", TextColor3 = C.dim, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Right })
+
+local rarityBar = New("ScrollingFrame", { Parent = toolbar, Position = UDim2.fromOffset(0, 44), Size = UDim2.new(1, 0, 0, 36), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, ScrollingDirection = Enum.ScrollingDirection.X, CanvasSize = UDim2.fromOffset(#RARITIES * 96, 0) })
+local rarityLayout = New("UIListLayout", { Parent = rarityBar, FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+local rarityButtons = {}
+
+local gridHost = New("ScrollingFrame", { Parent = root, Position = UDim2.fromOffset(0, 156), Size = UDim2.new(1, 0, 1, -156), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 5, ScrollBarImageColor3 = C.accent, CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
+local grid = New("UIGridLayout", { Parent = gridHost, CellSize = UDim2.fromOffset(128, 148), CellPadding = UDim2.fromOffset(10, 10), SortOrder = Enum.SortOrder.LayoutOrder, FillDirectionMaxCells = 6 })
+New("UIPadding", { Parent = gridHost, PaddingBottom = UDim.new(0, 12) })
+
+local function currentList()
+    local src = state.catalog[state.kind] or {}
+    local out = {}
+    local q = string.lower(state.query or "")
+    for _, item in ipairs(src) do
+        if (not state.rarity or item.rarity == state.rarity) and (q == "" or string.find(string.lower(item.name), q, 1, true)) then
+            out[#out + 1] = item
+        end
+    end
+    return out, #src
+end
+
+local function selectedName()
+    return state.kind == "Gun" and state.selectedGun or state.selectedKnife
+end
+
+local function paintKind()
+    knivesBtn.BackgroundColor3 = state.kind == "Knife" and C.accent or C.surface
+    gunsBtn.BackgroundColor3 = state.kind == "Gun" and C.accent or C.surface
+end
+
+local function rebuildGrid()
+    for _, card in ipairs(state.cards) do pcall(function() card:Destroy() end) end
+    table.clear(state.cards)
+    local list, total = currentList()
+    countLabel.Text = string.format("%02d of %d %s", #list, total, state.kind == "Gun" and "guns" or "knives")
+    local chosen = selectedName()
+    for index, item in ipairs(list) do
+        local card = New("TextButton", { Parent = gridHost, BackgroundColor3 = C.panel, Text = "", AutoButtonColor = false, LayoutOrder = index })
+        corner(card, 14); local border = stroke(card, item.name == chosen and C.accent or C.border, item.name == chosen and .15 or .55)
+        local icon = New("ImageLabel", { Parent = card, Position = UDim2.fromOffset(18, 10), Size = UDim2.fromOffset(92, 84), BackgroundTransparency = 1, Image = item.image, ScaleType = Enum.ScaleType.Fit })
+        if item.image == "" then
+            icon.Image = ""
+            local letter = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(92, 70), BackgroundTransparency = 1, Text = string.sub(item.name, 1, 1), TextColor3 = C.text, TextSize = 36, Font = Enum.Font.GothamBold })
+        end
+        local title = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(8, 98), Size = UDim2.new(1, -16, 0, 22), BackgroundTransparency = 1, Text = item.name, TextColor3 = C.text, TextSize = 12, Font = Enum.Font.GothamBold, TextTruncate = Enum.TextTruncate.AtEnd })
+        local rare = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(8, 120), Size = UDim2.new(1, -16, 0, 18), BackgroundTransparency = 1, Text = item.rarity, TextColor3 = RARITY_COLOR[item.rarity] or C.dim, TextSize = 11, Font = Enum.Font.Gotham })
+        local function fire()
+            if state.kind == "Gun" then state.selectedGun = item.name else state.selectedKnife = item.name end
+            save()
+            if state.enabled then
+                applyKind(state.kind)
+                notify("Skin: " .. item.name, 2)
+            else
+                notify("Enable Skinchanger first", 2)
+            end
+            rebuildGrid()
+        end
+        card.MouseButton1Click:Connect(fire)
+        card.Activated:Connect(fire)
+        state.cards[#state.cards + 1] = card
+    end
+end
+
+local function setKind(kind)
+    state.kind = kind
+    paintKind()
+    rebuildGrid()
+    save()
+end
+knivesBtn.MouseButton1Click:Connect(function() setKind("Knife") end)
+gunsBtn.MouseButton1Click:Connect(function() setKind("Gun") end)
+knivesBtn.Activated:Connect(function() setKind("Knife") end)
+gunsBtn.Activated:Connect(function() setKind("Gun") end)
+
+search:GetPropertyChangedSignal("Text"):Connect(function()
+    state.query = search.Text or ""
+    rebuildGrid()
+end)
+
+for i, rarity in ipairs(RARITIES) do
+    local b = New("TextButton", { Parent = rarityBar, Size = UDim2.fromOffset(90, 30), BackgroundColor3 = C.surface, Text = rarity, TextColor3 = RARITY_COLOR[rarity] or C.text, TextSize = 12, Font = Enum.Font.GothamBold, AutoButtonColor = false, LayoutOrder = i })
+    corner(b, 8); stroke(b, C.border, .5)
+    local function tap()
+        state.rarity = state.rarity == rarity and nil or rarity
+        for name, btn in pairs(rarityButtons) do
+            btn.BackgroundColor3 = (state.rarity == name) and C.accent or C.surface
+        end
+        rebuildGrid()
+    end
+    b.MouseButton1Click:Connect(tap)
+    b.Activated:Connect(tap)
+    rarityButtons[rarity] = b
+end
+
+paintKind()
+task.spawn(function()
+    rebuildCatalog()
+    rebuildGrid()
+    if state.enabled then applyAll() end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.delay(0.35, function()
+        if state.enabled and state.keep then applyAll() end
+    end)
+end)
+pcall(function()
+    local backpack = LocalPlayer:WaitForChild("Backpack", 5)
+    if backpack then
+        backpack.ChildAdded:Connect(function(child)
+            if state.enabled and state.keep and child:IsA("Tool") then task.delay(0.08, applyAll) end
+        end)
+    end
+end)
+if LocalPlayer.Character then
+    LocalPlayer.Character.ChildAdded:Connect(function(child)
+        if state.enabled and state.keep and child:IsA("Tool") then task.delay(0.08, applyAll) end
+    end)
+end
+RunService.Heartbeat:Connect(function()
+    if state.enabled and state.keep then
+        writePlayerData("Knife", state.selectedKnife)
+        writePlayerData("Gun", state.selectedGun)
+    end
+end)
+
+]==]
+    local ok, fn = pcall(compiler, source)
+    if not ok or type(fn) ~= "function" then
+        warn("[Noir Skins] compile failed: " .. tostring(fn))
+        return
+    end
+    local ran, err = xpcall(fn, function(message) return tostring(message) end)
+    if not ran then warn("[Noir Skins] startup failed: " .. tostring(err)) end
+end)
