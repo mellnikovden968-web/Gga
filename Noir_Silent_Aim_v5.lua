@@ -11826,13 +11826,14 @@ local function SkidFling(TargetPlayer)
 
         local vel = liveRoot.AssemblyLinearVelocity
         local horiz = v3(vel.X, 0, vel.Z)
+        local speed = horiz.Magnitude
         local ping = 0.08
         pcall(function()
             local p = LocalPlayer:GetNetworkPing()
             if type(p)=="number" and p==p then ping = math.max(p, 0.05) end
         end)
-        -- центр всегда тело, не точка рядом; лёгкий сдвиг на пинг, чтобы догнать бегущего
-        local center = liveRoot.Position + horiz * ping
+        -- центр = тело + короткий lead по пингу (не уезжаем вперёд мимо)
+        local center = liveRoot.Position + horiz * (ping * 2 + 0.08)
         if liveHum then
             local md = liveHum.MoveDirection
             if md.Magnitude > 0.1 then
@@ -11840,24 +11841,33 @@ local function SkidFling(TargetPlayer)
             end
         end
 
-        -- направление прокола: вдоль бега, иначе новый угол каждый проход
-        local pass = 0.22
+        local pass = 0.28
         local passN = math.floor(elapsed / pass)
         local dir
-        if horiz.Magnitude > 2 then
+        if speed > 2 then
             dir = horiz.Unit
         elseif liveHum and liveHum.MoveDirection.Magnitude > 0.1 then
             dir = liveHum.MoveDirection.Unit
         else
-            local yaw = passN * 1.047 -- ~60° каждый шух
+            local yaw = passN * 1.047
             dir = v3(math.cos(yaw), 0, math.sin(yaw))
         end
         local t = (elapsed % pass) / pass
         local headY = (liveHead and liveHead.Parent) and liveHead.Position.Y or (center.Y + 1.5)
-        -- спереди-сверху СКВОЗЬ торс назад-вниз
-        local from = center + dir * 2.8 + v3(0, (headY - center.Y) + startStuds, 0)
-        local to = center - dir * 2.8 + v3(0, -3, 0)
+        -- короткий прокол: больше кадров ВНУТРИ хитбокса, шух всё равно через торс
+        local extent = (speed > 6) and 0.9 or 1.35
+        local from = center + dir * extent + v3(0, (headY - center.Y) + startStuds, 0)
+        local to = center - dir * extent + v3(0, -3, 0)
         local pos = from:Lerp(to, t)
+        -- на бегу прижимаем XZ к центру тела, иначе пролетаем мимо
+        if speed > 4 then
+            local stick = 0.55
+            pos = v3(
+                pos.X * (1 - stick) + center.X * stick,
+                pos.Y,
+                pos.Z * (1 - stick) + center.Z * stick
+            )
+        end
         local spin = elapsed * 90
         local cf = cfr(pos) * CFrame.Angles(math.pi / 2, spin, 0)
         RootPart.CFrame = cf
