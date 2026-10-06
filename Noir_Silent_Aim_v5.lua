@@ -11840,9 +11840,10 @@ local function SkidFling(TargetPlayer)
 
         local topY = (liveHead and liveHead.Parent) and (liveHead.Position.Y + startStuds) or (goal.Y + startStuds + 0.5)
         local botY = goal.Y - 3.5
-        local t = math.clamp(elapsed / duration, 0, 1)
-        local spin = elapsed * 14
-        local radius = 1.8 * (1 - t) + 0.25
+        local pass = 0.22
+        local t = (elapsed % pass) / pass
+        local spin = elapsed * 55
+        local radius = 1.4 * (1 - t) + 0.2
         local pos = v3(
             goal.X + math.cos(spin) * radius,
             topY + (botY - topY) * t,
@@ -11852,7 +11853,7 @@ local function SkidFling(TargetPlayer)
         RootPart.CFrame = cf
         pcall(function() Character:SetPrimaryPartCFrame(cf) end)
         RootPart.AssemblyLinearVelocity = v3(0, -downForce, 0)
-        RootPart.AssemblyAngularVelocity = v3(0, 12000 * velMult, 0)
+        RootPart.AssemblyAngularVelocity = v3(0, 55000 * velMult, 0)
         local toT = goal - RootPart.Position
         if flingBV then
             flingBV.Velocity = (toT.Magnitude > 0.05) and (toT.Unit * downForce) or v3(0, -downForce, 0)
