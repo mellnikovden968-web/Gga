@@ -11831,32 +11831,40 @@ local function SkidFling(TargetPlayer)
             local p = LocalPlayer:GetNetworkPing()
             if type(p)=="number" and p==p then ping = math.max(p, 0.05) end
         end)
-        local lead = horiz * (ping + 0.08)
+        -- центр всегда тело, не точка рядом; лёгкий сдвиг на пинг, чтобы догнать бегущего
+        local center = liveRoot.Position + horiz * ping
         if liveHum then
             local md = liveHum.MoveDirection
             if md.Magnitude > 0.1 then
-                lead = lead + md * ((liveHum.WalkSpeed or 16) * ping)
+                center = center + md * ((liveHum.WalkSpeed or 16) * ping)
             end
         end
-        if predStuds > 0 and horiz.Magnitude > 0.2 then
-            lead = lead + horiz.Unit * math.min(predStuds * 0.5, 6)
-        end
-        if lead.Magnitude > 6 then lead = lead.Unit * 6 end
-        local goal = liveRoot.Position + lead
 
-        -- как рабочий reset: проход сквозь хитбокс сверху вниз, мы В цели, не рядом
-        local topY = (liveHead and liveHead.Parent) and (liveHead.Position.Y + startStuds) or (goal.Y + startStuds + 0.5)
-        local botY = goal.Y - 3
-        local pass = 0.45
+        -- направление прокола: вдоль бега, иначе новый угол каждый проход
+        local pass = 0.22
+        local passN = math.floor(elapsed / pass)
+        local dir
+        if horiz.Magnitude > 2 then
+            dir = horiz.Unit
+        elseif liveHum and liveHum.MoveDirection.Magnitude > 0.1 then
+            dir = liveHum.MoveDirection.Unit
+        else
+            local yaw = passN * 1.047 -- ~60° каждый шух
+            dir = v3(math.cos(yaw), 0, math.sin(yaw))
+        end
         local t = (elapsed % pass) / pass
+        local headY = (liveHead and liveHead.Parent) and liveHead.Position.Y or (center.Y + 1.5)
+        -- спереди-сверху СКВОЗЬ торс назад-вниз
+        local from = center + dir * 2.8 + v3(0, (headY - center.Y) + startStuds, 0)
+        local to = center - dir * 2.8 + v3(0, -3, 0)
+        local pos = from:Lerp(to, t)
         local spin = elapsed * 90
-        local pos = v3(goal.X, topY + (botY - topY) * t, goal.Z)
         local cf = cfr(pos) * CFrame.Angles(math.pi / 2, spin, 0)
         RootPart.CFrame = cf
         pcall(function() Character:SetPrimaryPartCFrame(cf) end)
         RootPart.AssemblyLinearVelocity = v3(0, -downForce, 0)
         RootPart.AssemblyAngularVelocity = v3(7500 * velMult, 7500 * velMult, 7500 * velMult)
-        local toT = goal - RootPart.Position
+        local toT = center - RootPart.Position
         if flingBV then
             if toT.Magnitude > 0.05 then flingBV.Velocity = toT.Unit * downForce
             else flingBV.Velocity = v3(0, -downForce, 0) end
