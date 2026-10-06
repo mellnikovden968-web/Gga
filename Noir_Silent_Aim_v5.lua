@@ -1117,7 +1117,6 @@ local config = {
     knifeAutoThrow = false,
     -- Native Knife Silent Aim utilities, kept separate from the original redirect settings.
     knifeDualEffect = false,
-    knifeDisableStab = false,
     knifeInstantThrow = false,
     knifeFastThrow = false,
     knifeAutoKillEveryone = false,
@@ -1894,22 +1893,12 @@ function redirect(remote, args)
 end
 
 local function swallowKnifeRemote(self)
-    if typeof(self) ~= "Instance" then return false end
-    local className = self.ClassName
-    if className ~= "RemoteEvent" and className ~= "RemoteFunction" and className ~= "BindableEvent" then return false end
-    local name = string.lower(tostring(self.Name or ""))
+    if typeof(self) ~= "Instance" or self.ClassName ~= "RemoteEvent" then return false end
+    if string.lower(tostring(self.Name or "")) ~= "knifethrown" then return false end
+    if not (config.knifeInstantThrow or config.knifeFastThrow) then return false end
     local runtime
     pcall(function() runtime = getgenv().__NoirKnifeUtilityRuntime end)
-    if config.knifeDisableStab and (name == "handletouched" or name == "knifestabbed" or name == "knifestab" or name == "stab" or string.find(name, "stab", 1, true)) then
-        if type(runtime) == "table" and runtime.auraCall then return false end
-        return true
-    end
-    if (config.knifeInstantThrow or config.knifeFastThrow) and name == "knifethrown" then
-        if type(runtime) == "table" and type(runtime.lastInstantThrow) == "number" and os.clock() - runtime.lastInstantThrow < .48 then
-            return true
-        end
-    end
-    return false
+    return type(runtime) == "table" and type(runtime.lastInstantThrow) == "number" and os.clock() - runtime.lastInstantThrow < .48
 end
 function installHook()
     if hooked then return true end
@@ -2032,14 +2021,10 @@ do
         touchPair(blade, part)
         if handle and handle:IsA("BasePart") and handle ~= blade then touchPair(handle, part) end
         if not tool then return end
-        local runtime
-        pcall(function() runtime = getgenv().__NoirKnifeUtilityRuntime end)
-        if type(runtime) == "table" then runtime.auraCall = true end
         local touched = tool:FindFirstChild("HandleTouched", true)
         if touched and touched:IsA("RemoteEvent") then pcall(touched.FireServer, touched, part) end
         local stabbed = tool:FindFirstChild("KnifeStabbed", true)
-        if not config.knifeDisableStab and stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
-        if type(runtime) == "table" then runtime.auraCall = false end
+        if stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
     end
 
     local function stopStep()
@@ -2101,7 +2086,7 @@ task.defer(function()
     local runtime = { stopped = false, connections = {}, bindConnections = {}, gui = nil, button = nil,
         dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
         dualOriginalC0 = nil, dualOriginalTransform = nil, ghostModel = nil, ghostParts = {}, hiddenParts = {}, dualTorso = nil,
-        poseBind = "NoirKnifeDualArmPose", nextAction = 0, lastInstantThrow = 0, lastStab = {}, auraCall = false }
+        poseBind = "NoirKnifeDualArmPose", nextAction = 0, lastInstantThrow = 0, lastStab = {} }
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
         runtime.connections[#runtime.connections + 1] = connection
@@ -2120,20 +2105,6 @@ task.defer(function()
     end
     local function equippedKnife()
         return findKnifeTool(LocalPlayer.Character)
-    end
-    local function ownedKnife()
-        return equippedKnife() or findKnifeTool(LocalPlayer:FindFirstChildOfClass("Backpack"))
-    end
-    local function muteTouched(part)
-        if type(getconnections) ~= "function" then return end
-        pcall(function()
-            for _, connection in ipairs(getconnections(part.Touched)) do
-                pcall(function()
-                    if connection.Disable then connection:Disable()
-                    elseif connection.Disconnect then connection:Disconnect() end
-                end)
-            end
-        end)
     end
     local function limbFor(character, side)
         return character and (character:FindFirstChild(side .. "Hand") or character:FindFirstChild(side .. " Arm") or character:FindFirstChild(side .. "LowerArm")) or nil
@@ -2203,15 +2174,12 @@ task.defer(function()
         local now = os.clock()
         if now - (runtime.lastStab[player] or 0) < .08 then return false end
         runtime.lastStab[player] = now
-        local restoreTouch = handle.CanTouch
-        handle.CanTouch = true
         for _, part in ipairs(character:GetChildren()) do
             if part:IsA("BasePart") then pokeTouch(handle, part) end
         end
         local hrp = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
         local touched = tool:FindFirstChild("HandleTouched", true)
         local stabbed = tool:FindFirstChild("KnifeStabbed", true)
-        runtime.auraCall = true
         if touched and touched:IsA("RemoteEvent") then
             if hrp then pcall(touched.FireServer, touched, hrp) end
             pcall(touched.FireServer, touched, character)
@@ -2220,33 +2188,7 @@ task.defer(function()
             pcall(stabbed.FireServer, stabbed)
             if hrp then pcall(stabbed.FireServer, stabbed, hrp) end
         end
-        runtime.auraCall = false
-        handle.CanTouch = restoreTouch
         return true
-    end
-    local function enforceDisableStab()
-        local tool = ownedKnife()
-        if not tool then return end
-        if config.knifeDisableStab then
-            for _, object in ipairs(tool:GetDescendants()) do
-                if object:IsA("BasePart") then
-                    if object.CanTouch then object.CanTouch = false end
-                    muteTouched(object)
-                elseif object.ClassName == "TouchTransmitter" then
-                    object:Destroy()
-                end
-            end
-            if tool:IsA("BasePart") then
-                tool.CanTouch = false
-                muteTouched(tool)
-            end
-        else
-            for _, object in ipairs(tool:GetDescendants()) do
-                if object:IsA("BasePart") and object.Name == "Handle" then
-                    object.CanTouch = true
-                end
-            end
-        end
     end
     local function attack(player)
         if not validTarget(player) then return false end
@@ -2406,7 +2348,6 @@ task.defer(function()
     end
     function runtime:Refresh()
         refreshDualEffect()
-        enforceDisableStab()
         if config.knifeSheriffBind then createBind() else destroyBind() end
         updateBindShape()
     end
@@ -2436,12 +2377,6 @@ task.defer(function()
         if tool.Name ~= "Knife" and not tool:FindFirstChild("KnifeThrown", true) then return end
         boundTools[tool] = true
         connect(tool.Activated, onKnifeActivated)
-        connect(tool.DescendantAdded, function(child)
-            if not config.knifeDisableStab then return end
-            if child.ClassName == "TouchTransmitter" then child:Destroy()
-            elseif child:IsA("BasePart") then child.CanTouch = false; muteTouched(child) end
-        end)
-        enforceDisableStab()
     end
     local function watchCharacter(character)
         if not character then return end
@@ -2467,10 +2402,9 @@ task.defer(function()
     end)
     runtime.connections[#runtime.connections + 1] = RunService.Heartbeat:Connect(function()
         if runtime.stopped then return end
-        refreshDualEffect()
-        enforceDisableStab()
-        if config.knifeAutoKillEveryone then killEveryone(true)
-        elseif config.knifeAutoKillSheriff then killSheriff(true) end
+        pcall(refreshDualEffect)
+        if config.knifeAutoKillEveryone then pcall(killEveryone, true)
+        elseif config.knifeAutoKillSheriff then pcall(killSheriff, true) end
     end)
     function runtime:Stop()
         if runtime.stopped then return end
@@ -2952,7 +2886,7 @@ function exportRevertConfig()
             gunTriggerBotWallCheck = config.gunTriggerBotWallCheck, gunTriggerBotPrediction = config.gunTriggerBotPrediction,
             knifeWallCheck = config.knifeWallCheck,
             knifePrioritizeSheriff = config.knifePrioritizeSheriff, knifeAutoThrow = config.knifeAutoThrow,
-            knifeDualEffect = config.knifeDualEffect, knifeDisableStab = config.knifeDisableStab,
+            knifeDualEffect = config.knifeDualEffect,
             knifeInstantThrow = config.knifeInstantThrow, knifeFastThrow = config.knifeFastThrow,
             knifeAutoKillEveryone = config.knifeAutoKillEveryone, knifeAutoKillSheriff = config.knifeAutoKillSheriff,
             knifeKillPlayer = config.knifeKillPlayer, knifeSheriffBind = config.knifeSheriffBind,
@@ -3008,7 +2942,7 @@ function applyRevertConfig(data)
         end
         for _, key in ipairs({ "autoFire", "wallCheck", "piercerBullet", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
                                "gunDualEffect", "gunTriggerBot", "gunTriggerBotWallCheck", "gunTriggerBotPrediction",
-                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow", "knifeThrownAura", "knifeDualEffect", "knifeDisableStab",
+                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow", "knifeThrownAura", "knifeDualEffect",
                                "knifeInstantThrow", "knifeFastThrow", "knifeAutoKillEveryone", "knifeAutoKillSheriff", "knifeSheriffBind" }) do
             if typeof(noir[key]) == "boolean" then config[key] = noir[key] end
         end
@@ -6802,12 +6736,6 @@ do
         notify("Knife utilities are starting", 2)
         return nil
     end
-    combatKnife:AddToggle("Disable Stab", function(v)
-        config.knifeDisableStab = v == true
-        installHook()
-        local runtime = getgenv().__NoirKnifeUtilityRuntime
-        if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
-    end)
     combatKnife:AddToggle("Instant Throw", function(v)
         config.knifeInstantThrow = v == true
         if config.knifeInstantThrow then installHook() end
