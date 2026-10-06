@@ -1877,12 +1877,16 @@ function redirect(remote, args)
 end
 
 local function swallowKnifeRemote(self)
-    if typeof(self) ~= "Instance" or self.ClassName ~= "RemoteEvent" then return false end
+    if typeof(self) ~= "Instance" then return false end
+    if not (self.ClassName == "RemoteEvent" or self.ClassName == "RemoteFunction" or self.ClassName == "BindableEvent") then return false end
     local name = self.Name
-    if config.knifeDisableStab and name == "KnifeStabbed" then return true end
+    local runtime
+    pcall(function() runtime = getgenv().__NoirKnifeUtilityRuntime end)
+    if config.knifeDisableStab and (name == "KnifeStabbed" or name == "KnifeStab" or name == "Stab") then
+        if type(runtime) == "table" and runtime.auraCall then return false end
+        return true
+    end
     if (config.knifeInstantThrow or config.knifeFastThrow) and name == "KnifeThrown" then
-        local runtime
-        pcall(function() runtime = getgenv().__NoirKnifeUtilityRuntime end)
         if type(runtime) == "table" and type(runtime.lastInstantThrow) == "number" and os.clock() - runtime.lastInstantThrow < .48 then
             return true
         end
@@ -1898,12 +1902,14 @@ function installHook()
         local ok, err = pcall(function()
             old = hookmetamethod(game, "__namecall", wrap(function(self, ...)
                 local method = getnamecallmethod()
-                if method == "FireServer" and typeof(self) == "Instance" and self.ClassName == "RemoteEvent" and not isOwnCall() then
+                if (method == "FireServer" or method == "InvokeServer" or method == "Fire") and typeof(self) == "Instance" then
                     if swallowKnifeRemote(self) then return end
-                    local args = table.pack(...)
-                    pcall(redirect, self, args)
-                    if type(setnamecallmethod) == "function" then setnamecallmethod(method) end
-                    return old(self, table.unpack(args, 1, args.n))
+                    if self.ClassName == "RemoteEvent" and method == "FireServer" and not isOwnCall() then
+                        local args = table.pack(...)
+                        pcall(redirect, self, args)
+                        if type(setnamecallmethod) == "function" then setnamecallmethod(method) end
+                        return old(self, table.unpack(args, 1, args.n))
+                    end
                 end
                 return old(self, ...)
             end))
@@ -1920,9 +1926,9 @@ function installHook()
     local ok, err = pcall(function()
         original = hookfunction(probe.FireServer, wrap(function(self, ...)
             local args = table.pack(...)
-            if typeof(self) == "Instance" and self.ClassName == "RemoteEvent" and not isOwnCall() then
+            if typeof(self) == "Instance" then
                 if swallowKnifeRemote(self) then return end
-                pcall(redirect, self, args)
+                if self.ClassName == "RemoteEvent" and not isOwnCall() then pcall(redirect, self, args) end
             end
             return original(self, table.unpack(args, 1, args.n))
         end))
@@ -2072,7 +2078,7 @@ task.defer(function()
     local runtime = { stopped = false, connections = {}, bindConnections = {}, gui = nil, button = nil,
         dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
         dualOriginalC0 = nil, dualOriginalTransform = nil, ghostModel = nil, ghostParts = {}, hiddenParts = {}, dualTorso = nil,
-        poseBind = "NoirKnifeDualArmPose", nextAction = 0, lastInstantThrow = 0 }
+        poseBind = "NoirKnifeDualArmPose", nextAction = 0, lastInstantThrow = 0, lastStab = {}, auraCall = false }
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
         runtime.connections[#runtime.connections + 1] = connection
@@ -2133,29 +2139,66 @@ task.defer(function()
         if ok then runtime.lastInstantThrow = now end
         return ok == true
     end
+    local function pokeTouch(handle, part)
+        if not handle or not part or not handle.Parent or not part.Parent then return end
+        if type(firetouchinterest) ~= "function" then return end
+        pcall(firetouchinterest, handle, part, 0)
+        pcall(firetouchinterest, handle, part, 1)
+        pcall(firetouchinterest, handle, part, true)
+        pcall(firetouchinterest, handle, part, false)
+    end
     local function stabAt(player)
-        if config.knifeDisableStab then return false end
-        local tool, targetRoot, ownRoot = equippedKnife(), rootFor(player), localRoot()
-        if not tool or not targetRoot or not ownRoot or (targetRoot.Position - ownRoot.Position).Magnitude > 9 then return false end
+        local tool = equippedKnife()
+        local character = player and player.Character
+        if not tool or not character or not validTarget(player) then return false end
         local handle = tool:FindFirstChild("Handle", true)
         if not handle or not handle:IsA("BasePart") then return false end
         local now = os.clock()
-        if now < runtime.nextAction then return false end
-        runtime.nextAction = now + .11
+        if now - (runtime.lastStab[player] or 0) < .08 then return false end
+        runtime.lastStab[player] = now
+        local restoreTouch = handle.CanTouch
+        handle.CanTouch = true
+        for _, part in ipairs(character:GetChildren()) do
+            if part:IsA("BasePart") then pokeTouch(handle, part) end
+        end
+        local hrp = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
         local touched = tool:FindFirstChild("HandleTouched", true)
         local stabbed = tool:FindFirstChild("KnifeStabbed", true)
-        if type(firetouchinterest) == "function" then
-            pcall(firetouchinterest, handle, targetRoot, true)
-            task.defer(function() if handle.Parent and targetRoot.Parent then pcall(firetouchinterest, handle, targetRoot, false) end end)
+        runtime.auraCall = true
+        if touched and touched:IsA("RemoteEvent") then
+            if hrp then pcall(touched.FireServer, touched, hrp) end
+            pcall(touched.FireServer, touched, character)
         end
-        if touched and touched:IsA("RemoteEvent") then pcall(touched.FireServer, touched, targetRoot) end
-        if stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
+        if stabbed and stabbed:IsA("RemoteEvent") then
+            pcall(stabbed.FireServer, stabbed)
+            if hrp then pcall(stabbed.FireServer, stabbed, hrp) end
+        end
+        runtime.auraCall = false
+        handle.CanTouch = restoreTouch
         return true
+    end
+    local function enforceDisableStab()
+        local tool = equippedKnife()
+        local handle = tool and tool:FindFirstChild("Handle", true)
+        if not handle or not handle:IsA("BasePart") then return end
+        if config.knifeDisableStab then
+            if handle.CanTouch then handle.CanTouch = false end
+            local transmitter = handle:FindFirstChildOfClass("TouchTransmitter")
+            if transmitter then transmitter:Destroy() end
+            if type(getconnections) == "function" then
+                pcall(function()
+                    for _, connection in ipairs(getconnections(handle.Touched)) do
+                        if connection.Disable then connection:Disable() end
+                    end
+                end)
+            end
+        else
+            if not handle.CanTouch then handle.CanTouch = true end
+        end
     end
     local function attack(player)
         if not validTarget(player) then return false end
-        if not config.knifeDisableStab and stabAt(player) then return true end
-        return throwAt(player)
+        return stabAt(player)
     end
     local function killSheriff(silent)
         if not equippedKnife() then
@@ -2164,7 +2207,7 @@ task.defer(function()
         end
         local target = sheriffTarget()
         local success = target and attack(target) or false
-        if not silent then notify(success and ("Knife: " .. target.Name) or "Sheriff not found / knife not ready", 3) end
+        if not silent then notify(success and ("Stab: " .. target.Name) or "Sheriff not found / knife not ready", 3) end
         return success
     end
     local function killEveryone(silent)
@@ -2176,7 +2219,7 @@ task.defer(function()
         for _, player in ipairs(getPlayers()) do
             if validTarget(player) and attack(player) then count += 1 end
         end
-        if not silent then notify(count > 0 and ("Knife sent to " .. tostring(count) .. " target(s)") or "Knife: no valid target", 3) end
+        if not silent then notify(count > 0 and ("Stabbed " .. tostring(count) .. " target(s)") or "Stab: no valid target", 3) end
         return count
     end
     local function killSelected(silent)
@@ -2190,7 +2233,7 @@ task.defer(function()
             return false
         end
         local success = attack(target)
-        if not silent then notify(success and ("Knife: " .. target.Name) or "Knife: wait / failed", 3) end
+        if not silent then notify(success and ("Stab: " .. target.Name) or "Stab: wait / failed", 3) end
         return success
     end
     local function armPartPairs(character)
@@ -2311,6 +2354,7 @@ task.defer(function()
     end
     function runtime:Refresh()
         refreshDualEffect()
+        enforceDisableStab()
         if config.knifeSheriffBind then createBind() else destroyBind() end
         updateBindShape()
     end
@@ -2365,6 +2409,7 @@ task.defer(function()
     runtime.connections[#runtime.connections + 1] = RunService.Heartbeat:Connect(function()
         if runtime.stopped then return end
         refreshDualEffect()
+        enforceDisableStab()
         if config.knifeAutoKillEveryone then killEveryone(true)
         elseif config.knifeAutoKillSheriff then killSheriff(true) end
     end)
@@ -6700,7 +6745,9 @@ do
     end
     combatKnife:AddToggle("Disable Stab", function(v)
         config.knifeDisableStab = v == true
-        if config.knifeDisableStab then installHook() end
+        installHook()
+        local runtime = getgenv().__NoirKnifeUtilityRuntime
+        if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
     end)
     combatKnife:AddToggle("Instant Throw", function(v)
         config.knifeInstantThrow = v == true
