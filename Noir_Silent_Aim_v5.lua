@@ -726,7 +726,15 @@ function host.CreateTab()
                 callback(state)
                 if persist ~= false then NoirPersistence.data.toggles[storagePrefix .. label] = state; NoirPersistence.Save() end
             end
-            pill.MouseButton1Click:Connect(function() set(not state, true) end)
+            local lastClick = 0
+            local function toggleClick()
+                local now = os.clock()
+                if now - lastClick < .18 then return end
+                lastClick = now
+                set(not state, true)
+            end
+            pill.MouseButton1Click:Connect(toggleClick)
+            pill.Activated:Connect(toggleClick)
             set(state, false)
             return function(v) set(v == nil and not state or v, true) end
         end
@@ -736,7 +744,15 @@ function host.CreateTab()
             corner(b, 12); stroke(b, C.border, .5)
             b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(48,52,56) }):Play() end)
             b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn }):Play() end)
-            b.MouseButton1Click:Connect(callback)
+            local lastClick = 0
+            local function fire()
+                local now = os.clock()
+                if now - lastClick < .18 then return end
+                lastClick = now
+                callback()
+            end
+            b.MouseButton1Click:Connect(fire)
+            b.Activated:Connect(fire)
             return b
         end
         function api:AddSlider(label, min, max, default, callback)
@@ -809,9 +825,18 @@ function host.CreateTab()
                     local item = New("TextButton", { Parent = popup, Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, Text = tostring(v),
                         TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, ZIndex = 51 })
                     item.MouseButton1Click:Connect(function() set(v); close() end)
+                    item.Activated:Connect(function() set(v); close() end)
                 end
             end
-            b.MouseButton1Click:Connect(function() if popup then close() else open() end end)
+            local lastOpen = 0
+            local function togglePopup()
+                local now = os.clock()
+                if now - lastOpen < .18 then return end
+                lastOpen = now
+                if popup then close() else open() end
+            end
+            b.MouseButton1Click:Connect(togglePopup)
+            b.Activated:Connect(togglePopup)
             local ctl = {}
             function ctl:SetValue(v) set(v) end
             function ctl:Select(v) set(v) end
@@ -1851,6 +1876,19 @@ function redirect(remote, args)
     redirected = redirected + 1
 end
 
+local function swallowKnifeRemote(self)
+    if typeof(self) ~= "Instance" or self.ClassName ~= "RemoteEvent" then return false end
+    local name = self.Name
+    if config.knifeDisableStab and name == "KnifeStabbed" then return true end
+    if (config.knifeInstantThrow or config.knifeFastThrow) and name == "KnifeThrown" then
+        local runtime
+        pcall(function() runtime = getgenv().__NoirKnifeUtilityRuntime end)
+        if type(runtime) == "table" and type(runtime.lastInstantThrow) == "number" and os.clock() - runtime.lastInstantThrow < .48 then
+            return true
+        end
+    end
+    return false
+end
 function installHook()
     if hooked then return true end
     local wrap = type(newcclosure) == "function" and newcclosure or function(callback) return callback end
@@ -1861,6 +1899,7 @@ function installHook()
             old = hookmetamethod(game, "__namecall", wrap(function(self, ...)
                 local method = getnamecallmethod()
                 if method == "FireServer" and typeof(self) == "Instance" and self.ClassName == "RemoteEvent" and not isOwnCall() then
+                    if swallowKnifeRemote(self) then return end
                     local args = table.pack(...)
                     pcall(redirect, self, args)
                     if type(setnamecallmethod) == "function" then setnamecallmethod(method) end
@@ -1881,7 +1920,10 @@ function installHook()
     local ok, err = pcall(function()
         original = hookfunction(probe.FireServer, wrap(function(self, ...)
             local args = table.pack(...)
-            if typeof(self) == "Instance" and self.ClassName == "RemoteEvent" and not isOwnCall() then pcall(redirect, self, args) end
+            if typeof(self) == "Instance" and self.ClassName == "RemoteEvent" and not isOwnCall() then
+                if swallowKnifeRemote(self) then return end
+                pcall(redirect, self, args)
+            end
             return original(self, table.unpack(args, 1, args.n))
         end))
     end)
@@ -2030,7 +2072,7 @@ task.defer(function()
     local runtime = { stopped = false, connections = {}, bindConnections = {}, gui = nil, button = nil,
         dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
         dualOriginalC0 = nil, dualOriginalTransform = nil, ghostModel = nil, ghostParts = {}, hiddenParts = {}, dualTorso = nil,
-        poseBind = "NoirKnifeDualArmPose", nextAction = 0 }
+        poseBind = "NoirKnifeDualArmPose", nextAction = 0, lastInstantThrow = 0 }
     local function connect(signal, callback)
         local connection = signal:Connect(callback)
         runtime.connections[#runtime.connections + 1] = connection
@@ -2067,18 +2109,29 @@ task.defer(function()
         end
         return nil
     end
+    local function throwCooldown()
+        if config.knifeInstantThrow then return .05 end
+        if config.knifeFastThrow then return .12 end
+        return .38
+    end
     local function throwAt(player)
         local tool, part = equippedKnife(), getAimPart(player)
         local handle = tool and tool:FindFirstChild("Handle", true)
         local remote = tool and knifeThrowRemote(tool)
-        if not tool or not part or not handle or not handle:IsA("BasePart") or not remote then return false end
+        if not tool then return false, "equip" end
+        if not part or not handle or not handle:IsA("BasePart") or not remote then return false end
         local now = os.clock()
-        local cooldown = config.knifeInstantThrow and .055 or config.knifeFastThrow and .14 or .42
         if now < runtime.nextAction then return false end
-        runtime.nextAction = now + cooldown
-        local origin, aim = handle.Position, calculateKnifeAim(part, handle.Position)
-        local ok = pcall(function() remote:FireServer(CFrame.lookAt(origin, aim), CFrame.new(aim)) end)
-        return ok
+        runtime.nextAction = now + throwCooldown()
+        local origin = handle.Position
+        local aim = calculateKnifeAim(part, origin)
+        local look = CFrame.lookAt(origin, aim)
+        local hit = CFrame.new(aim)
+        local ok = pcall(function() remote:FireServer(look, hit) end)
+        if not ok then ok = pcall(function() remote:FireServer(hit) end) end
+        if not ok then ok = pcall(function() remote:FireServer(aim) end) end
+        if ok then runtime.lastInstantThrow = now end
+        return ok == true
     end
     local function stabAt(player)
         if config.knifeDisableStab then return false end
@@ -2101,38 +2154,44 @@ task.defer(function()
     end
     local function attack(player)
         if not validTarget(player) then return false end
-        -- A nearby target is handled with the knife's normal touch/stab route; farther targets
-        -- are sent through the regular KnifeThrown remote only when Fast/Instant Throw is enabled.
-        if stabAt(player) then return true end
-        if config.knifeInstantThrow or config.knifeFastThrow then return throwAt(player) end
-        return false
+        if not config.knifeDisableStab and stabAt(player) then return true end
+        return throwAt(player)
     end
     local function killSheriff(silent)
+        if not equippedKnife() then
+            if not silent then notify("Equip the Knife first", 3) end
+            return false
+        end
         local target = sheriffTarget()
         local success = target and attack(target) or false
-        if not silent then notify(success and ("Knife action: " .. target.Name) or "Knife action: Sheriff not available or out of range", 3) end
+        if not silent then notify(success and ("Knife: " .. target.Name) or "Sheriff not found / knife not ready", 3) end
         return success
     end
     local function killEveryone(silent)
+        if not equippedKnife() then
+            if not silent then notify("Equip the Knife first", 3) end
+            return 0
+        end
         local count = 0
         for _, player in ipairs(getPlayers()) do
-            if validTarget(player) and stabAt(player) then count += 1 end
+            if validTarget(player) and attack(player) then count += 1 end
         end
-        -- A thrown knife has one trajectory: never fire multiple conflicting ranged remotes.
-        if count == 0 and (config.knifeInstantThrow or config.knifeFastThrow) then
-            local chosen, distance = nil, math.huge
-            local ownRoot = localRoot()
-            for _, player in ipairs(getPlayers()) do
-                local root = rootFor(player)
-                if validTarget(player) and root then
-                    local d = ownRoot and (root.Position - ownRoot.Position).Magnitude or 0
-                    if d < distance then chosen, distance = player, d end
-                end
-            end
-            if chosen and throwAt(chosen) then count = 1 end
-        end
-        if not silent then notify(count > 0 and ("Knife action sent to " .. tostring(count) .. " target(s)") or "Knife action: no valid target", 3) end
+        if not silent then notify(count > 0 and ("Knife sent to " .. tostring(count) .. " target(s)") or "Knife: no valid target", 3) end
         return count
+    end
+    local function killSelected(silent)
+        if not equippedKnife() then
+            if not silent then notify("Equip the Knife first", 3) end
+            return false
+        end
+        local target = killPlayerByName()
+        if not target then
+            if not silent then notify("Select a player in Kill Player", 3) end
+            return false
+        end
+        local success = attack(target)
+        if not silent then notify(success and ("Knife: " .. target.Name) or "Knife: wait / failed", 3) end
+        return success
     end
     local function armPartPairs(character)
         local pairs = {}
@@ -2217,7 +2276,14 @@ task.defer(function()
         local pressScale = New("UIScale", { Parent = button, Scale = 1 })
         runtime.gui, runtime.button = gui, button
         updateBindShape()
-        local dragging, moved, start, origin, dragInput = false, false, nil, nil, nil
+        local dragging, moved, start, origin, dragInput, lastBind = false, false, nil, nil, nil, 0
+        local function fireBind()
+            if moved then return end
+            local now = os.clock()
+            if now - lastBind < .25 then return end
+            lastBind = now
+            killSheriff(false)
+        end
         runtime.bindConnections[#runtime.bindConnections + 1] = RunService.RenderStepped:Connect(function() if outerGradient.Parent then outerGradient.Rotation = (outerGradient.Rotation + 1) % 360 end end)
         runtime.bindConnections[#runtime.bindConnections + 1] = button.InputBegan:Connect(function(input)
             if not isPrimaryPress(input) then return end
@@ -2237,9 +2303,11 @@ task.defer(function()
             if not dragging or not isPrimaryPress(input) then return end
             dragging = false
             TweenService:Create(pressScale, TweenInfo.new(.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
-            if moved then NoirPersistence.SetPosition("knife_sheriff_bind_v1", button.Position) end
+            if moved then NoirPersistence.SetPosition("knife_sheriff_bind_v1", button.Position) return end
+            fireBind()
         end)
-        runtime.bindConnections[#runtime.bindConnections + 1] = button.Activated:Connect(function() if not moved then killSheriff(false) end end)
+        runtime.bindConnections[#runtime.bindConnections + 1] = button.Activated:Connect(fireBind)
+        runtime.bindConnections[#runtime.bindConnections + 1] = button.MouseButton1Click:Connect(fireBind)
     end
     function runtime:Refresh()
         refreshDualEffect()
@@ -2248,6 +2316,47 @@ task.defer(function()
     end
     function runtime:KillSheriff() return killSheriff(false) end
     function runtime:KillEveryone() return killEveryone(false) end
+    function runtime:KillSelected() return killSelected(false) end
+    local function nearestTarget()
+        local chosen, distance = nil, math.huge
+        local ownRoot = localRoot()
+        for _, player in ipairs(getPlayers()) do
+            local root = rootFor(player)
+            if validTarget(player) and root then
+                local d = ownRoot and (root.Position - ownRoot.Position).Magnitude or 0
+                if d < distance then chosen, distance = player, d end
+            end
+        end
+        return chosen
+    end
+    local function onKnifeActivated()
+        if not (config.knifeInstantThrow or config.knifeFastThrow) then return end
+        local player = knifeTargetPlayer() or nearestTarget()
+        if player then throwAt(player) end
+    end
+    local boundTools = {}
+    local function bindKnifeTool(tool)
+        if not tool or not tool:IsA("Tool") or tool.Name ~= "Knife" or boundTools[tool] then return end
+        boundTools[tool] = true
+        connect(tool.Activated, onKnifeActivated)
+    end
+    local function watchCharacter(character)
+        if not character then return end
+        local knife = character:FindFirstChild("Knife")
+        if knife then bindKnifeTool(knife) end
+        connect(character.ChildAdded, function(child)
+            if child.Name == "Knife" then bindKnifeTool(child) end
+        end)
+    end
+    if LocalPlayer.Character then watchCharacter(LocalPlayer.Character) end
+    connect(LocalPlayer.CharacterAdded, watchCharacter)
+    connect(UIS.InputBegan, function(input, processed)
+        if processed then return end
+        if not (config.knifeInstantThrow or config.knifeFastThrow) then return end
+        if not equippedKnife() then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        onKnifeActivated()
+    end)
     pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
     RunService:BindToRenderStep(runtime.poseBind, Enum.RenderPriority.Last.Value, function()
         if runtime.stopped or not config.knifeDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
@@ -6583,21 +6692,29 @@ do
         local runtime = getgenv().__NoirKnifeUtilityRuntime
         if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
     end
-    combatKnife:AddToggle("Disable Stab", function(v) config.knifeDisableStab = v == true end)
-    combatKnife:AddToggle("Instant Throw", function(v) config.knifeInstantThrow = v == true end)
-    combatKnife:AddToggle("Fast Throw", function(v) config.knifeFastThrow = v == true end)
+    local function knifeRuntimeCall(method)
+        local runtime = getgenv().__NoirKnifeUtilityRuntime
+        if type(runtime) == "table" and type(runtime[method]) == "function" then return runtime[method](runtime) end
+        notify("Knife utilities are starting", 2)
+        return nil
+    end
+    combatKnife:AddToggle("Disable Stab", function(v)
+        config.knifeDisableStab = v == true
+        if config.knifeDisableStab then installHook() end
+    end)
+    combatKnife:AddToggle("Instant Throw", function(v)
+        config.knifeInstantThrow = v == true
+        if config.knifeInstantThrow then installHook() end
+    end)
+    combatKnife:AddToggle("Fast Throw", function(v)
+        config.knifeFastThrow = v == true
+        if config.knifeFastThrow then installHook() end
+    end)
     combatKnife:AddToggle("Auto Kill Everyone", function(v) config.knifeAutoKillEveryone = v == true end)
     combatKnife:AddToggle("Auto Kill Sheriff", function(v) config.knifeAutoKillSheriff = v == true end)
-    combatKnife:AddButton("Kill Everyone", function()
-        local runtime = getgenv().__NoirKnifeUtilityRuntime
-        if type(runtime) == "table" and type(runtime.KillEveryone) == "function" then runtime:KillEveryone() else notify("Knife utilities are starting", 2) end
-    end)
-    combatKnife:AddButton("Kill Sheriff", function()
-        local runtime = getgenv().__NoirKnifeUtilityRuntime
-        if type(runtime) == "table" and type(runtime.KillSheriff) == "function" then runtime:KillSheriff() else notify("Knife utilities are starting", 2) end
-    end)
+    combatKnife:AddButton("Kill Everyone", function() knifeRuntimeCall("KillEveryone") end)
+    combatKnife:AddButton("Kill Sheriff", function() knifeRuntimeCall("KillSheriff") end)
     combatKnife:AddToggle("Enable Kill Sheriff Bindable Button", function(v) config.knifeSheriffBind = v == true; refreshKnifeUtilities() end)
-    combatKnife:AddDropdown("Kill Sheriff Bindable Shape Type", { "Circle", "Square" }, function(v) config.knifeSheriffBindShape = v == "Square" and "Square" or "Circle"; refreshKnifeUtilities() end)
     local function knifePlayerChoices()
         local values = { "N/A" }
         for _, player in ipairs(getPlayers()) do if player ~= LocalPlayer then values[#values + 1] = player.Name end end
@@ -6605,7 +6722,15 @@ do
         return values
     end
     local selectedKnifePlayer = combatKnife:AddDropdown("Kill Player", knifePlayerChoices(), function(v) config.knifeKillPlayer = tostring(v or "N/A") end)
+    combatKnife:AddButton("Kill Player", function() knifeRuntimeCall("KillSelected") end)
     combatKnife:AddButton("Refresh Kill Player List", function() selectedKnifePlayer:Refresh(knifePlayerChoices(), config.knifeKillPlayer) end)
+    local function refreshKnifePlayerList()
+        if selectedKnifePlayer and selectedKnifePlayer.Refresh then
+            selectedKnifePlayer:Refresh(knifePlayerChoices(), config.knifeKillPlayer)
+        end
+    end
+    Players.PlayerAdded:Connect(function() task.delay(.15, refreshKnifePlayerList) end)
+    Players.PlayerRemoving:Connect(function() task.delay(.15, refreshKnifePlayerList) end)
 
     local function addPrediction(section,profile,prefix)
         local function addToggle(key,label)
