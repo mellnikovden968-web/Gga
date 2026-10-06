@@ -1749,13 +1749,30 @@ end
 local function piercerShotOrigin(origin, aim, part, enabled)
     if not enabled or not origin or not aim or not part then return origin end
     local direction = aim - origin
-    if direction.Magnitude <= 0.01 then return origin end
+    local distance = direction.Magnitude
+    if distance <= 0.05 then return origin end
+    local dir = direction.Unit
     local character = LocalPlayer.Character
-    wallCheckParams.FilterDescendantsInstances = character and { character } or {}
-    local result = Workspace:Raycast(origin, direction, wallCheckParams)
-    if not result or result.Instance:IsDescendantOf(part.Parent) then return origin end
-    local spacing = math.clamp(part.Size.Magnitude * 0.75, 2.5, 4.5)
-    return aim - direction.Unit * spacing
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local filter = { character, part.Parent }
+    local gun = (character and character:FindFirstChild("Gun")) or (backpack and backpack:FindFirstChild("Gun"))
+    if gun then filter[#filter + 1] = gun end
+    for _, player in ipairs(getPlayers()) do
+        if player.Character and player.Character ~= character then filter[#filter + 1] = player.Character end
+    end
+    wallCheckParams.FilterDescendantsInstances = filter
+    local blocked = Workspace:Raycast(origin, dir * distance, wallCheckParams)
+    if not blocked then return origin end
+    local inner = Workspace:Raycast(aim, -dir * distance, wallCheckParams)
+    local candidate = inner and (inner.Position + dir * 0.9) or (aim - dir * 0.9)
+    if (aim - candidate).Magnitude > 0.02 and not Workspace:Raycast(candidate, aim - candidate, wallCheckParams) then
+        return candidate
+    end
+    candidate = aim - dir * 0.5
+    if (aim - candidate).Magnitude > 0.02 and not Workspace:Raycast(candidate, aim - candidate, wallCheckParams) then
+        return candidate
+    end
+    return aim - dir * 0.4
 end
 
 function knifeRemote(remote, args)
@@ -1878,15 +1895,16 @@ end
 
 local function swallowKnifeRemote(self)
     if typeof(self) ~= "Instance" then return false end
-    if not (self.ClassName == "RemoteEvent" or self.ClassName == "RemoteFunction" or self.ClassName == "BindableEvent") then return false end
-    local name = self.Name
+    local className = self.ClassName
+    if className ~= "RemoteEvent" and className ~= "RemoteFunction" and className ~= "BindableEvent" then return false end
+    local name = string.lower(tostring(self.Name or ""))
     local runtime
     pcall(function() runtime = getgenv().__NoirKnifeUtilityRuntime end)
-    if config.knifeDisableStab and (name == "KnifeStabbed" or name == "KnifeStab" or name == "Stab") then
+    if config.knifeDisableStab and (name == "handletouched" or name == "knifestabbed" or name == "knifestab" or name == "stab" or string.find(name, "stab", 1, true)) then
         if type(runtime) == "table" and runtime.auraCall then return false end
         return true
     end
-    if (config.knifeInstantThrow or config.knifeFastThrow) and name == "KnifeThrown" then
+    if (config.knifeInstantThrow or config.knifeFastThrow) and name == "knifethrown" then
         if type(runtime) == "table" and type(runtime.lastInstantThrow) == "number" and os.clock() - runtime.lastInstantThrow < .48 then
             return true
         end
@@ -1902,9 +1920,10 @@ function installHook()
         local ok, err = pcall(function()
             old = hookmetamethod(game, "__namecall", wrap(function(self, ...)
                 local method = getnamecallmethod()
-                if (method == "FireServer" or method == "InvokeServer" or method == "Fire") and typeof(self) == "Instance" then
+                local methodLower = string.lower(tostring(method or ""))
+                if (methodLower == "fireserver" or methodLower == "invokeserver" or methodLower == "fire") and typeof(self) == "Instance" then
                     if swallowKnifeRemote(self) then return end
-                    if self.ClassName == "RemoteEvent" and method == "FireServer" and not isOwnCall() then
+                    if self.ClassName == "RemoteEvent" and methodLower == "fireserver" and not isOwnCall() then
                         local args = table.pack(...)
                         pcall(redirect, self, args)
                         if type(setnamecallmethod) == "function" then setnamecallmethod(method) end
@@ -2013,10 +2032,14 @@ do
         touchPair(blade, part)
         if handle and handle:IsA("BasePart") and handle ~= blade then touchPair(handle, part) end
         if not tool then return end
+        local runtime
+        pcall(function() runtime = getgenv().__NoirKnifeUtilityRuntime end)
+        if type(runtime) == "table" then runtime.auraCall = true end
         local touched = tool:FindFirstChild("HandleTouched", true)
         if touched and touched:IsA("RemoteEvent") then pcall(touched.FireServer, touched, part) end
         local stabbed = tool:FindFirstChild("KnifeStabbed", true)
         if not config.knifeDisableStab and stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
+        if type(runtime) == "table" then runtime.auraCall = false end
     end
 
     local function stopStep()
@@ -2084,9 +2107,33 @@ task.defer(function()
         runtime.connections[#runtime.connections + 1] = connection
         return connection
     end
+    local function findKnifeTool(parent)
+        if not parent then return nil end
+        local named = parent:FindFirstChild("Knife")
+        if named and named:IsA("Tool") then return named end
+        for _, child in ipairs(parent:GetChildren()) do
+            if child:IsA("Tool") and (child:FindFirstChild("KnifeThrown", true) or child:FindFirstChild("KnifeStabbed", true) or child:FindFirstChild("HandleTouched", true)) then
+                return child
+            end
+        end
+        return nil
+    end
     local function equippedKnife()
-        local character = LocalPlayer.Character
-        return character and character:FindFirstChild("Knife") or nil
+        return findKnifeTool(LocalPlayer.Character)
+    end
+    local function ownedKnife()
+        return equippedKnife() or findKnifeTool(LocalPlayer:FindFirstChildOfClass("Backpack"))
+    end
+    local function muteTouched(part)
+        if type(getconnections) ~= "function" then return end
+        pcall(function()
+            for _, connection in ipairs(getconnections(part.Touched)) do
+                pcall(function()
+                    if connection.Disable then connection:Disable()
+                    elseif connection.Disconnect then connection:Disconnect() end
+                end)
+            end
+        end)
     end
     local function limbFor(character, side)
         return character and (character:FindFirstChild(side .. "Hand") or character:FindFirstChild(side .. " Arm") or character:FindFirstChild(side .. "LowerArm")) or nil
@@ -2178,22 +2225,27 @@ task.defer(function()
         return true
     end
     local function enforceDisableStab()
-        local tool = equippedKnife()
-        local handle = tool and tool:FindFirstChild("Handle", true)
-        if not handle or not handle:IsA("BasePart") then return end
+        local tool = ownedKnife()
+        if not tool then return end
         if config.knifeDisableStab then
-            if handle.CanTouch then handle.CanTouch = false end
-            local transmitter = handle:FindFirstChildOfClass("TouchTransmitter")
-            if transmitter then transmitter:Destroy() end
-            if type(getconnections) == "function" then
-                pcall(function()
-                    for _, connection in ipairs(getconnections(handle.Touched)) do
-                        if connection.Disable then connection:Disable() end
-                    end
-                end)
+            for _, object in ipairs(tool:GetDescendants()) do
+                if object:IsA("BasePart") then
+                    if object.CanTouch then object.CanTouch = false end
+                    muteTouched(object)
+                elseif object.ClassName == "TouchTransmitter" then
+                    object:Destroy()
+                end
+            end
+            if tool:IsA("BasePart") then
+                tool.CanTouch = false
+                muteTouched(tool)
             end
         else
-            if not handle.CanTouch then handle.CanTouch = true end
+            for _, object in ipairs(tool:GetDescendants()) do
+                if object:IsA("BasePart") and object.Name == "Handle" then
+                    object.CanTouch = true
+                end
+            end
         end
     end
     local function attack(player)
@@ -2380,16 +2432,23 @@ task.defer(function()
     end
     local boundTools = {}
     local function bindKnifeTool(tool)
-        if not tool or not tool:IsA("Tool") or tool.Name ~= "Knife" or boundTools[tool] then return end
+        if not tool or not tool:IsA("Tool") or boundTools[tool] then return end
+        if tool.Name ~= "Knife" and not tool:FindFirstChild("KnifeThrown", true) then return end
         boundTools[tool] = true
         connect(tool.Activated, onKnifeActivated)
+        connect(tool.DescendantAdded, function(child)
+            if not config.knifeDisableStab then return end
+            if child.ClassName == "TouchTransmitter" then child:Destroy()
+            elseif child:IsA("BasePart") then child.CanTouch = false; muteTouched(child) end
+        end)
+        enforceDisableStab()
     end
     local function watchCharacter(character)
         if not character then return end
-        local knife = character:FindFirstChild("Knife")
+        local knife = findKnifeTool(character)
         if knife then bindKnifeTool(knife) end
         connect(character.ChildAdded, function(child)
-            if child.Name == "Knife" then bindKnifeTool(child) end
+            if child:IsA("Tool") then bindKnifeTool(child) end
         end)
     end
     if LocalPlayer.Character then watchCharacter(LocalPlayer.Character) end
@@ -6706,8 +6765,8 @@ do
     combatAim:AddToggle("Apply Prediction On Gun Trigger Bot", function(v) config.gunTriggerBotPrediction = v == true end)
 
     local combatGun=tab:AddSection("GUN", "Gun targeting controls")
-    combatGun:AddToggle("Piercer Bullet", setPiercerBullet)
-    combatGun:AddLabel("Sends a target-side Gun ray when a wall blocks the selected target.")
+        combatGun:AddToggle("Piercer Bullet", setPiercerBullet)
+    combatGun:AddLabel("If a wall is between you and the target, the shot starts on their side of the wall. Turn this on with Silent Aim.")
 
     local combatKnife=tab:AddSection("KNIFE SILENT AIM", "Nearest player or Sheriff-only targeting")
     combatKnife:AddToggle("Knife Silent Aim", function(v)
