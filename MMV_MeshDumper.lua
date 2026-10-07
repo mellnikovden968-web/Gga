@@ -1,195 +1,214 @@
--- Noir MMV Mesh Dumper v2
--- Run in Murder Mystery V with INVENTORY OPEN.
--- Collects only Tools / weapon displays / inventory viewports — not map eggs.
+-- Noir MMV Smart Dump
+-- Run in MMV. Does NOT click hats. Hunts the weapon dictionary in memory.
+-- Writes: mmv_meshes.lua  +  mmv_debug.txt
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
-
-local SKIP = {
-    knifedisplay=true, gundisplay=true, display=true, handle=true, blade=true,
-    template=true, preview=true, camera=true, humanoid=true, part=true,
-    mesh=true, model=true, weapon=true, default=true, classic=true,
-    backpack=true, character=true, head=true, torso=true, humanoidrootpart=true,
-    leftfoot=true, rightfoot=true, lefthand=true, righthand=true,
-    leftlowerarm=true, rightlowerarm=true, leftupperarm=true, rightupperarm=true,
-    leftlowerleg=true, rightlowerleg=true, leftupperleg=true, rightupperleg=true,
-    uppertorso=true, lowertorso=true, meshpart=true, accessory=true,
-    workspace=true, replicatedstorage=true, lighting=true, coin=true,
-    coincontainer=true, lobby=true, sign=true, tree=true, rocks=true, leaves=true,
-    body=true, base=true, parts=true, models=true, pets=true, outfits=true,
-}
-
-local function junk(name)
-    if type(name) ~= "string" or #name < 2 or #name > 40 then return true end
-    local l = string.lower(name)
-    if SKIP[l] then return true end
-    if string.sub(l, 1, 10) == "accessory " then return true end
-    if string.find(l, "egg", 1, true) then return true end
-    if string.find(l, "wheel", 1, true) then return true end
-    if string.find(l, "meshes/", 1, true) then return true end
-    if string.find(l, " ", 1, true) and string.find(l, "hair", 1, true) then return true end
-    return false
-end
 
 local function notify(t)
     pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", { Title = "Noir MMV Dump v2", Text = tostring(t), Duration = 6 })
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Noir Smart Dump", Text = tostring(t), Duration = 7,
+        })
     end)
-    print("[Noir MMV]", t)
+    print("[Noir Smart]", t)
 end
 
-local function take(obj)
-    if not obj then return end
-    if obj:IsA("SpecialMesh") and obj.MeshId ~= "" then return obj.MeshId, obj.TextureId, obj.Scale end
-    if obj:IsA("MeshPart") and obj.MeshId ~= "" then return obj.MeshId, obj.TextureID, nil end
+local function raw(t, k)
+    local ok, v = pcall(rawget, t, k)
+    return ok and v or nil
 end
 
-local function extract(inst)
-    local m, t, s = take(inst)
-    if m then return m, t, s end
-    m, t, s = take(inst:FindFirstChildOfClass("SpecialMesh"))
-    if m then return m, t, s end
-    local h = inst:FindFirstChild("Handle")
-    if h then
-        m, t, s = take(h)
-        if m then return m, t, s end
-        m, t, s = take(h:FindFirstChildOfClass("SpecialMesh"))
-        if m then return m, t, s end
+local WEAPON_KEYS = { "Harvester", "Batwing", "Luger", "Seer", "Icebreaker", "Gingerscythe", "Alienbeam", "Candleflame", "Corrupt" }
+
+local function looksLikeWeaponDict(t)
+    if type(t) ~= "table" then return 0 end
+    local hits = 0
+    for _, k in ipairs(WEAPON_KEYS) do
+        local ok, v = pcall(function() return raw(t, k) or t[k] end)
+        if ok and v ~= nil then hits += 1 end
     end
-    pcall(function()
-        for _, d in ipairs(inst:GetDescendants()) do
-            m, t, s = take(d)
-            if m then return end
-        end
-    end)
-    return m, t, s
+    return hits
+end
+
+local function toAsset(v)
+    if type(v) == "number" and v > 1000 then return "rbxassetid://" .. tostring(v) end
+    if type(v) ~= "string" or v == "" then return "" end
+    if string.find(v, "rbxassetid://", 1, true) or string.find(v, "rbxasset://", 1, true) then return v end
+    local id = string.match(v, "(%d%d%d%d%d+)")
+    if id then return "rbxassetid://" .. id end
+    return ""
 end
 
 local db = {}
+local debugLines = { "=== NOIR SMART DUMP ===", "PlaceId=" .. tostring(game.PlaceId), "" }
 
-local function record(name, inst)
-    if junk(name) or not inst then return end
+local function add(name, mesh, tex, kind)
+    if type(name) ~= "string" or #name < 2 or #name > 42 then return end
+    local m = toAsset(mesh)
+    if m == "" then return end
     if db[name] then return end
-    local mesh, tex, scale = extract(inst)
-    if type(mesh) ~= "string" or mesh == "" then return end
+    db[name] = { mesh = m, tex = toAsset(tex), kind = kind or "Knife" }
+end
+
+local function harvestEntry(name, data)
+    if type(data) ~= "table" then return end
+    local mesh = raw(data, "MeshId") or raw(data, "MeshID") or raw(data, "meshId") or raw(data, "Mesh")
+    local tex = raw(data, "TextureId") or raw(data, "TextureID") or raw(data, "Texture")
+    local typ = tostring(raw(data, "ItemType") or raw(data, "Type") or "")
     local kind = "Knife"
-    local n = string.lower(name)
-    if string.find(n, "gun", 1, true) or string.find(n, "luger", 1, true) then kind = "Gun" end
-    db[name] = {
-        mesh = mesh, tex = tex or "",
-        sx = (scale and scale.X) or 1, sy = (scale and scale.Y) or 1, sz = (scale and scale.Z) or 1,
-        kind = kind,
-    }
-end
-
-local function useful(inst)
-    return inst and (inst:IsA("Tool") or inst:IsA("Accessory") or inst.Name == "Knife" or inst.Name == "Gun"
-        or inst.Name == "KnifeDisplay" or inst.Name == "GunDisplay"
-        or inst:IsA("Model") and inst:FindFirstChild("Handle"))
-end
-
-local function scan(root)
-    if not root then return end
-    pcall(function()
-        if useful(root) then
-            record(root.Name, root)
-            local a = root:GetAttribute("ItemName") or root:GetAttribute("SkinName")
-            if type(a) == "string" then record(a, root) end
+    if string.find(string.lower(typ), "gun", 1, true) then kind = "Gun" end
+    local n = name or raw(data, "ItemName") or raw(data, "Name")
+    add(n, mesh, tex, kind)
+    -- nested model instance
+    local model = raw(data, "Model") or raw(data, "Tool")
+    if typeof(model) == "Instance" then
+        local sm = model:FindFirstChildOfClass("SpecialMesh") or model:FindFirstChildWhichIsA("MeshPart", true)
+        if sm then
+            if sm:IsA("SpecialMesh") then add(n, sm.MeshId, sm.TextureId, kind)
+            else add(n, sm.MeshId, sm.TextureID, kind) end
         end
-        for _, inst in ipairs(root:GetDescendants()) do
-            if useful(inst) then
-                record(inst.Name, inst)
-                local a = inst:GetAttribute("ItemName") or inst:GetAttribute("SkinName")
-                if type(a) == "string" then record(a, inst) end
-            elseif inst:IsA("ViewportFrame") then
-                local label
-                local p = inst.Parent
-                if p then
-                    for _, ch in ipairs(p:GetDescendants()) do
-                        if (ch:IsA("TextLabel") or ch:IsA("TextButton")) and ch.Text ~= "" and not junk(ch.Text) then
-                            label = ch.Text
-                            break
-                        end
-                    end
-                end
-                if label then record(label, inst) end
+    end
+end
+
+local function harvestDict(t, label)
+    if type(t) ~= "table" then return 0 end
+    local before = 0
+    for _ in pairs(db) do before += 1 end
+    pcall(function()
+        for k, v in pairs(t) do
+            if type(k) == "string" and type(v) == "table" then
+                harvestEntry(k, v)
+            elseif type(v) == "table" then
+                harvestEntry(raw(v, "ItemName") or raw(v, "Name"), v)
             end
         end
     end)
+    local after = 0
+    for _ in pairs(db) do after += 1 end
+    local gained = after - before
+    if gained > 0 then
+        debugLines[#debugLines + 1] = string.format("DICT %s  +%d items", tostring(label), gained)
+    end
+    return gained
 end
 
-notify("Open inventory, dumping tools + viewports...")
-
-scan(ReplicatedStorage)
-scan(Lighting)
-scan(game:GetService("StarterPack"))
-if LocalPlayer then
-    scan(LocalPlayer:FindFirstChild("Backpack"))
-    scan(LocalPlayer.Character)
-    scan(LocalPlayer:FindFirstChild("PlayerGui"))
-end
-
--- Click inventory cards (name labels) and recapture equipped knife/gun
+-- 1) _G / shared
 pcall(function()
-    local gui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
-    if not gui then return end
-    local clicked = 0
-    for _, v in ipairs(gui:GetDescendants()) do
-        if (v:IsA("TextButton") or v:IsA("ImageButton") or v:IsA("TextLabel")) and not junk(v.Text) then
-            local btn = v
-            if not btn:IsA("GuiButton") then
-                btn = v.Parent
-                if btn and not btn:IsA("GuiButton") then btn = nil end
-            end
-            if btn and btn:IsA("GuiButton") then
-                pcall(function()
-                    if firesignal then
-                        firesignal(btn.MouseButton1Click)
-                        firesignal(btn.Activated)
+    if type(getrenv) ~= "function" then return end
+    local g = getrenv()._G
+    debugLines[#debugLines + 1] = "_G type=" .. type(g)
+    if type(g) == "table" then
+        local keys = {}
+        pcall(function()
+            for k in pairs(g) do keys[#keys + 1] = tostring(k) end
+        end)
+        table.sort(keys)
+        debugLines[#debugLines + 1] = "_G keys: " .. table.concat(keys, ", "):sub(1, 400)
+        harvestDict(g.Database, "_G.Database")
+        harvestDict(g.Database and g.Database.Item, "_G.Database.Item")
+        harvestDict(g.Items, "_G.Items")
+        harvestDict(g.Weapons, "_G.Weapons")
+        harvestDict(g.ItemData, "_G.ItemData")
+    end
+end)
+
+-- 2) ReplicatedStorage tree
+debugLines[#debugLines + 1] = ""
+debugLines[#debugLines + 1] = "--- ReplicatedStorage ---"
+pcall(function()
+    for _, ch in ipairs(ReplicatedStorage:GetChildren()) do
+        debugLines[#debugLines + 1] = ch.ClassName .. "  " .. ch.Name
+        harvestDict(nil, ch.Name)
+        if ch:IsA("Folder") or ch:IsA("Model") then
+            for _, sub in ipairs(ch:GetChildren()) do
+                if sub:IsA("Tool") or sub:IsA("Model") then
+                    local sm = sub:FindFirstChildOfClass("SpecialMesh", true) or sub:FindFirstChildWhichIsA("MeshPart", true)
+                    if sm then
+                        if sm:IsA("SpecialMesh") then add(sub.Name, sm.MeshId, sm.TextureId)
+                        else add(sub.Name, sm.MeshId, sm.TextureID) end
                     end
-                end)
-                clicked += 1
-                task.wait(0.08)
-                local char = LocalPlayer.Character
-                if char then
-                    local k = char:FindFirstChild("Knife") or char:FindFirstChild("KnifeDisplay")
-                    local g = char:FindFirstChild("Gun") or char:FindFirstChild("GunDisplay")
-                    if k then record(v.Text, k) end
-                    if g then record(v.Text, g) end
                 end
-                local bp = LocalPlayer:FindFirstChild("Backpack")
-                if bp then
-                    local k = bp:FindFirstChild("Knife")
-                    local g = bp:FindFirstChild("Gun")
-                    if k then record(v.Text, k) end
-                    if g then record(v.Text, g) end
+            end
+        end
+        if ch:IsA("ModuleScript") then
+            local n = string.lower(ch.Name)
+            if string.find(n, "item", 1, true) or string.find(n, "weapon", 1, true) or string.find(n, "data", 1, true) or n == "database" or string.find(n, "skin", 1, true) then
+                local ok, mod = pcall(require, ch)
+                debugLines[#debugLines + 1] = "require " .. ch.Name .. " ok=" .. tostring(ok) .. " type=" .. type(mod)
+                if ok then
+                    harvestDict(mod, "require " .. ch.Name)
+                    if type(mod) == "table" then
+                        harvestDict(mod.Item or mod.Items or mod.Weapons, "require " .. ch.Name .. ".Item")
+                    end
                 end
-                if clicked >= 250 then break end
-                if clicked % 20 == 0 then task.wait(0.15) end
             end
         end
     end
-    notify("Clicked " .. clicked .. " inventory buttons")
 end)
 
+-- 3) getgc dictionaries with known weapon names
+notify("Scanning memory...")
+local bestHits, bestTable = 0, nil
+pcall(function()
+    if type(getgc) ~= "function" then return end
+    local dumped = getgc(true)
+    local n = 0
+    for _, object in pairs(dumped) do
+        n += 1
+        if n > 100000 then break end
+        if type(object) == "table" then
+            local hits = looksLikeWeaponDict(object)
+            if hits > bestHits then
+                bestHits = hits
+                bestTable = object
+            end
+            if hits >= 2 then
+                harvestDict(object, "gc hits=" .. hits)
+            end
+            local typ = raw(object, "ItemType") or raw(object, "itemType")
+            if type(typ) == "string" then
+                harvestEntry(raw(object, "ItemName") or raw(object, "Name"), object)
+            end
+        end
+        if n % 4000 == 0 then task.wait() end
+    end
+    debugLines[#debugLines + 1] = "getgc scanned=" .. tostring(n) .. " bestMarkerHits=" .. tostring(bestHits)
+end)
+
+if bestTable then
+    harvestDict(bestTable, "bestMarkerDict")
+    local item = raw(bestTable, "Item") or raw(bestTable, "Items")
+    harvestDict(item, "bestMarkerDict.Item")
+end
+
+-- 4) serialize
 local names = {}
-for n in pairs(db) do names[#names + 1] = n end
+for k in pairs(db) do names[#names + 1] = k end
 table.sort(names)
+debugLines[#debugLines + 1] = ""
+debugLines[#debugLines + 1] = "WEAPON COUNT=" .. #names
+debugLines[#debugLines + 1] = "names: " .. table.concat(names, ", "):sub(1, 800)
+
 local lines = { "return {" }
 for _, name in ipairs(names) do
     local e = db[name]
     lines[#lines + 1] = string.format(
-        "    [%q] = { mesh = %q, tex = %q, sx = %s, sy = %s, sz = %s, kind = %q },",
-        name, e.mesh, e.tex or "", tostring(e.sx), tostring(e.sy), tostring(e.sz), e.kind
+        "    [%q] = { mesh = %q, tex = %q, sx = 1, sy = 1, sz = 1, kind = %q },",
+        name, e.mesh, e.tex or "", e.kind or "Knife"
     )
 end
 lines[#lines + 1] = "}"
 local source = table.concat(lines, "\n")
+local dbg = table.concat(debugLines, "\n")
+
 pcall(function() if writefile then writefile("mmv_meshes.lua", source) end end)
+pcall(function() if writefile then writefile("mmv_debug.txt", dbg) end end)
 pcall(function() if setclipboard then setclipboard(source) end end)
-notify("Weapons: " .. #names .. "  -> mmv_meshes.lua")
-print("===== NOIR MMV MESH DUMP v2 =====")
+
+print(dbg)
+print("===== MESHES =====")
 print(source)
-print("===== END =====")
+notify(string.format("Weapons in memory: %d  (send mmv_meshes.lua AND mmv_debug.txt)", #names))
