@@ -13202,11 +13202,11 @@ local MESH_DB = {
     ["Gingermint_G"] = { mesh = "rbxassetid://11866444071", tex = "rbxassetid://11866444253", sx = 0.0475529, sy = 0.0475529, sz = 0.0475529, kind = "Gun", name = "Gingermint", rarity = "Godly", itemid = 11872179646, mk = "MeshPart", grip = {5.19329e-07,-0.250001,0.700008,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0946884,-0.0992584,0.236683,0.991792,0.113654,0.0585769,-0.115783,0.60394,0.788575,0.0542479,-0.788884,0.612142} },
     ["Gingermint_K"] = { mesh = "rbxassetid://11837984324", tex = "rbxassetid://11837984504", sx = 0.0664162, sy = 0.0664162, sz = 0.0664162, kind = "Knife", name = "Cookiecane", rarity = "Godly", itemid = 11855306927, mk = "MeshPart", grip = {0.00698853,-1.25001,-0.0497513,0.997562,0,-0.0697919,0,1,0,0.0697919,0,0.997562}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Gingermint_KChroma"] = { mesh = "rbxassetid://11837984324", tex = "rbxassetid://11837984504", sx = 0.0686548, sy = 0.0686548, sz = 0.0686548, kind = "Knife", name = "Cookiecane", rarity = "Godly", itemid = 11873640255, mk = "SpecialMesh", grip = {0,-1.4,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["Gingerscope"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://15409041564", sx = 0.0841985, sy = 0.0841985, sz = 0.0841985, kind = "Gun", name = "Gingerscope", rarity = "Ancient", itemid = 15666469505, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 1, bg = 1, bb = 1, btex = "rbxassetid://15374653796", bw = 1 },
-    ["Gingerscope_Blue"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://100142423147247", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Blue Gingerscope", rarity = "Unique", itemid = 16964462231, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0, bg = 0.235294, bb = 1, btex = "rbxassetid://16221396385", bw = 1 },
-    ["Gingerscope_Bronze"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://93684911189915", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Bronze Gingerscope", rarity = "Unique", itemid = 16964465320, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.952407, bg = 0.398367, bb = 0, btex = "rbxassetid://16221396385", bw = 1 },
-    ["Gingerscope_Gold"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://75888854860786", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Gold Gingerscope", rarity = "Unique", itemid = 16964471890, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.96434, bg = 0.814771, bb = 0.0339513, btex = "rbxassetid://16221396385", bw = 1 },
-    ["Gingerscope_Silver"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://129527194826480", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Silver Gingerscope", rarity = "Unique", itemid = 16964468980, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.807843, bg = 0.984314, bb = 1, btex = "rbxassetid://106972878353658", bw = 0.5 },
+    ["Gingerscope"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://15409041564", sx = 0.0841985, sy = 0.0841985, sz = 0.0841985, kind = "Gun", name = "Gingerscope", rarity = "Ancient", itemid = 15666469505, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 1, bg = 1, bb = 1, btex = "rbxassetid://15374653796", bw = 1 },
+    ["Gingerscope_Blue"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://100142423147247", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Blue Gingerscope", rarity = "Unique", itemid = 16964462231, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0, bg = 0.235294, bb = 1, btex = "rbxassetid://16221396385", bw = 1 },
+    ["Gingerscope_Bronze"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://93684911189915", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Bronze Gingerscope", rarity = "Unique", itemid = 16964465320, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.952407, bg = 0.398367, bb = 0, btex = "rbxassetid://16221396385", bw = 1 },
+    ["Gingerscope_Gold"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://75888854860786", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Gold Gingerscope", rarity = "Unique", itemid = 16964471890, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.96434, bg = 0.814771, bb = 0.0339513, btex = "rbxassetid://16221396385", bw = 1 },
+    ["Gingerscope_Silver"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://129527194826480", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Silver Gingerscope", rarity = "Unique", itemid = 16964468980, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.807843, bg = 0.984314, bb = 1, btex = "rbxassetid://106972878353658", bw = 0.5 },
     ["Gingerscythe_Ancient"] = { mesh = "rbxassetid://15395668244", tex = "rbxassetid://15409195246", sx = 0.0637743, sy = 0.0637743, sz = 0.0637743, kind = "Knife", name = "Gingerscythe", rarity = "Ancient", itemid = 15683188776, mk = "MeshPart", grip = {7.62939e-06,-0.187927,1.0434,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Gingerscythe_Blue"] = { mesh = "rbxassetid://15397282571", tex = "rbxassetid://103762316034631", sx = 0.0696348, sy = 0.0696348, sz = 0.0696348, kind = "Knife", name = "Blue Gingerscythe", rarity = "Unique", itemid = 16964448042, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Gingerscythe_Bronze"] = { mesh = "rbxassetid://15397282571", tex = "rbxassetid://94302913285936", sx = 0.0696348, sy = 0.0696348, sz = 0.0696348, kind = "Knife", name = "Bronze Gingerscythe", rarity = "Unique", itemid = 16964449392, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -14003,30 +14003,35 @@ local function setIconTree(obj, img)
 end
 
 local function cacheHudIcons()
+    if hudIconCache.Equip and hudIconCache.Equip.Parent then return end
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
     pcall(function()
-        for _, d in ipairs(pg:GetDescendants()) do
-            if d:IsA("TextLabel") or d:IsA("TextButton") then
-                local t = string.lower(string.gsub(d.Text or "", "%s+", ""))
-                if t == "equip" or t == "throw" then
-                    local imgObj = d
-                    while imgObj and not (imgObj:IsA("ImageButton") or imgObj:IsA("ImageLabel")) do
-                        imgObj = imgObj.Parent
-                    end
-                    if not imgObj then
-                        local p = d.Parent
-                        if p then
-                            for _, s in ipairs(p:GetChildren()) do
-                                if s:IsA("ImageButton") or s:IsA("ImageLabel") then
-                                    imgObj = s
-                                    break
-                                end
-                            end
+        local roots = {}
+        for _, n in ipairs({ "MainGUI", "MainGui", "HUD", "GameGUI" }) do
+            local g = pg:FindFirstChild(n)
+            if g then roots[#roots + 1] = g end
+        end
+        if #roots == 0 then
+            for _, g in ipairs(pg:GetChildren()) do
+                if g:IsA("ScreenGui") and g.Name ~= "SkinsContent" then
+                    roots[#roots + 1] = g
+                    if #roots >= 2 then break end
+                end
+            end
+        end
+        for _, root in ipairs(roots) do
+            for _, d in ipairs(root:GetDescendants()) do
+                if d:IsA("TextLabel") or d:IsA("TextButton") then
+                    local t = string.lower(string.gsub(d.Text or "", "%s+", ""))
+                    if t == "equip" or t == "throw" then
+                        local imgObj = d
+                        while imgObj and not (imgObj:IsA("ImageButton") or imgObj:IsA("ImageLabel")) do
+                            imgObj = imgObj.Parent
                         end
-                    end
-                    if imgObj and not isNoirGui(imgObj) then
-                        if t == "equip" then hudIconCache.Equip = imgObj else hudIconCache.Throw = imgObj end
+                        if imgObj and not isNoirGui(imgObj) then
+                            if t == "equip" then hudIconCache.Equip = imgObj else hudIconCache.Throw = imgObj end
+                        end
                     end
                 end
             end
@@ -14071,22 +14076,6 @@ local function applyIcons(kind, skinName)
     pcall(function()
         if kind == "Gun" then setIconTree(hudIconCache.Equip, img) end
         if kind == "Knife" then setIconTree(hudIconCache.Throw, img) end
-        local pg = LocalPlayer:FindFirstChild("PlayerGui")
-        if not pg then return end
-        local prev = lastHud[kind]
-        local marks = DEFAULT_MARK[kind]
-        for _, d in ipairs(pg:GetDescendants()) do
-            if (d:IsA("ImageButton") or d:IsA("ImageLabel")) and not isNoirGui(d) then
-                local cur = d.Image
-                local hit = (prev ~= "" and cur == prev)
-                if not hit and type(cur) == "string" then
-                    for i = 1, #marks do
-                        if string.find(cur, marks[i], 1, true) then hit = true break end
-                    end
-                end
-                if hit then d.Image = img end
-            end
-        end
     end)
     lastHud[kind] = img
 end
@@ -14142,78 +14131,63 @@ local function applyFX(kind, db)
     end)
 end
 
-local animCache = {}
 local noirAnimTrack
-local function applyHoldAnim(kind, skinName)
-    if kind ~= "Gun" or type(skinName) ~= "string" then return end
+local function applyHoldAnim(kind, skinName, db)
+    if kind ~= "Gun" or type(db) ~= "table" or type(db.anim) ~= "string" then
+        pcall(function()
+            if noirAnimTrack then noirAnimTrack:Stop(0.1) noirAnimTrack = nil end
+        end)
+        return
+    end
     pcall(function()
-        if noirAnimTrack then
-            noirAnimTrack:Stop(0.08)
-            noirAnimTrack = nil
-        end
-        local cached = animCache[skinName]
-        if cached == false then return end
-        local found = cached
-        if type(found) ~= "string" then
-            found = nil
-            local needle = string.lower(skinName)
-            local function scan(root)
-                if not root or found then return end
-                for _, d in ipairs(root:GetDescendants()) do
-                    if d:IsA("Animation") then
-                        local n = string.lower(d.Name .. tostring(d.Parent and d.Parent.Name or ""))
-                        if string.find(n, needle, 1, true) then
-                            found = d.AnimationId
-                            return
-                        end
-                    end
-                    if found then return end
-                end
-            end
-            scan(ReplicatedStorage)
-            if not found then
-                local g = getrenv and getrenv()._G
-                local item = g and g.Database and g.Database.Item
-                item = type(item) == "table" and (item[skinName] or (MESH_DB[skinName] and item[MESH_DB[skinName].name]))
-                if type(item) == "table" then
-                    for _, key in ipairs({ "IdleAnimation", "HoldAnimation", "AnimationId", "Idle", "Hold", "Animation" }) do
-                        local v = raw(item, key)
-                        if type(v) == "string" and string.find(v, "%d") then found = v break end
-                        if type(v) == "number" and v > 100 then found = "rbxassetid://" .. tostring(v) break end
-                    end
-                end
-            end
-            animCache[skinName] = found or false
-        end
-        if type(found) ~= "string" or found == "" then return end
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         if not hum then return end
         local animator = hum:FindFirstChildOfClass("Animator") or hum
+        if noirAnimTrack then
+            noirAnimTrack:Stop(0.08)
+            noirAnimTrack = nil
+        end
         local a = Instance.new("Animation")
-        a.AnimationId = found
+        a.AnimationId = db.anim
         noirAnimTrack = animator:LoadAnimation(a)
         noirAnimTrack.Looped = true
-        noirAnimTrack.Priority = Enum.AnimationPriority.Action
-        noirAnimTrack:Play()
+        noirAnimTrack.Priority = Enum.AnimationPriority.Action2
+        noirAnimTrack:Play(0.12)
+        eachSlotTool("Gun", function(tool)
+            if not tool:IsA("Tool") or tool:GetAttribute("NoirAnim") then return end
+            tool:SetAttribute("NoirAnim", true)
+            tool.Activated:Connect(function()
+                if not state.enabled or type(db.shoot) ~= "string" then return end
+                pcall(function()
+                    local s = Instance.new("Animation")
+                    s.AnimationId = db.shoot
+                    local tr = animator:LoadAnimation(s)
+                    tr.Priority = Enum.AnimationPriority.Action
+                    tr:Play()
+                end)
+            end)
+        end)
     end)
 end
 
-local function applyKind(kind, allowLoad)
+local function applyKind(kind, allowLoad, light)
     if not state.enabled then return false end
     local skinName = kind == "Gun" and state.selectedGun or state.selectedKnife
     if type(skinName) ~= "string" or skinName == "" then return false end
-    writePlayerData(kind, skinName)
+    if not light then writePlayerData(kind, skinName) end
     local db = MESH_DB[skinName]
     if db then
         local scale = Vector3.new(db.sx or db[3] or 1, db.sy or db[4] or 1, db.sz or db[5] or 1)
         local painted = applyMeshDirect(kind, db.mesh or db[1], db.tex or db[2], scale)
         applyGrip(kind, db)
         applyHolster(kind, db)
-        applyIcons(kind, skinName)
-        applyFX(kind, db)
-        applyHoldAnim(kind, skinName)
-        if painted then return true end
+        if not light then
+            applyIcons(kind, skinName)
+            applyFX(kind, db)
+            applyHoldAnim(kind, skinName, db)
+        end
+        if painted or light then return true end
     end
     local lib = state.meshLib[skinName]
     if lib and lib.mesh then
@@ -14236,20 +14210,20 @@ local function applyKind(kind, allowLoad)
             end
         end
     end
+    if light then return ok end
     applyGrip(kind, MESH_DB[skinName])
     applyHolster(kind, MESH_DB[skinName])
     applyIcons(kind, skinName)
     applyFX(kind, MESH_DB[skinName])
-    applyHoldAnim(kind, skinName)
     return ok
 end
 
-local function applyAll()
+local function applyAll(light)
     if state.applying or not state.enabled then return end
     state.applying = true
     pcall(function()
-        applyKind("Knife")
-        applyKind("Gun")
+        applyKind("Knife", false, light)
+        applyKind("Gun", false, light)
     end)
     state.applying = false
 end
@@ -14432,24 +14406,15 @@ task.defer(function()
     end)
 end)
 
-pcall(function()
-    workspace.DescendantAdded:Connect(function(inst)
-        if not state.enabled then return end
-        local cls = inst.ClassName
-        if cls ~= "Beam" and cls ~= "Sound" and cls ~= "Trail" then return end
-        local db = MESH_DB[state.selectedGun]
-        if type(db) == "table" then paintFXInst(inst, db, "Gun") end
-    end)
-end)
-
 local function hookCharacter(character)
     if not character then return end
     character.ChildAdded:Connect(function()
-        if state.enabled and state.keep then task.delay(0.05, applyAll) end
+        if state.enabled and state.keep then task.delay(0.15, function() applyAll(true) end) end
     end)
 end
 LocalPlayer.CharacterAdded:Connect(function(character)
     hookCharacter(character)
+    hudIconCache.Equip, hudIconCache.Throw = nil, nil
     task.delay(0.4, function()
         if state.enabled and state.keep then applyAll() end
     end)
@@ -14459,7 +14424,7 @@ pcall(function()
     local backpack = LocalPlayer:WaitForChild("Backpack", 5)
     if backpack then
         backpack.ChildAdded:Connect(function()
-            if state.enabled and state.keep then task.delay(0.08, applyAll) end
+            if state.enabled and state.keep then task.delay(0.15, function() applyAll(true) end) end
         end)
     end
 end)
@@ -14467,9 +14432,9 @@ local acc = 0
 RunService.Heartbeat:Connect(function(dt)
     if not (state.enabled and state.keep) then return end
     acc += dt
-    if acc < 1.25 then return end
+    if acc < 2.5 then return end
     acc = 0
-    applyAll()
+    applyAll(true)
 end)
 ]==]
     local ok, fn = pcall(compiler, source)
