@@ -460,7 +460,446 @@ content.Position = UDim2.fromOffset(282, 104); content.Size = UDim2.new(1, -306,
 configContent.Position = content.Position; configContent.Size = content.Size
 visualContent = content:Clone(); visualContent.Name = "VisualContent"; visualContent.Parent = win; visualContent.Visible = false; visualContent:ClearAllChildren(); configureDualScrollPage(visualContent)
 visualCols = makeDualScrollColumns(visualContent)
-mainContent = content:Clone(); mainContent.Name = "MainContent"; mainContent.Parent = win; mainContent.Visible = false; mainContent:ClearAllChildren(); configureDualScrollPage(mainContent)
+do
+    local LightingSvc = game:GetService("Lighting")
+    local bar = New("Frame", { Parent = visualContent, Name = "VisSubBar",
+        Position = UDim2.fromOffset(0, 2), Size = UDim2.new(1, 0, 0, 44),
+        BackgroundColor3 = C.surface, BackgroundTransparency = .2 })
+    corner(bar, 12); stroke(bar, C.border, .45)
+    New("UIListLayout", { Parent = bar, FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder,
+        VerticalAlignment = Enum.VerticalAlignment.Center })
+    New("UIPadding", { Parent = bar, PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
+
+    local visPages, visBtns, visCurrent = {}, {}, "Visuals"
+    local function showVisPage(name)
+        visCurrent = name
+        for id, page in pairs(visPages) do page.Visible = id == name end
+        for id, btn in pairs(visBtns) do
+            local on = id == name
+            btn.BackgroundTransparency = on and .15 or 1
+            btn.TextColor3 = on and C.text or C.dim
+            local line = btn:FindFirstChild("OnLine")
+            if line then line.Visible = on end
+        end
+    end
+    local function makeVisPage(id)
+        local page = New("Frame", { Parent = visualContent, Name = "VisPage_" .. id,
+            Position = UDim2.fromOffset(0, 52), Size = UDim2.new(1, 0, 1, -56),
+            BackgroundTransparency = 1, Visible = id == "Visuals" })
+        visPages[id] = page
+        return page
+    end
+    local function addSub(id, title, order)
+        local b = New("TextButton", { Parent = bar, LayoutOrder = order, Size = UDim2.new(0.25, -4, 0, 32),
+            BackgroundColor3 = C.panel, BackgroundTransparency = 1, Text = title,
+            TextColor3 = C.dim, TextSize = 13, Font = Enum.Font.GothamMedium, AutoButtonColor = false })
+        corner(b, 8)
+        local line = New("Frame", { Parent = b, Name = "OnLine", AnchorPoint = Vector2.new(0.5, 1),
+            Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.new(0.55, 0, 0, 2),
+            BackgroundColor3 = C.accent, Visible = false, BorderSizePixel = 0 })
+        visBtns[id] = b
+        b.MouseButton1Click:Connect(function() showVisPage(id) end)
+        b.Activated:Connect(function() showVisPage(id) end)
+        return b
+    end
+    addSub("Visuals", "Visuals", 1)
+    addSub("Skybox", "Skybox Manager", 2)
+    addSub("Auras", "Auras", 3)
+    addSub("Trade", "Trade", 4)
+
+    local visMain = makeVisPage("Visuals")
+    visualCols[1].Parent = visMain
+    visualCols[1].Position = UDim2.new(0, 0, 0, 0)
+    visualCols[1].Size = UDim2.new(1, -6, 1, 0)
+    visualCols[2].Visible = false
+    visualCols[2] = visualCols[1]
+    showVisPage("Visuals")
+
+    local function visCard(parent, title)
+        local card = New("Frame", { Parent = parent, Size = UDim2.new(1, -8, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = C.panel, BackgroundTransparency = .2 })
+        corner(card, 16); stroke(card, C.border, .5)
+        local tick = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 14), Size = UDim2.fromOffset(3, 18), BackgroundColor3 = C.accent })
+        corner(tick, 2)
+        text(card, title, 16, UDim2.fromOffset(18, 12))
+        local body = New("Frame", { Parent = card, Position = UDim2.fromOffset(16, 44), Size = UDim2.new(1, -32, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
+        New("UIListLayout", { Parent = body, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+        New("UIPadding", { Parent = body, PaddingBottom = UDim.new(0, 14) })
+        return body
+    end
+    local function visRow(parent, label, h)
+        local r = New("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, h or 40), BackgroundTransparency = 1 })
+        text(r, label, 14, UDim2.fromOffset(0, 8))
+        return r
+    end
+
+    local skyPage = makeVisPage("Skybox")
+    local skyScroll = New("ScrollingFrame", { Parent = skyPage, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+        BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = C.accent,
+        CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
+    New("UIListLayout", { Parent = skyScroll, Padding = UDim.new(0, 12) })
+    local skyBody = visCard(skyScroll, "Skybox Manager")
+    do
+        local r = visRow(skyBody, "Clock Time")
+        local box = New("TextBox", { Parent = r, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0),
+            Size = UDim2.fromOffset(72, 28), BackgroundColor3 = C.btn, Text = string.format("%.1f", LightingSvc.ClockTime),
+            TextColor3 = C.text, TextSize = 13, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
+        corner(box, 8)
+        box.FocusLost:Connect(function()
+            local v = tonumber(box.Text)
+            if v then LightingSvc.ClockTime = math.clamp(v, 0, 24); box.Text = string.format("%.1f", LightingSvc.ClockTime) end
+        end)
+        local r2 = visRow(skyBody, "Brightness")
+        local box2 = New("TextBox", { Parent = r2, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0),
+            Size = UDim2.fromOffset(72, 28), BackgroundColor3 = C.btn, Text = string.format("%.2f", LightingSvc.Brightness),
+            TextColor3 = C.text, TextSize = 13, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
+        corner(box2, 8)
+        box2.FocusLost:Connect(function()
+            local v = tonumber(box2.Text)
+            if v then LightingSvc.Brightness = math.clamp(v, 0, 10); box2.Text = string.format("%.2f", LightingSvc.Brightness) end
+        end)
+        local r3 = visRow(skyBody, "Fog")
+        local box3 = New("TextBox", { Parent = r3, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0),
+            Size = UDim2.fromOffset(72, 28), BackgroundColor3 = C.btn, Text = tostring(math.floor(LightingSvc.FogEnd)),
+            TextColor3 = C.text, TextSize = 13, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
+        corner(box3, 8)
+        box3.FocusLost:Connect(function()
+            local v = tonumber(box3.Text)
+            if v then LightingSvc.FogEnd = math.max(0, v); box3.Text = tostring(math.floor(LightingSvc.FogEnd)) end
+        end)
+    end
+
+    local auraPage = makeVisPage("Auras")
+    local auraScroll = New("ScrollingFrame", { Parent = auraPage, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+        BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = C.accent,
+        CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
+    New("UIListLayout", { Parent = auraScroll, Padding = UDim.new(0, 12) })
+    local auraBody = visCard(auraScroll, "Auras")
+    do
+        local auraOn = false
+        local auraColor = C.accent
+        local function applyAura()
+            local char = LocalPlayer.Character
+            if not char then return end
+            local h = char:FindFirstChild("NoirAura")
+            if not auraOn then
+                if h then h:Destroy() end
+                return
+            end
+            if not h then
+                h = Instance.new("Highlight")
+                h.Name = "NoirAura"
+                h.FillTransparency = 0.55
+                h.OutlineTransparency = 0.1
+                h.Parent = char
+            end
+            h.FillColor = auraColor
+            h.OutlineColor = auraColor
+            h.Adornee = char
+        end
+        local r = visRow(auraBody, "Self Aura")
+        local pill = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0),
+            Size = UDim2.fromOffset(52, 28), BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
+        corner(pill, 14)
+        local dot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(20, 20), BackgroundColor3 = Color3.new(1, 1, 1) })
+        corner(dot, 10)
+        local function setAura(on)
+            auraOn = on
+            pill.BackgroundColor3 = on and C.accent or C.off
+            dot.Position = on and UDim2.fromOffset(28, 4) or UDim2.fromOffset(4, 4)
+            applyAura()
+        end
+        pill.MouseButton1Click:Connect(function() setAura(not auraOn) end)
+        pill.Activated:Connect(function() setAura(not auraOn) end)
+        LocalPlayer.CharacterAdded:Connect(function() task.delay(0.3, applyAura) end)
+    end
+
+    local tradePage = makeVisPage("Trade")
+    local tradeScroll = New("ScrollingFrame", { Parent = tradePage, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+        BorderSizePixel = 0, ScrollBarThickness = 4, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.fromOffset(0, 0) })
+    New("UIListLayout", { Parent = tradeScroll, Padding = UDim.new(0, 12) })
+    local tradeBody = visCard(tradeScroll, "Trade")
+    text(visRow(tradeBody, "", 56), "Трейд MM2 — через игровое меню. Здесь только раскладка вкладки.", 13, UDim2.fromOffset(0, 8), true)
+end
+do
+    local visMain = visualContent:FindFirstChild("VisPage_Visuals")
+    local skyPage = visualContent:FindFirstChild("VisPage_Skybox")
+    local auraPage = visualContent:FindFirstChild("VisPage_Auras")
+    local tradePage = visualContent:FindFirstChild("VisPage_Trade")
+    local col = visMain and visMain:FindFirstChildWhichIsA("ScrollingFrame")
+    local function card(parent, title, order)
+        local panel = New("Frame", { Parent = parent, LayoutOrder = order or 40, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
+        corner(panel, 16); stroke(panel, C.border, .5)
+        New("Frame", { Parent = panel, Position = UDim2.fromOffset(0, 14), Size = UDim2.fromOffset(3, 18), BackgroundColor3 = C.accent })
+        text(panel, title, 16, UDim2.fromOffset(18, 10))
+        local body = New("Frame", { Parent = panel, Position = UDim2.fromOffset(16, 40), Size = UDim2.new(1, -32, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
+        New("UIListLayout", { Parent = body, Padding = UDim.new(0, 4) })
+        New("UIPadding", { Parent = body, PaddingBottom = UDim.new(0, 12) })
+        return body
+    end
+    local function row(parent, label)
+        local r = New("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1 })
+        text(r, label, 13, UDim2.fromOffset(0, 8))
+        return r
+    end
+    local function pill(parent, onClick)
+        local b = New("TextButton", { Parent = parent, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0),
+            Size = UDim2.fromOffset(50, 26), BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
+        corner(b, 13)
+        local d = New("Frame", { Parent = b, Position = UDim2.fromOffset(3, 3), Size = UDim2.fromOffset(20, 20), BackgroundColor3 = Color3.new(1, 1, 1) })
+        corner(d, 10)
+        local on = false
+        local function set(v)
+            on = v and true or false
+            b.BackgroundColor3 = on and C.accent or C.off
+            d.Position = on and UDim2.fromOffset(27, 3) or UDim2.fromOffset(3, 3)
+            if onClick then onClick(on) end
+        end
+        b.MouseButton1Click:Connect(function() set(not on) end)
+        b.Activated:Connect(function() set(not on) end)
+        return set
+    end
+
+    if col then
+        local hats = card(col, "Chinese Hat / Jump Circles", 30)
+        local hatOn, jumpOn = false, false
+        local hatPart
+        local function killHat()
+            if hatPart then pcall(function() hatPart:Destroy() end) hatPart = nil end
+            local c = LocalPlayer.Character
+            local e = c and c:FindFirstChild("NoirChineseHat")
+            if e then e:Destroy() end
+        end
+        local function addHat()
+            killHat()
+            local c = LocalPlayer.Character
+            local head = c and c:FindFirstChild("Head")
+            if not hatOn or not head then return end
+            local p = Instance.new("Part")
+            p.Name = "NoirChineseHat"; p.Size = Vector3.new(1, 1, 1); p.Massless = true
+            p.CanCollide = false; p.CanTouch = false; p.CanQuery = false; p.CastShadow = false
+            p.Material = Enum.Material.Neon; p.Color = C.accent; p.Parent = c
+            local m = Instance.new("SpecialMesh")
+            m.MeshId = "rbxassetid://1033714"; m.Scale = Vector3.new(2.4, 1.6, 2.4); m.Parent = p
+            local w = Instance.new("WeldConstraint")
+            w.Part0 = head; w.Part1 = p; w.Parent = p
+            p.CFrame = head.CFrame * CFrame.new(0, 1.1, 0)
+            hatPart = p
+        end
+        pill(row(hats, "Chinese Hat"), function(v) hatOn = v; if v then addHat() else killHat() end end)
+        LocalPlayer.CharacterAdded:Connect(function() task.delay(0.4, function() if hatOn then addHat() end end) end)
+        pill(row(hats, "Jump Circles"), function(v) jumpOn = v end)
+        local wasAir = false
+        RunService.Heartbeat:Connect(function()
+            if not jumpOn then return end
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if not hum or not root then return end
+            local st = hum:GetState()
+            if st == Enum.HumanoidStateType.Jumping or st == Enum.HumanoidStateType.Freefall then wasAir = true end
+            if wasAir and hum.FloorMaterial ~= Enum.Material.Air then
+                wasAir = false
+                local ring = Instance.new("Part")
+                ring.Anchored = true; ring.CanCollide = false; ring.CanQuery = false; ring.CastShadow = false
+                ring.Material = Enum.Material.Neon; ring.Color = C.accent; ring.Transparency = 0.35
+                ring.CFrame = CFrame.new(root.Position - Vector3.new(0, 2.8, 0)) * CFrame.Angles(math.rad(90), 0, 0)
+                ring.Parent = Workspace
+                local mesh = Instance.new("SpecialMesh")
+                mesh.MeshType = Enum.MeshType.FileMesh; mesh.MeshId = "rbxassetid://3270017"
+                mesh.Scale = Vector3.new(5, 5, 0.15); mesh.Parent = ring
+                TweenService:Create(mesh, TweenInfo.new(0.8, Enum.EasingStyle.Quad), { Scale = Vector3.new(9, 9, 0.05) }):Play()
+                TweenService:Create(ring, TweenInfo.new(0.8), { Transparency = 1 }):Play()
+                task.delay(0.85, function() if ring then ring:Destroy() end end)
+            end
+        end)
+
+        local gk = card(col, "Gun & Knife / Tool", 31)
+        local hlOn, tintOn, dropFF = false, false, false
+        local function paintTool(tool)
+            if not tool or not tool:IsA("Tool") then return end
+            local n = string.lower(tool.Name)
+            if n ~= "gun" and n ~= "knife" then return end
+            local h = tool:FindFirstChild("NoirGKHL")
+            if hlOn then
+                if not h then
+                    h = Instance.new("Highlight"); h.Name = "NoirGKHL"; h.FillTransparency = 0.5; h.OutlineTransparency = 1; h.Parent = tool
+                end
+                h.FillColor = C.accent; h.Adornee = tool
+            elseif h then h:Destroy() end
+            if tintOn then
+                for _, d in ipairs(tool:GetDescendants()) do
+                    if d:IsA("BasePart") then d.Color = C.accent end
+                end
+            end
+        end
+        local function scanTools()
+            for _, box in ipairs({ LocalPlayer.Character, LocalPlayer:FindFirstChildOfClass("Backpack") }) do
+                if box then for _, t in ipairs(box:GetChildren()) do paintTool(t) end end
+            end
+        end
+        pill(row(gk, "Gun & Knife Highlight"), function(v) hlOn = v; scanTools() end)
+        pill(row(gk, "Tool Tint"), function(v) tintOn = v; scanTools() end)
+        pill(row(gk, "Dropped Gun ForceField"), function(v) dropFF = v end)
+        Workspace.ChildAdded:Connect(function(obj)
+            if dropFF and obj.Name == "GunDrop" and obj:IsA("BasePart") then
+                obj.Material = Enum.Material.ForceField
+                obj.Color = C.accent
+            end
+        end)
+        LocalPlayer.CharacterAdded:Connect(function(c)
+            c.ChildAdded:Connect(function(t) if t:IsA("Tool") then task.defer(paintTool, t) end end)
+        end)
+    end
+
+    if skyPage then
+        local skyScroll = skyPage:FindFirstChildWhichIsA("ScrollingFrame")
+        if skyScroll then
+            local env = card(skyScroll, "Environment", 2)
+            pill(row(env, "Fullbright"), function(v)
+                if v then
+                    Lighting.Brightness = 2; Lighting.ClockTime = 14; Lighting.FogEnd = 1e5
+                    Lighting.GlobalShadows = false; Lighting.Ambient = Color3.new(1, 1, 1)
+                    Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+                else
+                    Lighting.Brightness = 1; Lighting.GlobalShadows = true
+                end
+            end)
+            local rE = row(env, "Exposure")
+            local boxE = New("TextBox", { Parent = rE, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0),
+                Size = UDim2.fromOffset(64, 26), BackgroundColor3 = C.btn, Text = "0", TextColor3 = C.text, TextSize = 12, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
+            corner(boxE, 8)
+            boxE.FocusLost:Connect(function()
+                local n = tonumber(boxE.Text)
+                if n then Lighting.ExposureCompensation = math.clamp(n, -2, 5) end
+            end)
+            local fogR = false
+            pill(row(env, "Rainbow Fog"), function(v) fogR = v end)
+            RunService.Heartbeat:Connect(function()
+                if fogR then Lighting.FogColor = Color3.fromHSV((os.clock() % 6) / 6, 0.4, 1) end
+            end)
+            pill(row(env, "Motion Blur"), function(v)
+                local b = Lighting:FindFirstChild("NoirMotionBlur")
+                if v then
+                    if not b then b = Instance.new("BlurEffect"); b.Name = "NoirMotionBlur"; b.Size = 12; b.Parent = Lighting end
+                elseif b then b:Destroy() end
+            end)
+            local stretch = false
+            pill(row(env, "Stretch Screen"), function(v) stretch = v end)
+            RunService.RenderStepped:Connect(function()
+                if stretch and Workspace.CurrentCamera then
+                    local cam = Workspace.CurrentCamera
+                    cam.CFrame = cam.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, 0.65, 0, 0, 0, 1)
+                end
+            end)
+            pill(row(env, "Hide Jump / Joystick"), function(v)
+                pcall(function()
+                    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                    local tg = pg and pg:FindFirstChild("TouchGui")
+                    if tg then tg.Enabled = not v end
+                end)
+            end)
+        end
+    end
+
+    if auraPage then
+        local auraScroll = auraPage:FindFirstChildWhichIsA("ScrollingFrame")
+        if auraScroll then
+            local body = card(auraScroll, "Skin / Trails / Coin", 2)
+            local ffOn, ffRain, coinOn = false, false, false
+            local function applyFF()
+                local char = LocalPlayer.Character
+                if not char then return end
+                local col = ffRain and Color3.fromHSV((os.clock() % 5) / 5, 1, 1) or C.accent
+                for _, p in ipairs(char:GetDescendants()) do
+                    if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+                        if ffOn then p.Material = Enum.Material.ForceField; p.Color = col end
+                    end
+                end
+            end
+            pill(row(body, "ForceField Skin"), function(v) ffOn = v; applyFF() end)
+            pill(row(body, "Rainbow Skin"), function(v) ffRain = v end)
+            RunService.Heartbeat:Connect(function()
+                if ffOn and ffRain then applyFF() end
+            end)
+            LocalPlayer.CharacterAdded:Connect(function() task.delay(0.4, applyFF) end)
+            local trailObj
+            pill(row(body, "Custom Trail"), function(v)
+                local char = LocalPlayer.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if trailObj then pcall(function() trailObj:Destroy() end) trailObj = nil end
+                if v and root then
+                    local a0 = Instance.new("Attachment"); a0.Position = Vector3.new(0, 0.5, 0); a0.Parent = root
+                    local a1 = Instance.new("Attachment"); a1.Position = Vector3.new(0, -0.5, 0); a1.Parent = root
+                    local tr = Instance.new("Trail")
+                    tr.Attachment0 = a0; tr.Attachment1 = a1; tr.Lifetime = 0.45
+                    tr.Color = ColorSequence.new(C.accent); tr.Parent = root
+                    trailObj = tr
+                end
+            end)
+            pill(row(body, "Coin Aura"), function(v) coinOn = v end)
+            local coinAcc = 0
+            RunService.Heartbeat:Connect(function(dt)
+                if not coinOn then return end
+                coinAcc += dt
+                if coinAcc < 0.25 then return end
+                coinAcc = 0
+                local char = LocalPlayer.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if not root or type(firetouchinterest) ~= "function" then return end
+                local box = Workspace:FindFirstChild("CoinContainer")
+                if not box then return end
+                local pos = root.Position
+                for _, p in ipairs(box:GetChildren()) do
+                    if p:IsA("BasePart") and (p.Position - pos).Magnitude <= 18 then
+                        pcall(firetouchinterest, p, root, 0)
+                        pcall(firetouchinterest, p, root, 1)
+                    end
+                end
+            end)
+        end
+    end
+
+    if tradePage then
+        local tradeScroll = tradePage:FindFirstChildWhichIsA("ScrollingFrame")
+        if tradeScroll then
+            local body = card(tradeScroll, "Utilities (Visuals V2)", 2)
+            text(row(body, ""), "Unlimiter / Auto Tools / Shoot Murderer — Main и Misc.", 12, UDim2.fromOffset(0, 4), true)
+            text(row(body, ""), "Headless / Korblox — Main Self Mods. Speed / Anti-Aim — Combat.", 12, UDim2.fromOffset(0, 4), true)
+            local pingOn = false
+            local guiLbl
+            pill(row(body, "FPS & Ping Monitor"), function(v)
+                pingOn = v
+                if v and not guiLbl then
+                    local host = LocalPlayer:FindFirstChild("PlayerGui") or CoreGui
+                    local sg = New("ScreenGui", { Name = "NoirPerf", Parent = host, ResetOnSpawn = false })
+                    guiLbl = New("TextLabel", { Parent = sg, Position = UDim2.fromOffset(12, 8), Size = UDim2.fromOffset(180, 22),
+                        BackgroundTransparency = 1, TextColor3 = C.text, TextSize = 14, Font = Enum.Font.GothamBold,
+                        TextXAlignment = Enum.TextXAlignment.Left, Text = "FPS" })
+                end
+                if guiLbl then guiLbl.Visible = v end
+            end)
+            local frames, t0 = 0, os.clock()
+            RunService.RenderStepped:Connect(function()
+                if not pingOn or not guiLbl then return end
+                frames += 1
+                local now = os.clock()
+                if now - t0 >= 0.5 then
+                    local fps = math.floor(frames / (now - t0))
+                    frames, t0 = 0, now
+                    local ping = 0
+                    pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+                    guiLbl.Text = string.format("FPS %d  |  Ping %d", fps, ping)
+                end
+            end)
+        end
+    end
+end
+mainContent = content:Clone();
+ mainContent.Name = "MainContent"; mainContent.Parent = win; mainContent.Visible = false; mainContent:ClearAllChildren(); configureDualScrollPage(mainContent)
 mainCols = makeDualScrollColumns(mainContent)
 worldContent = content:Clone(); worldContent.Name = "WorldContent"; worldContent.Parent = win; worldContent.Visible = false; worldContent:ClearAllChildren(); configureDualScrollPage(worldContent)
 worldCols = makeDualScrollColumns(worldContent)
