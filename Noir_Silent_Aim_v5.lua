@@ -630,7 +630,8 @@ function refreshCanvas()
 end
 search:GetPropertyChangedSignal("Text"):Connect(function()
     local q = string.lower(search.Text or "")
-    local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0, misc = 0 }
+    local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0, misc = 0, map = 0 }
+    local firstPage, firstSub
     for _, entry in ipairs(sectionPanels) do
         local hay = entry.name
         for _, d in ipairs(entry.panel:GetDescendants()) do
@@ -638,10 +639,23 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
         end
         local match = q == "" or string.find(hay, q, 1, true) ~= nil
         entry.panel.Visible = match
-        if match then counts[entry.page] = (counts[entry.page] or 0) + 1 end
+        if match then
+            counts[entry.page] = (counts[entry.page] or 0) + 1
+            if q ~= "" and not firstPage then
+                firstPage, firstSub = entry.page, entry.sub
+            end
+        end
     end
-    if q ~= "" and activePage ~= "home" and (counts[activePage] or 0) == 0 then
-        for _, page in ipairs({ "main", "aim", "world", "visual", "emotes", "misc" }) do if counts[page] > 0 then selectPage(page) break end end
+    if q ~= "" and firstPage then
+        if activePage == "home" or activePage == "skins" or activePage ~= firstPage then
+            selectPage(firstPage)
+        end
+        local shower = getgenv().__NoirSubShow and getgenv().__NoirSubShow[firstPage]
+        if type(shower) == "function" and firstSub then pcall(shower, firstSub) end
+    elseif q == "" then
+        local cur = getgenv().__NoirSubCurrent and getgenv().__NoirSubCurrent[activePage]
+        local shower = getgenv().__NoirSubShow and getgenv().__NoirSubShow[activePage]
+        if type(shower) == "function" and cur then pcall(shower, cur) end
     end
     refreshCanvas()
 end)
@@ -1367,6 +1381,7 @@ do
         local function panel(title, subtitle)
             local card = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
                 BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
+            table.insert(sectionPanels, { panel = card, page = "map", name = string.lower(title .. " " .. (subtitle or "") .. " teleport map lobby murder sheriff player") })
             corner(card, 18); stroke(card, C.border, .5)
             local tick = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
             corner(tick, 2)
@@ -1479,10 +1494,34 @@ do
             end
             return pickFrom(map)
         end
-                -- MM2 lobby HRP (from in-game dump). Old house coords (-109,141,-11) are void now.
-        local LOBBY_CF = CFrame.new(33.6801758, 291.254089, 8967.01953, 1, 0, 0, 0, 1, 0, 0, 0, 1)
-        local function lobbyCFrame()
-            return LOBBY_CF
+                local function lobbyCFrame()
+            local function fromSpawns(folder)
+                if not folder then return nil end
+                local parts = {}
+                for _, child in ipairs(folder:GetChildren()) do
+                    local p = firstPart(child)
+                    if p then parts[#parts + 1] = p end
+                end
+                if #parts == 0 then
+                    local p = firstPart(folder)
+                    if p then parts[1] = p end
+                end
+                if #parts > 0 then return parts[math.random(1, #parts)].CFrame + Vector3.new(0, 3, 0) end
+            end
+            local lobby = workspace:FindFirstChild("Lobby")
+            if lobby then
+                local cf = fromSpawns(lobby:FindFirstChild("Spawns") or lobby:FindFirstChild("Spawn"))
+                if cf then return cf end
+                local sl = lobby:FindFirstChildWhichIsA("SpawnLocation", true)
+                if sl then return sl.CFrame + Vector3.new(0, 4, 0) end
+            end
+            for _, inst in ipairs(workspace:GetDescendants()) do
+                if inst.Name == "Spawns" and inst.Parent and inst.Parent.Name == "Lobby" then
+                    local cf = fromSpawns(inst)
+                    if cf then return cf end
+                end
+            end
+            return nil
         end
         local function tpToPlayer(player)
             if not player or player == LocalPlayer then notify("Некого телепортировать", 2); return end
@@ -12395,7 +12434,8 @@ local function toggleTouchFling()
     Notify("Touch Fling", touchFlingOn and "ON — walk into players" or "OFF", 2)
     pcall(function() ODHX.Set("⚡ Fling", "Touch Fling", "Toggle", touchFlingOn, false) end)
     local btn = BindableButtons.Buttons and BindableButtons.Buttons["bind_touchFling"]
-    if btn then btn.Text = touchFlingOn and "TF ON" or "TF" end
+    local lab = btn and btn:FindFirstChild("@Text")
+    if lab then lab.Text = touchFlingOn and "TF ON" or "TF" end
 end
 
 local ACTIONS={}
@@ -12525,6 +12565,15 @@ actionSection:AddPlayerDropdown("▸ Fling player", function(p)
     end
 end)
 actionSection:AddToggle("Touch Fling", setTouchFling)
+actionSection:AddToggle("Bind Touch Fling", function(enabled)
+    local id = "bind_touchFling"
+    if enabled then
+        BindableButtons.AddBButton(id, "TF", function() runAction("touchFling") end)
+        Notify("Binds", "TF button on screen", 2)
+    else
+        BindableButtons.DeleteBButton(id)
+    end
+end)
 
 -- 🤖 Auto
 local autoSection = AddSection("🤖 Auto")
@@ -12773,12 +12822,19 @@ do
         for _, rec in ipairs(sectionPanels) do
             if rec.page == pageId then
                 local title = matchTab(tabs, rec.name)
+                rec.sub = title
                 groups[title] = groups[title] or {}
                 groups[title][#groups[title] + 1] = rec.panel
             end
         end
         local function show(title)
             current = title
+            pcall(function()
+                getgenv().__NoirSubCurrent = getgenv().__NoirSubCurrent or {}
+                getgenv().__NoirSubCurrent[pageId] = title
+                getgenv().__NoirSubShow = getgenv().__NoirSubShow or {}
+                getgenv().__NoirSubShow[pageId] = show
+            end)
             for name, list in pairs(groups) do
                 local vis = name == title
                 for i = 1, #list do list[i].Visible = vis end
