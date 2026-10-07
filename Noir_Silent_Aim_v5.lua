@@ -12642,7 +12642,7 @@ local function addItem(name, kind, rarity, image)
         end
     end
     if string.sub(string.lower(name), 1, 6) == "chroma" then rarity = "Chroma" end
-    list[#list + 1] = { name = name, kind = kind, rarity = rarity or "Common", image = image or "" }
+    list[#list + 1] = { name = name, kind = kind, rarity = rarity or "Common", image = image or "", meshId = "", textureId = "" }
 end
 
 local function harvestEntry(data, key)
@@ -12653,6 +12653,20 @@ local function harvestEntry(data, key)
     local rarity = normalizeRarity(raw(data, "Rarity") or raw(data, "rarity") or raw(data, "Tier"))
     if string.sub(string.lower(name), 1, 6) == "chroma" then rarity = "Chroma" end
     addItem(name, kind, rarity, itemImage(data))
+    local meshId = toImage(raw(data, "MeshId") or raw(data, "MeshID") or raw(data, "meshId"))
+    local texId = toImage(raw(data, "TextureId") or raw(data, "TextureID") or raw(data, "textureId") or raw(data, "Texture"))
+    if meshId ~= "" or texId ~= "" then
+        local list = state.catalog[kind]
+        if list then
+            for _, item in ipairs(list) do
+                if item.name == name then
+                    if meshId ~= "" then item.meshId = meshId end
+                    if texId ~= "" then item.textureId = texId end
+                    break
+                end
+            end
+        end
+    end
 end
 
 local function isItemDictionary(t)
@@ -12681,19 +12695,37 @@ local function harvestTable(t)
     end)
 end
 
+local function compactName(value)
+    return string.lower((tostring(value or ""):gsub("[%s%p]", "")))
+end
+
 local function indexTemplates()
-    table.clear(state.templates)
     local function consider(inst)
         if not inst or inst.Name == "" then return end
-        if inst:IsA("Tool") or inst:IsA("Model") or inst:IsA("MeshPart") or inst:IsA("BasePart") then
-            if state.templates[inst.Name] == nil then state.templates[inst.Name] = inst end
-        end
+        local n = inst.Name
+        if n == "KnifeDisplay" or n == "GunDisplay" or n == "Handle" or n == "Knife" or n == "Gun" then return end
+        if JUNK_NAME[string.lower(n)] then return end
+        local useful = inst:IsA("Tool") or inst:IsA("Model") or inst:IsA("MeshPart") or inst:FindFirstChildOfClass("SpecialMesh") or inst:FindFirstChild("Handle")
+        if useful and state.templates[n] == nil then state.templates[n] = inst end
     end
     for _, root in ipairs({ ReplicatedStorage, game:GetService("Lighting"), Workspace }) do
         pcall(function()
             for _, inst in ipairs(root:GetDescendants()) do consider(inst) end
         end)
     end
+end
+
+local function getTemplate(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    if state.missingTemplates and state.missingTemplates[name] then return nil end
+    local direct = state.templates[name]
+    if direct and direct.Parent then return direct end
+    local want = compactName(name)
+    for n, inst in pairs(state.templates) do
+        if inst and inst.Parent and compactName(n) == want then return inst end
+    end
+    if not state.missingTemplates then state.missingTemplates = {} end
+    state.missingTemplates[name] = true
 end
 
 local function pullEnvTables()
@@ -12768,6 +12800,8 @@ end
 
 local function rebuildCatalog()
     state.catalog.Knife, state.catalog.Gun = {}, {}
+    state.templates = {}
+    state.missingTemplates = {}
     pcall(pullEnvTables)
     pcall(pullGarbage)
     pcall(pullHttpFallback)
@@ -12782,102 +12816,112 @@ local function rebuildCatalog()
     sortList(state.catalog.Gun)
 end
 
-local function copyMesh(fromPart, toPart)
-    if not (fromPart and toPart and fromPart:IsA("BasePart") and toPart:IsA("BasePart")) then return end
+local function firstMesh(root)
+    if not root then return nil, nil end
+    if root:IsA("SpecialMesh") then return root, root.Parent end
+    if root:IsA("MeshPart") then return root, root end
+    local mesh = root:FindFirstChildOfClass("SpecialMesh")
+    if mesh then return mesh, root:IsA("BasePart") and root or mesh.Parent end
+    local handle = root:FindFirstChild("Handle")
+    if handle then
+        local hm = handle:FindFirstChildOfClass("SpecialMesh")
+        if hm then return hm, handle end
+        if handle:IsA("MeshPart") then return handle, handle end
+    end
+    local ok, descendants = pcall(function() return root:GetDescendants() end)
+    if ok then
+        for _, d in ipairs(descendants) do
+            if d:IsA("SpecialMesh") then return d, d.Parent end
+            if d:IsA("MeshPart") then return d, d end
+        end
+    end
+    return nil, root:IsA("BasePart") and root or root:FindFirstChildWhichIsA("BasePart")
+end
+
+local function paintMesh(dst, src, meshId, textureId)
+    if not dst then return false end
+    local sm = src and select(1, firstMesh(src))
+    local dm, dp = firstMesh(dst)
+    if not dm then
+        local part = dst:IsA("BasePart") and dst or dst:FindFirstChild("Handle") or dst:FindFirstChildWhichIsA("BasePart")
+        if not part then return false end
+        dm = Instance.new("SpecialMesh")
+        dm.Parent = part
+        dp = part
+    end
+    local ok = false
     pcall(function()
-        toPart.Color = fromPart.Color
-        toPart.Material = fromPart.Material
-        toPart.Reflectance = fromPart.Reflectance
-        toPart.Transparency = math.min(fromPart.Transparency, 0.35)
+        if sm and sm:IsA("SpecialMesh") and dm:IsA("SpecialMesh") then
+            dm.MeshId = sm.MeshId
+            dm.TextureId = sm.TextureId
+            dm.Scale = sm.Scale
+            dm.Offset = sm.Offset
+            dm.VertexColor = sm.VertexColor
+            ok = sm.MeshId ~= ""
+        elseif sm and sm:IsA("MeshPart") and dm:IsA("MeshPart") then
+            dm.MeshId = sm.MeshId
+            dm.TextureID = sm.TextureID
+            ok = sm.MeshId ~= ""
+        elseif sm and sm:IsA("SpecialMesh") and dm:IsA("MeshPart") then
+            dm.MeshId = sm.MeshId
+            dm.TextureID = sm.TextureId
+            ok = sm.MeshId ~= ""
+        elseif sm and sm:IsA("MeshPart") and dm:IsA("SpecialMesh") then
+            dm.MeshId = sm.MeshId
+            dm.TextureId = sm.TextureID
+            ok = sm.MeshId ~= ""
+        end
+        if (not ok) and type(meshId) == "string" and meshId ~= "" then
+            if dm:IsA("SpecialMesh") then
+                dm.MeshId = meshId
+                if type(textureId) == "string" and textureId ~= "" then dm.TextureId = textureId end
+            elseif dm:IsA("MeshPart") then
+                dm.MeshId = meshId
+                if type(textureId) == "string" and textureId ~= "" then dm.TextureID = textureId end
+            end
+            ok = true
+        end
+        if sm and sm:IsA("BasePart") and dp and dp:IsA("BasePart") then
+            dp.Color = sm.Color
+            dp.Material = sm.Material
+            dp.Reflectance = sm.Reflectance
+        end
     end)
-    if fromPart:IsA("MeshPart") and toPart:IsA("MeshPart") then
-        pcall(function()
-            toPart.MeshId = fromPart.MeshId
-            toPart.TextureID = fromPart.TextureID
-            toPart.Size = fromPart.Size
-        end)
-    end
-    local srcMesh = fromPart:FindFirstChildOfClass("SpecialMesh")
-    if srcMesh then
-        local dst = toPart:FindFirstChildOfClass("SpecialMesh")
-        if not dst then dst = Instance.new("SpecialMesh"); dst.Parent = toPart end
-        pcall(function()
-            dst.MeshType = srcMesh.MeshType
-            dst.MeshId = srcMesh.MeshId
-            dst.TextureId = srcMesh.TextureId
-            dst.Scale = srcMesh.Scale
-            dst.Offset = srcMesh.Offset
-            dst.VertexColor = srcMesh.VertexColor
-        end)
-    end
-    for _, ch in ipairs(fromPart:GetChildren()) do
-        if ch:IsA("Decal") or ch:IsA("Texture") then
-            local clone = ch:Clone()
-            clone.Parent = toPart
-        end
-    end
+    return ok
 end
 
-local function stripVisuals(tool)
-    local handle = tool:FindFirstChild("Handle")
-    for _, child in ipairs(tool:GetChildren()) do
-        if child ~= handle and not child:IsA("Script") and not child:IsA("LocalScript") and not child:IsA("RemoteEvent") and not child:IsA("RemoteFunction") and not child:IsA("Sound") and not child:IsA("BindableEvent") then
-            if child:IsA("BasePart") or child:IsA("Model") or child:IsA("Folder") or child:IsA("SpecialMesh") or child:IsA("Weld") or child:IsA("WeldConstraint") then
-                pcall(function() child:Destroy() end)
-            end
+local function visualTargets(kind)
+    local list, seen = {}, {}
+    local function add(inst)
+        if inst and not seen[inst] then
+            seen[inst] = true
+            list[#list + 1] = inst
         end
     end
-end
-
-local function applyTemplateToTool(template, tool)
-    if not template or not tool then return false end
-    local handle = tool:FindFirstChild("Handle")
-    if not handle or not handle:IsA("BasePart") then return false end
-    stripVisuals(tool)
-    local srcHandle = template:FindFirstChild("Handle", true)
-    if template:IsA("BasePart") then srcHandle = template end
-    if srcHandle and srcHandle:IsA("BasePart") then copyMesh(srcHandle, handle) end
-    if template:IsA("Model") or template:IsA("Tool") then
-        for _, part in ipairs(template:GetDescendants()) do
-            if part:IsA("BasePart") and part ~= srcHandle and part.Name ~= "HumanoidRootPart" then
-                local clone = part:Clone()
-                clone.CanCollide = false
-                clone.Massless = true
-                clone.Parent = tool
-                local weld = Instance.new("WeldConstraint")
-                weld.Part0 = handle
-                weld.Part1 = clone
-                weld.Parent = clone
-                pcall(function()
-                    clone.CFrame = handle.CFrame * srcHandle.CFrame:ToObjectSpace(part.CFrame)
-                end)
-            end
-        end
-    end
-    return true
-end
-
-local function characterTools(kind)
     local character = LocalPlayer.Character
     local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-    local name = kind == "Gun" and "Gun" or "Knife"
-    local list = {}
+    local displayName = kind == "Gun" and "GunDisplay" or "KnifeDisplay"
+    local toolName = kind == "Gun" and "Gun" or "Knife"
     if character then
-        local equipped = character:FindFirstChild(name)
-        if equipped and equipped:IsA("Tool") then list[#list + 1] = equipped end
+        add(character:FindFirstChild(displayName))
+        add(character:FindFirstChild(toolName))
         for _, child in ipairs(character:GetChildren()) do
-            if child:IsA("Model") and child.Name ~= "HumanoidRootPart" then
-                if child:FindFirstChild("Handle", true) and not child:FindFirstChildWhichIsA("Humanoid") then
-                    list[#list + 1] = child
-                end
+            local n = string.lower(child.Name)
+            if kind == "Gun" then
+                if n == "gundisplay" or n == "gun" or n == "fakegun" then add(child) end
+            else
+                if n == "knifedisplay" or n == "knife" then add(child) end
             end
         end
     end
-    if backpack then
-        local stored = backpack:FindFirstChild(name)
-        if stored and stored:IsA("Tool") then list[#list + 1] = stored end
-    end
+    if backpack then add(backpack:FindFirstChild(toolName)) end
     return list
+end
+
+local function catalogItem(kind, skinName)
+    for _, item in ipairs(state.catalog[kind] or {}) do
+        if item.name == skinName then return item end
+    end
 end
 
 local function writePlayerData(kind, skinName)
@@ -12908,12 +12952,12 @@ local function applyKind(kind)
     local skinName = kind == "Gun" and state.selectedGun or state.selectedKnife
     if type(skinName) ~= "string" or skinName == "" then return false end
     writePlayerData(kind, skinName)
-    if not state.templates[skinName] then indexTemplates() end
-    local template = state.templates[skinName]
+    local item = catalogItem(kind, skinName)
+    local template = getTemplate(skinName)
     local ok = false
-    for _, tool in ipairs(characterTools(kind)) do
-        if template then
-            if applyTemplateToTool(template, tool) then ok = true end
+    for _, target in ipairs(visualTargets(kind)) do
+        if target ~= template then
+            if paintMesh(target, template, item and item.meshId, item and item.textureId) then ok = true end
         end
     end
     return ok
@@ -13050,8 +13094,12 @@ local function rebuildGrid()
             if not state.enabled then
                 notify("Turn Enable on first", 2)
             else
-                applyKind(state.kind)
-                notify("Skin: " .. item.name, 2)
+                local ok = applyKind(state.kind)
+                if ok then
+                    notify("Skin: " .. item.name, 2)
+                else
+                    notify("No 3D model for " .. item.name, 2)
+                end
             end
             rebuildGrid()
         end
@@ -13104,29 +13152,34 @@ dumpBtn.MouseButton1Click:Connect(function() task.spawn(runDump) end)
 dumpBtn.Activated:Connect(function() task.spawn(runDump) end)
 task.spawn(runDump)
 
-LocalPlayer.CharacterAdded:Connect(function()
-    task.delay(0.35, function()
+local function hookCharacter(character)
+    if not character then return end
+    character.ChildAdded:Connect(function()
+        if state.enabled and state.keep then task.delay(0.05, applyAll) end
+    end)
+end
+LocalPlayer.CharacterAdded:Connect(function(character)
+    hookCharacter(character)
+    task.delay(0.4, function()
         if state.enabled and state.keep then applyAll() end
     end)
 end)
+hookCharacter(LocalPlayer.Character)
 pcall(function()
     local backpack = LocalPlayer:WaitForChild("Backpack", 5)
     if backpack then
-        backpack.ChildAdded:Connect(function(child)
-            if state.enabled and state.keep and child:IsA("Tool") then task.delay(0.08, applyAll) end
+        backpack.ChildAdded:Connect(function()
+            if state.enabled and state.keep then task.delay(0.08, applyAll) end
         end)
     end
 end)
-if LocalPlayer.Character then
-    LocalPlayer.Character.ChildAdded:Connect(function(child)
-        if state.enabled and state.keep and child:IsA("Tool") then task.delay(0.08, applyAll) end
-    end)
-end
-RunService.Heartbeat:Connect(function()
-    if state.enabled and state.keep then
-        writePlayerData("Knife", state.selectedKnife)
-        writePlayerData("Gun", state.selectedGun)
-    end
+local acc = 0
+RunService.Heartbeat:Connect(function(dt)
+    if not (state.enabled and state.keep) then return end
+    acc += dt
+    if acc < 0.18 then return end
+    acc = 0
+    applyAll()
 end)
 ]==]
     local ok, fn = pcall(compiler, source)
