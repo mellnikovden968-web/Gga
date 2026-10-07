@@ -14165,12 +14165,9 @@ end
 local knivesBtn = kindButton("Knives", 4)
 local gunsBtn = kindButton("Guns", 96)
 
-local search = New("TextBox", { Parent = toolbar, Position = UDim2.fromOffset(204, 0), Size = UDim2.new(1, -220, 0, 34), BackgroundColor3 = C.surface, Text = "", PlaceholderText = "Search skins by name...", TextColor3 = C.text, PlaceholderColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
+local search = New("TextBox", { Parent = toolbar, Position = UDim2.fromOffset(204, 0), Size = UDim2.new(1, -8, 0, 34), BackgroundColor3 = C.surface, Text = "", PlaceholderText = "Search skins by name...", TextColor3 = C.text, PlaceholderColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
 corner(search, 10); stroke(search, C.border, .45)
-
-local dumpBtn = New("TextButton", { Parent = toolbar, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Size = UDim2.fromOffset(92, 34), BackgroundColor3 = C.accent, Text = "Dump", TextColor3 = Color3.new(1, 1, 1), TextSize = 13, Font = Enum.Font.GothamBold, AutoButtonColor = false })
-corner(dumpBtn, 10)
-local countLabel = New("TextLabel", { Parent = toolbar, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 48), Size = UDim2.fromOffset(160, 22), BackgroundTransparency = 1, Text = "dumping...", TextColor3 = C.dim, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Right })
+local countLabel = New("TextLabel", { Parent = toolbar, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 48), Size = UDim2.fromOffset(160, 22), BackgroundTransparency = 1, Text = "", TextColor3 = C.dim, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Right })
 
 local rarityBar = New("ScrollingFrame", { Parent = toolbar, Position = UDim2.fromOffset(0, 44), Size = UDim2.new(1, 0, 0, 36), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, ScrollingDirection = Enum.ScrollingDirection.X, CanvasSize = UDim2.fromOffset(#RARITIES * 96, 0) })
 local rarityLayout = New("UIListLayout", { Parent = rarityBar, FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
@@ -14272,18 +14269,6 @@ for i, rarity in ipairs(RARITIES) do
 end
 
 paintKind()
-local function runDump()
-    countLabel.Text = "dumping..."
-    rebuildCatalog()
-    pcall(capturePlayers)
-    local meshes = 0
-    pcall(function() meshes = collectAllMeshes() or 0 end)
-    rebuildGrid()
-    notify(string.format("Skins: %d knives, %d guns, %d meshes", #state.catalog.Knife, #state.catalog.Gun, meshes), 4)
-    if state.enabled then applyAll() end
-end
-dumpBtn.MouseButton1Click:Connect(function() task.spawn(runDump) end)
-dumpBtn.Activated:Connect(function() task.spawn(runDump) end)
 task.defer(function()
     pcall(function()
         for k, v in pairs(MESH_DB) do
