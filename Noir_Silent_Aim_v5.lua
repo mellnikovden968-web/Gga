@@ -688,9 +688,11 @@ function host.CreateTab()
     function tab:AddSection(name, description)
         local isVisual = name == "Visuals" or name == "Object ESP" or string.find(name, "VISUAL", 1, true) == 1
         local isMain = string.sub(name, 1, 5) == "MAIN "
-        local isWorld = string.sub(name, 1, 6) == "WORLD "
-        local isEmotes = string.sub(name, 1, 7) == "EMOTES "
-        local isMisc = string.sub(name, 1, 5) == "MISC "
+        local function hasTag(p) return string.find(name, p, 1, true) ~= nil end
+        local isFling = hasTag("Fling") or hasTag("⚡") or hasTag("🤖") or hasTag("📋") or hasTag("⚙") or hasTag("🔘") or hasTag("🔑")
+        local isWorld = string.sub(name, 1, 6) == "WORLD " or name == "Bomb Jump+" or name == "Gold Bomb Jump+" or isFling
+        local isEmotes = string.sub(name, 1, 7) == "EMOTES " or name == "FE Animations" or name == "About"
+        local isMisc = string.sub(name, 1, 5) == "MISC " or name == "Inventory Unlimiter V5" or name == "Pm-WallHop"
         local col, page = nil, "aim"
         if isVisual then visualSectionCount += 1; col = visualCols[(visualSectionCount - 1) % 2 + 1]; page = "visual"
         elseif isMain then mainSectionCount += 1; col = mainCols[(mainSectionCount - 1) % 2 + 1]; page = "main"
@@ -7842,7 +7844,7 @@ function runtime.Cleanup()
 end
 
 local tab=shared.CreateTab("FE Animations","/mellnikovden968-web/CFG_PM2/refs/heads/main/icon")
-local section=tab:AddSection("EMOTES \u{2022} Animations","aux0on presets • R15 • full track reset • auto-save")
+local section=tab:AddSection("FE Animations","aux0on presets • R15 • full track reset • auto-save")
 statusLabel=section:AddLabel("Loading settings...",true)
 section:AddParagraph("Saved settings","Toggle and all animation choices are saved automatically. Individual Default uses All Animations; All Animations = Default uses your avatar's originals. R15 only.")
 local toggle=section:AddToggle("Enable FE Anims",function(value)
@@ -8724,7 +8726,7 @@ if not _game and (game.PlaceId == 142823291 or game.GameId == 66654135) then _ga
 
 if _game == "Murder Mystery 2" or _game == "Murder Mystery Modded" then
 
-local aboutSection = shared.AddSection("EMOTES \u{2022} About")
+local aboutSection = shared.AddSection("About")
 
 aboutSection:AddParagraph("Bomb Jump+", "Plugin Made by @lzzzx")
 
@@ -9141,7 +9143,7 @@ local function CreateBombJumpSystem(config)
     }
 end
 
-local section = shared.AddSection("WORLD \u{2022} Bomb Jump+")
+local section = shared.AddSection("Bomb Jump+")
 
 local bombJumpSystem = CreateBombJumpSystem({
     bombType = "FakeBomb",
@@ -9159,7 +9161,7 @@ local bombJumpSystem = CreateBombJumpSystem({
 })
 
 if _game == "Murder Mystery Modded" then
-    local gbjSection = shared.AddSection("WORLD \u{2022} Gold Bomb Jump+")
+    local gbjSection = shared.AddSection("Gold Bomb Jump+")
 
     local goldBombJumpSystem = CreateBombJumpSystem({
         bombType = "GoldBomb",
@@ -9453,7 +9455,7 @@ else
     local ok,result=pcall(function()
         local tab=shared.CreateTab("Inventory Unlimiter", "/mellnikovden968-web/CFG_PM2/refs/heads/main/icon")
         return {owner=shared,version=UI_VERSION,tab=tab,
-            section=tab:AddSection("MISC \u{2022} Inventory Unlimiter","Client-side limit • Saved preferences"),visual=false}
+            section=tab:AddSection("Inventory Unlimiter V5","Client-side limit • Saved preferences"),visual=false}
     end)
     if not ok then warn("[Inventory Unlimiter] UI failed: " .. tostring(result));return end
     ui=result
@@ -9780,7 +9782,7 @@ end)()
 local shared = ODHX.shared
 local UpdateWallhopButtonState, performVideoFlick, performWallhop
 
-local wallhop_section = shared.AddSection("MISC \u{2022} WallHop")
+local wallhop_section = shared.AddSection("Pm-WallHop")
 
 wallhop_section:AddLabel("Pm-WallHop Script by @Phemtom (Improved)")
 wallhop_section:AddParagraph("Pm-WallHop", "Флинг при прыжке возле стыка стен")
@@ -12393,37 +12395,36 @@ do
     end
     local defs = {
         aim = {
-            { "Silent Aim Gun", function(n) return (nfind(n,"silent aim") or nfind(n,"pistol") or nfind(n,"piercer") or nfind(n,"gun targeting")) and not nfind(n,"knife") end },
+            { "Silent Aim Gun", function(n) return nfind(n,"pistol") or nfind(n,"piercer") or nfind(n,"gun targeting") or (nfind(n,"silent aim") and not nfind(n,"knife")) or (string.sub(n,1,4)=="gun " and not nfind(n,"knife")) end },
             { "Silent Aim Knife", function(n) return nfind(n,"knife") end },
-            { "Fling", function(n) return nfind(n,"fling") or nfind(n,"🤖") or nfind(n,"lists") or nfind(n,"tuning") or nfind(n,"binds") or nfind(n,"keys") or nfind(n,"auto") end },
         },
         main = {
             { "Movement", function(n) return nfind(n,"universal") or nfind(n,"noclip") or nfind(n,"fly") end },
             { "Invisible", function(n) return nfind(n,"invisible") end },
-            { "Fun", function(n) return nfind(n,"fun") end },
+            { "Fun", function(n) return nfind(n,"fun client") or nfind(n,"fun") end },
             { "Self", function(n) return nfind(n,"self") end },
             { "Server", function(n) return nfind(n,"server") end },
         },
         world = {
             { "Gun", function(n) return nfind(n,"world") and nfind(n,"gun") end },
+            { "Fling", function(n) return nfind(n,"fling") or nfind(n,"🤖") or nfind(n,"lists") or nfind(n,"tuning") or nfind(n,"binds") or nfind(n,"keys") or nfind(n,"auto") end },
             { "Bomb Jump", function(n) return nfind(n,"bomb") end },
-            { "World", function(n) return nfind(n,"world") and not nfind(n,"gun") and not nfind(n,"bomb") end },
+            { "World", function(n) return nfind(n,"world") and not nfind(n,"gun") and not nfind(n,"bomb") and not nfind(n,"fling") end },
         },
         visual = {
-            { "ESP", function(n) return nfind(n,"visual") and not nfind(n,"object") end },
             { "Objects", function(n) return nfind(n,"object") end },
+            { "ESP", function(n) return nfind(n,"visual") end },
         },
         emotes = {
-            { "Animations", function(n) return nfind(n,"anim") end },
-            { "About", function(n) return nfind(n,"about") end },
+            { "Animations", function(n) return true end },
         },
         misc = {
             { "Aimlock", function(n) return nfind(n,"aimlock") end },
             { "Cursor", function(n) return nfind(n,"cursor") end },
-            { "FPS", function(n) return nfind(n,"fps") end },
+            { "FPS", function(n) return nfind(n,"fps") and not nfind(n,"aimlock") end },
             { "Desync", function(n) return nfind(n,"desync") end },
             { "Inventory", function(n) return nfind(n,"inventory") end },
-            { "WallHop", function(n) return nfind(n,"wallhop") or nfind(n,"wall hop") end },
+            { "WallHop", function(n) return nfind(n,"wallhop") or nfind(n,"wall hop") or nfind(n,"pm-wall") end },
         },
     }
     local pageFrames = {
@@ -12434,10 +12435,11 @@ do
         for i = 1, #list do
             if list[i][2](n) then return list[i][1] end
         end
-        return list[1] and list[1][1] or nil
+        return nil
     end
     local function attach(pageId, frame, tabs)
         if not frame or not tabs or #tabs == 0 then return end
+        if #tabs == 1 then return end
         local bar = New("Frame", { Parent = frame, Name = "NoirSubBar", ZIndex = 6,
             Position = UDim2.fromOffset(0, 2), Size = UDim2.new(1, 0, 0, 42),
             BackgroundColor3 = C.surface, BackgroundTransparency = .2 })
