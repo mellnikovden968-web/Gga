@@ -13715,6 +13715,9 @@ local function applyMeshDirect(kind, meshId, texId, scale)
     for _, target in ipairs(visualTargets(kind)) do
         local part = getAnchor(target)
         if part then
+            if part:GetAttribute("NoirMesh") == meshId then
+                ok = true
+            else
             pcall(function()
                 if part:IsA("MeshPart") then
                     part.MeshId = meshId
@@ -13732,7 +13735,9 @@ local function applyMeshDirect(kind, meshId, texId, scale)
                 if type(texId) == "string" and texId ~= "" then mesh.TextureId = texId end
                 if typeof(scale) == "Vector3" then mesh.Scale = scale end
             end)
+            part:SetAttribute("NoirMesh", meshId)
             ok = true
+            end
         end
     end
     return ok
@@ -13944,19 +13949,28 @@ end
 local function applyIcons(kind, skinName)
     local img = skinIcon(skinName)
     if img == "" then return end
+    local slot = kind == "Gun" and "Gun" or "Knife"
     pcall(function()
-        for _, target in ipairs(visualTargets(kind)) do
-            if target:IsA("Tool") then target.TextureId = img end
-            local tool = target:FindFirstAncestorOfClass("Tool")
-            if tool then tool.TextureId = img end
+        local function paintTool(tool)
+            if tool and tool:IsA("Tool") and tool.Name == slot then
+                tool.TextureId = img
+            end
         end
+        local character = LocalPlayer.Character
+        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+        if character then paintTool(character:FindFirstChild(slot)) end
+        if backpack then paintTool(backpack:FindFirstChild(slot)) end
     end)
+    if kind ~= "Knife" then return end
     pcall(function()
-        local slot = kind == "Gun" and "gun" or "knife"
-        for _, inst in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
-            if inst:IsA("ImageButton") or inst:IsA("ImageLabel") then
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        if not pg then return end
+        local hud = pg:FindFirstChild("MainGUI")
+        if not hud then return end
+        for _, inst in ipairs(hud:GetDescendants()) do
+            if inst:IsA("ImageButton") then
                 local n = string.lower(inst.Name)
-                if string.find(n, "throw", 1, true) or string.find(n, "equip", 1, true) or string.find(n, slot, 1, true) then
+                if n == "throw" or n == "equip" then
                     inst.Image = img
                 end
             end
@@ -13969,7 +13983,6 @@ local function applyKind(kind, allowLoad)
     local skinName = kind == "Gun" and state.selectedGun or state.selectedKnife
     if type(skinName) ~= "string" or skinName == "" then return false end
     writePlayerData(kind, skinName)
-    applyIcons(kind, skinName)
     local db = MESH_DB[skinName]
     if db then
         local scale = Vector3.new(db.sx or db[3] or 1, db.sy or db[4] or 1, db.sz or db[5] or 1)
@@ -14194,7 +14207,19 @@ local function runDump()
 end
 dumpBtn.MouseButton1Click:Connect(function() task.spawn(runDump) end)
 dumpBtn.Activated:Connect(function() task.spawn(runDump) end)
-task.spawn(runDump)
+task.defer(function()
+    pcall(function()
+        for k, v in pairs(MESH_DB) do
+            if type(v) == "table" then
+                local img = ""
+                local c = CATALOG_DB[k]
+                if type(c) == "table" then img = c.Image or "" end
+                addItem(k, v.kind or "Knife", v.rarity or "Godly", img)
+            end
+        end
+        rebuildGrid()
+    end)
+end)
 
 local function hookCharacter(character)
     if not character then return end
@@ -14217,16 +14242,11 @@ pcall(function()
         end)
     end
 end)
-local acc, capAcc = 0, 0
+local acc = 0
 RunService.Heartbeat:Connect(function(dt)
     if not (state.enabled and state.keep) then return end
     acc += dt
-    capAcc += dt
-    if capAcc > 2 then
-        capAcc = 0
-        pcall(capturePlayers)
-    end
-    if acc < 0.2 then return end
+    if acc < 1.25 then return end
     acc = 0
     applyAll()
 end)
