@@ -14083,17 +14083,24 @@ end
 local function paintFXInst(inst, db, kind)
     if not inst or type(db) ~= "table" then return end
     if inst:IsA("Sound") and type(db.snd) == "string" and kind == "Gun" then
+        if string.find(db.snd, "90731824782499", 1, true) then return end
         local n = string.lower(inst.Name)
         if string.find(n, "shoot") or string.find(n, "fire") or string.find(n, "alt") or n == "sound" or string.find(n, "gun") then
             inst.SoundId = db.snd
             if type(db.spd) == "number" then inst.PlaybackSpeed = db.spd end
         end
-    elseif inst:IsA("Beam") and type(db.br) == "number" then
-        inst.Color = ColorSequence.new(Color3.new(db.br, db.bg or 1, db.bb or 1))
-        if type(db.btex) == "string" and db.btex ~= "" then inst.Texture = db.btex end
-        if type(db.bw) == "number" then inst.Width0 = db.bw inst.Width1 = db.bw end
-    elseif inst:IsA("Trail") and type(db.br) == "number" then
-        inst.Color = ColorSequence.new(Color3.new(db.br, db.bg or 1, db.bb or 1))
+    elseif (inst:IsA("Beam") or inst:IsA("Trail") or inst:IsA("ParticleEmitter")) and type(db.br) == "number" then
+        local col = Color3.new(db.br, db.bg or 1, db.bb or 1)
+        pcall(function() inst.Color = ColorSequence.new(col) end)
+        if inst:IsA("Beam") then
+            if type(db.btex) == "string" and db.btex ~= "" then inst.Texture = db.btex end
+            if type(db.bw) == "number" then inst.Width0 = db.bw inst.Width1 = db.bw end
+        end
+    elseif (inst:IsA("BasePart")) and type(db.br) == "number" then
+        local n = string.lower(inst.Name)
+        if string.find(n, "bullet") or string.find(n, "tracer") or string.find(n, "laser") or string.find(n, "shot") or string.find(n, "beam") or string.find(n, "pew") then
+            inst.Color = Color3.new(db.br, db.bg or 1, db.bb or 1)
+        end
     end
 end
 
@@ -14102,7 +14109,7 @@ local function applyFX(kind, db)
     pcall(function()
         eachSlotTool(kind, function(tool)
             for _, d in ipairs(tool:GetDescendants()) do paintFXInst(d, db, kind) end
-            if kind == "Gun" and type(db.snd) == "string" then
+            if kind == "Gun" and type(db.snd) == "string" and not string.find(db.snd, "90731824782499", 1, true) then
                 local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
                 if handle and not handle:FindFirstChild("NoirShoot") then
                     local s = Instance.new("Sound")
@@ -14132,43 +14139,7 @@ local function applyFX(kind, db)
 end
 
 local noirAnimTrack
-local function applyHoldAnim(kind, skinName, db)
-    if kind ~= "Gun" or type(db) ~= "table" or type(db.anim) ~= "string" then
-        pcall(function()
-            if noirAnimTrack then noirAnimTrack:Stop(0.1) noirAnimTrack = nil end
-        end)
-        return
-    end
-    pcall(function()
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not hum then return end
-        local animator = hum:FindFirstChildOfClass("Animator") or hum
-        if noirAnimTrack then
-            noirAnimTrack:Stop(0.08)
-            noirAnimTrack = nil
-        end
-        local a = Instance.new("Animation")
-        a.AnimationId = db.anim
-        noirAnimTrack = animator:LoadAnimation(a)
-        noirAnimTrack.Looped = true
-        noirAnimTrack.Priority = Enum.AnimationPriority.Action2
-        noirAnimTrack:Play(0.12)
-        eachSlotTool("Gun", function(tool)
-            if not tool:IsA("Tool") or tool:GetAttribute("NoirAnim") then return end
-            tool:SetAttribute("NoirAnim", true)
-            tool.Activated:Connect(function()
-                if not state.enabled or type(db.shoot) ~= "string" then return end
-                pcall(function()
-                    local s = Instance.new("Animation")
-                    s.AnimationId = db.shoot
-                    local tr = animator:LoadAnimation(s)
-                    tr.Priority = Enum.AnimationPriority.Action
-                    tr:Play()
-                end)
-            end)
-        end)
-    end)
+local function applyHoldAnim()
 end
 
 local function applyKind(kind, allowLoad, light)
@@ -14185,7 +14156,6 @@ local function applyKind(kind, allowLoad, light)
         if not light then
             applyIcons(kind, skinName)
             applyFX(kind, db)
-            applyHoldAnim(kind, skinName, db)
         end
         if painted or light then return true end
     end
@@ -14406,10 +14376,23 @@ task.defer(function()
     end)
 end)
 
+local function paintShot(inst)
+    if not state.enabled then return end
+    local db = MESH_DB[state.selectedGun]
+    if type(db) ~= "table" then return end
+    paintFXInst(inst, db, "Gun")
+end
+
 local function hookCharacter(character)
     if not character then return end
     character.ChildAdded:Connect(function()
         if state.enabled and state.keep then task.delay(0.15, function() applyAll(true) end) end
+    end)
+    character.DescendantAdded:Connect(function(inst)
+        local cls = inst.ClassName
+        if cls == "Beam" or cls == "Trail" or cls == "ParticleEmitter" then
+            paintShot(inst)
+        end
     end)
 end
 LocalPlayer.CharacterAdded:Connect(function(character)
@@ -14427,6 +14410,13 @@ pcall(function()
             if state.enabled and state.keep then task.delay(0.15, function() applyAll(true) end) end
         end)
     end
+end)
+pcall(function()
+    workspace.DescendantAdded:Connect(function(inst)
+        local cls = inst.ClassName
+        if cls ~= "Beam" and cls ~= "Trail" and cls ~= "ParticleEmitter" then return end
+        paintShot(inst)
+    end)
 end)
 local acc = 0
 RunService.Heartbeat:Connect(function(dt)
