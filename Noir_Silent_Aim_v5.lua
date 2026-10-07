@@ -13707,20 +13707,29 @@ local function makeMeshPart(name)
     return part
 end
 
+local visualTargets
+
 local function applyMeshDirect(kind, meshId, texId, scale)
     if type(meshId) ~= "string" or meshId == "" then return false end
     local ok = false
     for _, target in ipairs(visualTargets(kind)) do
         local part = getAnchor(target)
         if part then
-            local mesh = part:FindFirstChildOfClass("SpecialMesh")
-            if not mesh then
-                mesh = Instance.new("SpecialMesh")
-                mesh.MeshType = Enum.MeshType.FileMesh
-                mesh.Name = "Mesh"
-                mesh.Parent = part
-            end
             pcall(function()
+                if part:IsA("MeshPart") then
+                    part.MeshId = meshId
+                    if type(texId) == "string" and texId ~= "" then part.TextureID = texId end
+                    if typeof(scale) == "Vector3" then
+                        pcall(function() part.Size = scale end)
+                    end
+                end
+                local mesh = part:FindFirstChildOfClass("SpecialMesh")
+                if not mesh then
+                    mesh = Instance.new("SpecialMesh")
+                    mesh.MeshType = Enum.MeshType.FileMesh
+                    mesh.Name = "Mesh"
+                    mesh.Parent = part
+                end
                 mesh.MeshId = meshId
                 if type(texId) == "string" and texId ~= "" then mesh.TextureId = texId end
                 if typeof(scale) == "Vector3" then mesh.Scale = scale end
@@ -13873,7 +13882,7 @@ local function loadModel(name, kind)
     end
 end
 
-local function visualTargets(kind)
+visualTargets = function(kind)
     local list, seen = {}, {}
     local function add(inst)
         if inst and not seen[inst] then
