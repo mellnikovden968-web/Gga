@@ -212,13 +212,14 @@ do
         { "aim",    16898613777, Vector2.new(967, 759), "Combat" },
         { "world",  16898613509, Vector2.new(771, 563), "World" },
         { "map",    16898613509, Vector2.new(771, 563), "Map" },
+        { "farm",   16898613509, Vector2.new(771, 563), "Autofarm" },
         { "visual", 16898613353, Vector2.new(771, 563), "Visuals" },
         { "skins",  16898613353, Vector2.new(771, 563), "Skins" },
         { "emotes", 16898613777, Vector2.new(967, 759), "Emotes" },
         { "misc",   16898613509, Vector2.new(820, 147), "Misc" },
     }
     for i, d in ipairs(navDefs) do
-        local b = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(16, 110 + (i - 1) * 48), Size = UDim2.fromOffset(208, 44),
+        local b = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(16, 108 + (i - 1) * 44), Size = UDim2.fromOffset(208, 42),
             BackgroundColor3 = C.surface, BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Name = d[4] })
         corner(b, 12)
         local ic = New("ImageLabel", { Parent = b, Position = UDim2.fromOffset(14, 11), Size = UDim2.fromOffset(24, 24),
@@ -264,6 +265,16 @@ do
             end
             glyphPart(UDim2.fromOffset(20, 9), UDim2.fromOffset(12, 12), 6)
             glyphPart(UDim2.fromOffset(23, 20), UDim2.fromOffset(6, 10), 2)
+        elseif d[1] == "farm" then
+            ic.Visible = false
+            glyphs = {}
+            local function glyphPart(position, size, rounded)
+                local part = New("Frame", { Parent = b, Position = position, Size = size, BackgroundColor3 = C.dim, BorderSizePixel = 0 })
+                if rounded then corner(part, rounded) end
+                glyphs[#glyphs + 1] = part
+            end
+            glyphPart(UDim2.fromOffset(18, 14), UDim2.fromOffset(16, 16), 8)
+            glyphPart(UDim2.fromOffset(22, 18), UDim2.fromOffset(8, 8), 4)
         elseif d[1] == "misc" then
             -- Requested Misc mark: a circular outline containing three dots.
             ic.Visible = false
@@ -485,6 +496,13 @@ do
     mapPage:ClearAllChildren()
     configureDualScrollPage(mapPage)
     makeDualScrollColumns(mapPage)
+    local farmPage = content:Clone()
+    farmPage.Name = "FarmContent"
+    farmPage.Parent = win
+    farmPage.Visible = false
+    farmPage:ClearAllChildren()
+    configureDualScrollPage(farmPage)
+    makeDualScrollColumns(farmPage)
 end
 end
 
@@ -544,7 +562,7 @@ end)
 local activePage = "home"
 local selectPage
 do
-    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, map = win:FindFirstChild("MapContent"), visual = visualContent, emotes = emotesContent, misc = miscContent }
+    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, map = win:FindFirstChild("MapContent"), farm = win:FindFirstChild("FarmContent"), visual = visualContent, emotes = emotesContent, misc = miscContent }
     pcall(function()
         getgenv().__NoirRegisterPage = function(name, object)
             if type(name) == "string" and typeof(object) == "Instance" then pageObjects[name] = object end
@@ -630,7 +648,7 @@ function refreshCanvas()
 end
 search:GetPropertyChangedSignal("Text"):Connect(function()
     local q = string.lower(search.Text or "")
-    local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0, misc = 0, map = 0 }
+    local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0, misc = 0, map = 0, farm = 0 }
     local firstPage, firstSub
     for _, entry in ipairs(sectionPanels) do
         local hay = entry.name
@@ -1670,6 +1688,174 @@ do
         local bus = getgenv().__NoirV4RoleBus
         if bus and bus.Subscribe then bus:Subscribe(function() task.defer(refreshRoles) end) end
         refreshRoles()
+    end
+end
+
+do
+    local page = win:FindFirstChild("FarmContent")
+    local col = page and page:FindFirstChild("NoirColumn1")
+    if page and col then
+        local function panel(title, subtitle)
+            local card = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
+            table.insert(sectionPanels, { panel = card, page = "farm", name = string.lower(title .. " " .. (subtitle or "") .. " autofarm farm coins coin") })
+            corner(card, 18); stroke(card, C.border, .5)
+            local tick = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
+            corner(tick, 2)
+            text(card, title, 18, UDim2.fromOffset(24, 16))
+            if subtitle and subtitle ~= "" then text(card, subtitle, 12, UDim2.fromOffset(24, 44), true) end
+            local holder = New("Frame", { Parent = card, Position = UDim2.fromOffset(20, subtitle ~= "" and 74 or 57), Size = UDim2.new(1, -40, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
+            New("UIListLayout", { Parent = holder, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+            New("UIPadding", { Parent = holder, PaddingBottom = UDim.new(0, 12) })
+            return holder
+        end
+        local function makeToggle(parent, label, callback)
+            local state = false
+            local r = New("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1 })
+            text(r, label, 16, UDim2.fromOffset(0, 10))
+            local pill = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(64, 34),
+                BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
+            corner(pill, 17); stroke(pill, C.border, .55)
+            local dot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = Color3.fromRGB(150, 155, 162) })
+            corner(dot, 13)
+            local function apply(v)
+                state = v == true
+                TweenService:Create(pill, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = state and C.accent or C.off }):Play()
+                TweenService:Create(dot, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                    Position = state and UDim2.fromOffset(34, 4) or UDim2.fromOffset(4, 4),
+                    BackgroundColor3 = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 155, 162)
+                }):Play()
+                callback(state)
+            end
+            local last = 0
+            local function fire()
+                local now = os.clock()
+                if now - last < .18 then return end
+                last = now
+                apply(not state)
+            end
+            pill.MouseButton1Click:Connect(fire)
+            pill.Activated:Connect(fire)
+        end
+        local farming, lobbyOnFull = false, false
+        local statusLbl
+        local function setStatus(msg)
+            if statusLbl then statusLbl.Text = msg end
+        end
+        local function firstPart(inst)
+            if not inst then return nil end
+            if inst:IsA("BasePart") then return inst end
+            if inst:IsA("Model") then return inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true) end
+            return inst:FindFirstChildWhichIsA("BasePart", true)
+        end
+        local function findCoins()
+            local coins = {}
+            for _, child in ipairs(workspace:GetChildren()) do
+                local box = child:FindFirstChild("CoinContainer")
+                if box then
+                    for _, coin in ipairs(box:GetChildren()) do
+                        local n = coin.Name
+                        if n == "Coin_Server" or n == "CoinVisual" or n == "Coin" then
+                            local p = firstPart(coin)
+                            if p then coins[#coins + 1] = p end
+                        end
+                    end
+                end
+            end
+            return coins
+        end
+        local function bagFull()
+            local pg = LocalPlayer:FindFirstChild("PlayerGui")
+            local main = pg and (pg:FindFirstChild("MainGUI") or pg:FindFirstChild("MainGui"))
+            if not main then return false end
+            local ok, descs = pcall(function() return main:GetDescendants() end)
+            if not ok or not descs then return false end
+            for i = 1, #descs do
+                local d = descs[i]
+                if d:IsA("GuiObject") and d.Visible then
+                    local n = string.lower(d.Name)
+                    if n == "coinbags" or (string.find(n, "bag", 1, true) and string.find(n, "full", 1, true)) then
+                        return true
+                    end
+                    if (d:IsA("TextLabel") or d:IsA("TextButton")) then
+                        local tx = string.lower(d.Text or "")
+                        if string.find(tx, "bag full", 1, true) or string.find(tx, "full bag", 1, true) then return true end
+                    end
+                end
+            end
+            return false
+        end
+        local function grab(part)
+            local char = LocalPlayer.Character
+            local root = localRoot()
+            if not char or not root or not part or not part.Parent then return false end
+            local dest = workspace.FallenPartsDestroyHeight
+            local cf = part.CFrame + Vector3.new(0, 3, 0)
+            if typeof(dest) == "number" and cf.Position.Y < dest + 40 then return false end
+            pcall(function()
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
+            end)
+            if not pcall(function() char:PivotTo(cf) end) then
+                root.CFrame = cf
+            end
+            if firetouchinterest then
+                pcall(firetouchinterest, root, part, 0)
+                pcall(firetouchinterest, root, part, 1)
+            end
+            return true
+        end
+        local function nearest(coins)
+            local root = localRoot()
+            local origin = root and root.Position
+            local best, bestD = nil, math.huge
+            for i = 1, #coins do
+                local p = coins[i]
+                if p and p.Parent then
+                    local d = origin and (p.Position - origin).Magnitude or 0
+                    if d < bestD then best, bestD = p, d end
+                end
+            end
+            return best
+        end
+        local holder = panel("Autofarm", "Монеты MM2 · ближайшая монета")
+        statusLbl = New("TextLabel", { Parent = holder, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
+            Text = "Idle", TextColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+        makeToggle(holder, "Auto Farm", function(on)
+            farming = on
+            if not on then setStatus("Idle"); notify("Autofarm OFF", 2); return end
+            notify("Autofarm ON", 2)
+            setStatus("Farming...")
+            task.spawn(function()
+                while farming do
+                    if bagFull() then
+                        setStatus("Bag full")
+                        if lobbyOnFull then
+                            notify("Сумка полная", 2)
+                            farming = false
+                            break
+                        end
+                        task.wait(1)
+                        continue
+                    end
+                    local coins = findCoins()
+                    if #coins == 0 then
+                        setStatus("Ждём карту / монеты...")
+                        task.wait(0.8)
+                        continue
+                    end
+                    setStatus("Монет: " .. tostring(#coins))
+                    local coin = nearest(coins)
+                    if coin then grab(coin) end
+                    task.wait(0.35)
+                end
+                setStatus("Idle")
+            end)
+        end)
+        makeToggle(holder, "Stop when bag full", function(on)
+            lobbyOnFull = on
+        end)
     end
 end
 
