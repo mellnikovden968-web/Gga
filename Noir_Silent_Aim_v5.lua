@@ -211,13 +211,14 @@ do
         { "main",   16898613509, Vector2.new(820, 147), "Main" },
         { "aim",    16898613777, Vector2.new(967, 759), "Combat" },
         { "world",  16898613509, Vector2.new(771, 563), "World" },
+        { "map",    16898613509, Vector2.new(771, 563), "Map" },
         { "visual", 16898613353, Vector2.new(771, 563), "Visuals" },
         { "skins",  16898613353, Vector2.new(771, 563), "Skins" },
         { "emotes", 16898613777, Vector2.new(967, 759), "Emotes" },
         { "misc",   16898613509, Vector2.new(820, 147), "Misc" },
     }
     for i, d in ipairs(navDefs) do
-        local b = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(16, 116 + (i - 1) * 52), Size = UDim2.fromOffset(208, 46),
+        local b = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(16, 110 + (i - 1) * 48), Size = UDim2.fromOffset(208, 44),
             BackgroundColor3 = C.surface, BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Name = d[4] })
         corner(b, 12)
         local ic = New("ImageLabel", { Parent = b, Position = UDim2.fromOffset(14, 11), Size = UDim2.fromOffset(24, 24),
@@ -253,6 +254,16 @@ do
             end
             glyphPart(UDim2.fromOffset(22, 10), UDim2.fromOffset(8, 24), 3)
             glyphPart(UDim2.fromOffset(20, 8), UDim2.fromOffset(12, 6), 2)
+        elseif d[1] == "map" then
+            ic.Visible = false
+            glyphs = {}
+            local function glyphPart(position, size, rounded)
+                local part = New("Frame", { Parent = b, Position = position, Size = size, BackgroundColor3 = C.dim, BorderSizePixel = 0 })
+                if rounded then corner(part, rounded) end
+                glyphs[#glyphs + 1] = part
+            end
+            glyphPart(UDim2.fromOffset(20, 9), UDim2.fromOffset(12, 12), 6)
+            glyphPart(UDim2.fromOffset(23, 20), UDim2.fromOffset(6, 10), 2)
         elseif d[1] == "misc" then
             -- Requested Misc mark: a circular outline containing three dots.
             ic.Visible = false
@@ -466,6 +477,15 @@ emotesContent = content:Clone(); emotesContent.Name = "EmotesContent"; emotesCon
 emotesCols = makeDualScrollColumns(emotesContent)
 miscContent = content:Clone(); miscContent.Name = "MiscContent"; miscContent.Parent = win; miscContent.Visible = false; miscContent:ClearAllChildren(); configureDualScrollPage(miscContent)
 miscCols = makeDualScrollColumns(miscContent)
+do
+    local mapPage = content:Clone()
+    mapPage.Name = "MapContent"
+    mapPage.Parent = win
+    mapPage.Visible = false
+    mapPage:ClearAllChildren()
+    configureDualScrollPage(mapPage)
+    makeDualScrollColumns(mapPage)
+end
 end
 
 local dashboard = New("Frame", { Parent = win, Position = content.Position, Size = content.Size, BackgroundTransparency = 1 })
@@ -524,7 +544,7 @@ end)
 local activePage = "home"
 local selectPage
 do
-    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent, emotes = emotesContent, misc = miscContent }
+    local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, map = win:FindFirstChild("MapContent"), visual = visualContent, emotes = emotesContent, misc = miscContent }
     pcall(function()
         getgenv().__NoirRegisterPage = function(name, object)
             if type(name) == "string" and typeof(object) == "Instance" then pageObjects[name] = object end
@@ -1338,6 +1358,226 @@ do
         for _, callback in ipairs(self.listeners) do if type(callback) == "function" then pcall(callback, self.revision) end end
     end
     getgenv().__NoirV4RoleBus = roleBus
+end
+
+do
+    local page = win:FindFirstChild("MapContent")
+    local col = page and page:FindFirstChild("NoirColumn1")
+    if page and col then
+        local function panel(title, subtitle)
+            local card = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
+            corner(card, 18); stroke(card, C.border, .5)
+            local tick = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
+            corner(tick, 2)
+            text(card, title, 18, UDim2.fromOffset(24, 16))
+            if subtitle and subtitle ~= "" then text(card, subtitle, 12, UDim2.fromOffset(24, 44), true) end
+            local holder = New("Frame", { Parent = card, Position = UDim2.fromOffset(20, subtitle ~= "" and 74 or 57), Size = UDim2.new(1, -40, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
+            New("UIListLayout", { Parent = holder, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+            New("UIPadding", { Parent = holder, PaddingBottom = UDim.new(0, 12) })
+            return holder
+        end
+        local function makeBtn(parent, label, callback)
+            local b = New("TextButton", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
+                Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
+            corner(b, 12); stroke(b, C.border, .5)
+            b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(48, 52, 56) }):Play() end)
+            b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn }):Play() end)
+            local last = 0
+            local function fire()
+                local now = os.clock()
+                if now - last < .2 then return end
+                last = now
+                callback()
+            end
+            b.MouseButton1Click:Connect(fire)
+            b.Activated:Connect(fire)
+            return b
+        end
+        local function firstPart(inst)
+            if not inst then return nil end
+            if inst:IsA("BasePart") then return inst end
+            if inst:IsA("Model") then
+                return inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true)
+            end
+            return inst:FindFirstChildWhichIsA("BasePart", true)
+        end
+        local function safeCFrame(cf)
+            if typeof(cf) ~= "CFrame" then return nil end
+            local dest = workspace.FallenPartsDestroyHeight
+            if typeof(dest) == "number" and cf.Position.Y < dest + 40 then return nil end
+            return cf
+        end
+        local function tpToCF(cf)
+            cf = safeCFrame(cf)
+            if not cf then notify("Небезопасная точка телепорта", 2); return false end
+            local char = LocalPlayer.Character
+            local root = localRoot()
+            if not char or not root then notify("Нет персонажа", 2); return false end
+            pcall(function()
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
+            end)
+            if not pcall(function() char:PivotTo(cf) end) then
+                root.CFrame = cf
+            end
+            pcall(function()
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
+            end)
+            return true
+        end
+        local function pickFrom(model)
+            if not model then return nil end
+            local named = model:FindFirstChild("Spawns") or model:FindFirstChild("Spawn") or model:FindFirstChild("SpawnLocation") or model:FindFirstChild("PlayerSpawns")
+            if named then
+                if named:IsA("BasePart") then return named.CFrame + Vector3.new(0, 4, 0) end
+                local parts = {}
+                for _, child in ipairs(named:GetChildren()) do
+                    local p = firstPart(child)
+                    if p then parts[#parts + 1] = p end
+                end
+                if #parts > 0 then return parts[math.random(1, #parts)].CFrame + Vector3.new(0, 4, 0) end
+                local p = firstPart(named)
+                if p then return p.CFrame + Vector3.new(0, 4, 0) end
+            end
+            local sl = model:FindFirstChildWhichIsA("SpawnLocation", true)
+            if sl then return sl.CFrame + Vector3.new(0, 4, 0) end
+            local ok, boxCF, size = pcall(function() return model:GetBoundingBox() end)
+            if ok and typeof(boxCF) == "CFrame" then
+                local lift = 8
+                if typeof(size) == "Vector3" then lift = math.max(8, size.Y * 0.15) end
+                return boxCF + Vector3.new(0, lift, 0)
+            end
+            local p = firstPart(model)
+            if p then return p.CFrame + Vector3.new(0, 6, 0) end
+            return nil
+        end
+        local function findMapModel()
+            local map = workspace:FindFirstChild("Map")
+            if map then return map end
+            for _, child in ipairs(workspace:GetChildren()) do
+                local n = string.lower(child.Name)
+                if child:IsA("Model") and (n == "map" or string.find(n, "map", 1, true) == 1) then return child end
+            end
+            return nil
+        end
+        local function findLobbyModel()
+            local lobby = workspace:FindFirstChild("Lobby")
+            if lobby then return lobby end
+            for _, child in ipairs(workspace:GetChildren()) do
+                local n = string.lower(child.Name)
+                if n == "lobby" or n == "lobbyhouse" or n == "house" then return child end
+            end
+            return nil
+        end
+        local function tpToPlayer(player)
+            if not player or player == LocalPlayer then notify("Некого телепортировать", 2); return end
+            local char = player.Character
+            local hrp = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"))
+            if not hrp then notify(player.Name .. " без персонажа", 2); return end
+            if tpToCF(hrp.CFrame * CFrame.new(0, 2, 3.5)) then
+                notify("TP → " .. player.Name, 2)
+            end
+        end
+        local function currentMurder()
+            if validTarget(murderer) then return murderer end
+            local byKnife = findByKnife()
+            if validTarget(byKnife) then return byKnife end
+            for _, player in ipairs(getPlayers()) do
+                if roleCache[player.UserId] == "murderer" and validTarget(player) then return player end
+            end
+        end
+        local function currentSheriff()
+            if validTarget(sheriff) then return sheriff end
+            if validTarget(hero) then return hero end
+            local byGun = findByGun()
+            if validTarget(byGun) then return byGun end
+            for _, player in ipairs(getPlayers()) do
+                local role = roleCache[player.UserId]
+                if (role == "sheriff" or role == "hero") and validTarget(player) then return player end
+            end
+        end
+
+        local tpHolder = panel("Teleport", "Карта · лобби · роли")
+        makeBtn(tpHolder, "Teleport to Map", function()
+            local map = findMapModel()
+            if not map then notify("Карта не найдена (раунд не начался)", 3); return end
+            local cf = pickFrom(map)
+            if cf and tpToCF(cf) then notify("Телепорт на карту", 2) else notify("Нет точки спавна на карте", 3) end
+        end)
+        makeBtn(tpHolder, "Teleport to Lobby", function()
+            local lobby = findLobbyModel()
+            if not lobby then notify("Лобби не найдено", 3); return end
+            local cf = pickFrom(lobby)
+            if cf and tpToCF(cf) then notify("Телепорт в лобби", 2) else notify("Нет точки спавна в лобби", 3) end
+        end)
+        makeBtn(tpHolder, "Teleport to Murder", function()
+            local target = currentMurder()
+            if not target then notify("Murder не найден", 3); return end
+            tpToPlayer(target)
+        end)
+        makeBtn(tpHolder, "Teleport to Sheriff", function()
+            local target = currentSheriff()
+            if not target then notify("Sheriff не найден", 3); return end
+            tpToPlayer(target)
+        end)
+
+        local listHolder = panel("Players", "Тап по игроку — телепорт")
+        local roleLabel = New("TextLabel", { Parent = listHolder, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
+            Text = "Murder: —  ·  Sheriff: —", TextColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+        makeBtn(listHolder, "Refresh list", function() end)
+        local rows = New("Frame", { Parent = listHolder, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
+        New("UIListLayout", { Parent = rows, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder })
+
+        local function roleOf(player)
+            local cached = roleCache[player.UserId]
+            if cached and cached ~= "" then return cached end
+            if playerHasTool(player, "Knife") then return "murderer" end
+            if playerHasTool(player, "Gun") then return "sheriff" end
+            return "innocent"
+        end
+        local function rebuild()
+            for _, child in ipairs(rows:GetChildren()) do
+                if not child:IsA("UIListLayout") then child:Destroy() end
+            end
+            local m, s = currentMurder(), currentSheriff()
+            roleLabel.Text = "Murder: " .. (m and m.Name or "—") .. "  ·  Sheriff: " .. (s and s.Name or "—")
+            local list = {}
+            for _, player in ipairs(getPlayers()) do
+                if player ~= LocalPlayer then list[#list + 1] = player end
+            end
+            table.sort(list, function(a, b) return string.lower(a.Name) < string.lower(b.Name) end)
+            if #list == 0 then
+                text(rows, "Нет игроков", 14, UDim2.fromOffset(0, 0), true)
+                return
+            end
+            for _, player in ipairs(list) do
+                local role = roleOf(player)
+                local tag = ""
+                if role == "murderer" then tag = "  ·  Murder"
+                elseif role == "sheriff" then tag = "  ·  Sheriff"
+                elseif role == "hero" then tag = "  ·  Hero"
+                elseif role == "dead" then tag = "  ·  Dead" end
+                local label = player.DisplayName
+                if player.DisplayName ~= player.Name then label = player.DisplayName .. " (@" .. player.Name .. ")" end
+                local captured = player
+                makeBtn(rows, label .. tag, function() tpToPlayer(captured) end)
+            end
+        end
+        -- rebind refresh now that rebuild exists
+        local refreshBtn = listHolder:FindFirstChildWhichIsA("TextButton")
+        if refreshBtn then
+            refreshBtn.MouseButton1Click:Connect(rebuild)
+            refreshBtn.Activated:Connect(rebuild)
+        end
+        Players.PlayerAdded:Connect(function() task.defer(rebuild) end)
+        Players.PlayerRemoving:Connect(function() task.defer(rebuild) end)
+        local bus = getgenv().__NoirV4RoleBus
+        if bus and bus.Subscribe then bus:Subscribe(function() task.defer(rebuild) end) end
+        rebuild()
+    end
 end
 
 function consumeData(data, fullSnapshot)
@@ -10976,7 +11216,7 @@ local state = {
 state_whitelist_ref = state.whitelist
 
 local maids = {
-    loopPlr = nil, clickFling = nil, aura = nil,
+    loopPlr = nil, clickFling = nil, aura = nil, touchFling = nil,
     autoSheriff = nil, autoMurderer = nil,
 }
 
@@ -12206,6 +12446,44 @@ actionSection:AddPlayerDropdown("▸ Fling player", function(p)
         if state.whitelist[p.UserId] then Notify("Whitelist", p.Name.." is whitelisted!",3)
         else SkidFling(p); Notify("Fling","Flinging "..p.Name,2) end
     end
+end)
+actionSection:AddToggle("Touch Fling", function(enabled)
+    if maids.touchFling then maids.touchFling:Destroy(); maids.touchFling = nil end
+    if not enabled then return end
+    maids.touchFling = Maid.new()
+    local lastHit = {}
+    local function onTouched(hit)
+        if not hit then return end
+        local model = hit.Parent
+        if not model then return end
+        if not model:IsA("Model") then model = model:FindFirstAncestorWhichIsA("Model") end
+        local player = model and Players:GetPlayerFromCharacter(model)
+        if not player or not isValidTarget(player) then return end
+        local t = now()
+        if lastHit[player.UserId] and (t - lastHit[player.UserId]) < 0.4 then return end
+        lastHit[player.UserId] = t
+        state.resetSelPlr = player
+        SkidFling(player)
+    end
+    local function hookCharacter(char)
+        if not char or not maids.touchFling or maids.touchFling._destroyed then return end
+        local function hookPart(part)
+            if part and part:IsA("BasePart") then
+                maids.touchFling:GiveTask(part.Touched:Connect(onTouched))
+            end
+        end
+        hookPart(char:FindFirstChild("HumanoidRootPart"))
+        hookPart(char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"))
+        hookPart(char:FindFirstChild("LowerTorso"))
+        hookPart(char:FindFirstChild("Head"))
+        hookPart(char:FindFirstChild("LeftFoot") or char:FindFirstChild("Left Leg"))
+        hookPart(char:FindFirstChild("RightFoot") or char:FindFirstChild("Right Leg"))
+        maids.touchFling:GiveTask(char.ChildAdded:Connect(function(child)
+            if child.Name == "HumanoidRootPart" or child.Name == "Torso" or child.Name == "UpperTorso" then hookPart(child) end
+        end))
+    end
+    if LocalPlayer.Character then hookCharacter(LocalPlayer.Character) end
+    maids.touchFling:GiveTask(LocalPlayer.CharacterAdded:Connect(hookCharacter))
 end)
 
 -- 🤖 Auto
