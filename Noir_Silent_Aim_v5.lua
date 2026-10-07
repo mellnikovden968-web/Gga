@@ -12402,7 +12402,6 @@ do
             { "Movement", function(n) return nfind(n,"universal") or nfind(n,"noclip") or nfind(n,"fly") end },
             { "Invisible", function(n) return nfind(n,"invisible") end },
             { "Fun", function(n) return nfind(n,"fun client") or nfind(n,"fun") end },
-            { "Self", function(n) return nfind(n,"self") end },
             { "Server", function(n) return nfind(n,"server") end },
         },
         world = {
@@ -12423,8 +12422,6 @@ do
             { "Cursor", function(n) return nfind(n,"cursor") end },
             { "FPS", function(n) return nfind(n,"fps") and not nfind(n,"aimlock") end },
             { "Desync", function(n) return nfind(n,"desync") end },
-            { "Inventory", function(n) return nfind(n,"inventory") end },
-            { "WallHop", function(n) return nfind(n,"wallhop") or nfind(n,"wall hop") or nfind(n,"pm-wall") end },
         },
     }
     local pageFrames = {
