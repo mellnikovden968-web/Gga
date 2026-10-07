@@ -1738,123 +1738,301 @@ do
             pill.MouseButton1Click:Connect(fire)
             pill.Activated:Connect(fire)
         end
-        local farming, lobbyOnFull = false, false
-        local statusLbl
+        local farming, gunFarm, auraOn, resetFull, killAllOn, shootMurdOn, noRenderOn = false, false, false, false, false, false, false
+        local collected, bagIsFull, auraRadius = 0, false, 8
+        local noclipConn, auraConn, statusLbl, savedDestroyH
+        local origDestroyH = workspace.FallenPartsDestroyHeight
         local function setStatus(msg)
             if statusLbl then statusLbl.Text = msg end
         end
-        local function firstPart(inst)
-            if not inst then return nil end
-            if inst:IsA("BasePart") then return inst end
-            if inst:IsA("Model") then return inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true) end
-            return inst:FindFirstChildWhichIsA("BasePart", true)
+        local function touch(a, b)
+            pcall(function()
+                firetouchinterest(a, b, 0)
+                firetouchinterest(a, b, 1)
+            end)
         end
-        local function findCoins()
-            local coins = {}
+        local function coinPos(coin)
+            if not coin then return nil end
+            if coin:IsA("BasePart") then return coin.Position end
+            local p = coin.PrimaryPart or coin:FindFirstChildWhichIsA("BasePart", true)
+            return p and p.Position or nil
+        end
+        local function getContainer()
+            local box = workspace:FindFirstChild("CoinContainer", true)
+            if box then return box end
             for _, child in ipairs(workspace:GetChildren()) do
-                local box = child:FindFirstChild("CoinContainer")
-                if box then
-                    for _, coin in ipairs(box:GetChildren()) do
-                        local n = coin.Name
-                        if n == "Coin_Server" or n == "CoinVisual" or n == "Coin" then
-                            local p = firstPart(coin)
-                            if p then coins[#coins + 1] = p end
-                        end
-                    end
-                end
+                local inner = child:FindFirstChild("CoinContainer")
+                if inner then return inner end
             end
-            return coins
+            return nil
         end
-        local function bagFull()
-            local pg = LocalPlayer:FindFirstChild("PlayerGui")
-            local main = pg and (pg:FindFirstChild("MainGUI") or pg:FindFirstChild("MainGui"))
-            if not main then return false end
-            local ok, descs = pcall(function() return main:GetDescendants() end)
-            if not ok or not descs then return false end
+        local function getCoinParts()
+            local parts, box = {}, getContainer()
+            if not box then return parts end
+            local ok, descs = pcall(function() return box:GetDescendants() end)
+            if not ok or not descs then return parts end
             for i = 1, #descs do
                 local d = descs[i]
-                if d:IsA("GuiObject") and d.Visible then
-                    local n = string.lower(d.Name)
-                    if n == "coinbags" or (string.find(n, "bag", 1, true) and string.find(n, "full", 1, true)) then
-                        return true
-                    end
-                    if (d:IsA("TextLabel") or d:IsA("TextButton")) then
-                        local tx = string.lower(d.Text or "")
-                        if string.find(tx, "bag full", 1, true) or string.find(tx, "full bag", 1, true) then return true end
+                if d:IsA("BasePart") and d:FindFirstChild("TouchInterest") then
+                    parts[#parts + 1] = d
+                elseif d:IsA("BasePart") and (d.Name == "Coin_Server" or d.Name == "CoinVisual" or d.Name == "Coin") then
+                    parts[#parts + 1] = d
+                end
+            end
+            if #parts == 0 then
+                local named = box:FindFirstChild("Coin_Server")
+                if named then
+                    if named:IsA("BasePart") then parts[1] = named
+                    else
+                        local p = named:FindFirstChildWhichIsA("BasePart", true)
+                        if p then parts[1] = p end
                     end
                 end
             end
-            return false
+            return parts
         end
-        local function grab(part)
-            local char = LocalPlayer.Character
+        local function underMapCF()
+            local box = getContainer()
+            local map = box and box.Parent
+            if map and map:IsA("Model") then
+                local ok, cf, size = pcall(function() return map:GetBoundingBox() end)
+                if ok and typeof(cf) == "CFrame" and typeof(size) == "Vector3" then
+                    return CFrame.new(cf.Position.X, cf.Position.Y - size.Y * 0.5 - 18, cf.Position.Z)
+                end
+            end
             local root = localRoot()
-            if not char or not root or not part or not part.Parent then return false end
-            local dest = workspace.FallenPartsDestroyHeight
-            local cf = part.CFrame + Vector3.new(0, 3, 0)
-            if typeof(dest) == "number" and cf.Position.Y < dest + 40 then return false end
-            pcall(function()
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.AssemblyAngularVelocity = Vector3.zero
+            if root then return CFrame.new(root.Position.X, root.Position.Y - 50, root.Position.Z) end
+        end
+        local function setAntiVoid(on)
+            if on then
+                if savedDestroyH == nil then savedDestroyH = workspace.FallenPartsDestroyHeight end
+                workspace.FallenPartsDestroyHeight = 0/0
+            else
+                workspace.FallenPartsDestroyHeight = savedDestroyH or origDestroyH
+                savedDestroyH = nil
+            end
+        end
+        local function setNoclip(on)
+            if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
+            if not on then
+                local char = LocalPlayer.Character
+                if char then
+                    for _, p in ipairs(char:GetChildren()) do
+                        if p:IsA("BasePart") then p.CanCollide = true end
+                    end
+                end
+                return
+            end
+            noclipConn = RunService.Stepped:Connect(function()
+                if not (farming or gunFarm or auraOn) then return end
+                local char = LocalPlayer.Character
+                if not char then return end
+                for _, p in ipairs(char:GetChildren()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
             end)
-            if not pcall(function() char:PivotTo(cf) end) then
-                root.CFrame = cf
-            end
-            if firetouchinterest then
-                pcall(firetouchinterest, root, part, 0)
-                pcall(firetouchinterest, root, part, 1)
-            end
-            return true
         end
-        local function nearest(coins)
+        local function collectAura()
             local root = localRoot()
-            local origin = root and root.Position
-            local best, bestD = nil, math.huge
-            for i = 1, #coins do
-                local p = coins[i]
-                if p and p.Parent then
-                    local d = origin and (p.Position - origin).Magnitude or 0
-                    if d < bestD then best, bestD = p, d end
+            if not root then return 0 end
+            local pos, n = root.Position, 0
+            local parts = getCoinParts()
+            for i = 1, #parts do
+                local part = parts[i]
+                if part and part.Parent and (pos - part.Position).Magnitude <= auraRadius then
+                    touch(root, part)
+                    n += 1
                 end
             end
-            return best
+            return n
         end
-        local holder = panel("Autofarm", "Монеты MM2 · ближайшая монета")
-        statusLbl = New("TextLabel", { Parent = holder, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
-            Text = "Idle", TextColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
-        makeToggle(holder, "Auto Farm", function(on)
-            farming = on
-            if not on then setStatus("Idle"); notify("Autofarm OFF", 2); return end
-            notify("Autofarm ON", 2)
-            setStatus("Farming...")
-            task.spawn(function()
-                while farming do
-                    if bagFull() then
-                        setStatus("Bag full")
-                        if lobbyOnFull then
-                            notify("Сумка полная", 2)
-                            farming = false
-                            break
-                        end
-                        task.wait(1)
-                        continue
-                    end
-                    local coins = findCoins()
-                    if #coins == 0 then
-                        setStatus("Ждём карту / монеты...")
-                        task.wait(0.8)
-                        continue
-                    end
-                    setStatus("Монет: " .. tostring(#coins))
-                    local coin = nearest(coins)
-                    if coin then grab(coin) end
-                    task.wait(0.35)
+        local function bringCoinsUnder()
+            local root = localRoot()
+            if not root then return 0 end
+            local parts = getCoinParts()
+            local n = 0
+            for i = 1, #parts do
+                local part = parts[i]
+                if part and part.Parent then
+                    pcall(function() part.CFrame = root.CFrame end)
+                    touch(root, part)
+                    n += 1
                 end
-                setStatus("Idle")
+            end
+            return n
+        end
+        pcall(function()
+            local gp = ReplicatedStorage:FindFirstChild("Remotes")
+            gp = gp and gp:FindFirstChild("Gameplay")
+            local ev = gp and gp:FindFirstChild("CoinCollected")
+            if ev and ev.OnClientEvent then
+                ev.OnClientEvent:Connect(function(_, current, max)
+                    current, max = tonumber(current), tonumber(max)
+                    if current and max and current >= max then bagIsFull = true end
+                end)
+            end
+            local endEv = gp and gp:FindFirstChild("RoundEndFade")
+            if endEv and endEv.OnClientEvent then
+                endEv.OnClientEvent:Connect(function() bagIsFull = false end)
+            end
+            local startEv = gp and gp:FindFirstChild("RoundStart")
+            if startEv and startEv.OnClientEvent then
+                startEv.OnClientEvent:Connect(function() bagIsFull = false end)
+            end
+        end)
+        pcall(function()
+            LocalPlayer.Idled:Connect(function()
+                local vu = game:GetService("VirtualUser")
+                vu:CaptureController()
+                vu:ClickButton2(Vector2.new())
             end)
         end)
-        makeToggle(holder, "Stop when bag full", function(on)
-            lobbyOnFull = on
+        local function hasTool(name)
+            local char, bp = LocalPlayer.Character, LocalPlayer:FindFirstChild("Backpack")
+            return (char and char:FindFirstChild(name)) or (bp and bp:FindFirstChild(name))
+        end
+        local function farmBtn(parent, label, fn)
+            local b = New("TextButton", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
+                Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
+            corner(b, 12); stroke(b, C.border, .5)
+            b.MouseButton1Click:Connect(fn)
+            b.Activated:Connect(fn)
+            return b
+        end
+
+        local holder = panel("Autofarm", "Под картой + Coin Aura · без TP к монете")
+        statusLbl = New("TextLabel", { Parent = holder, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
+            Text = "Idle", TextColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+        makeToggle(holder, "Auto Farm Coins (under map)", function(on)
+            farming = on
+            if not on then
+                setNoclip(false)
+                setAntiVoid(false)
+                setStatus("Idle · " .. tostring(collected))
+                notify("Autofarm OFF", 2)
+                return
+            end
+            notify("Autofarm ON — под картой", 2)
+            setAntiVoid(true)
+            setNoclip(true)
+            task.spawn(function()
+                while farming do
+                    if bagIsFull then
+                        setStatus("Bag full")
+                        if resetFull then
+                            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                            if hum then hum.Health = 0 end
+                            bagIsFull = false
+                            task.wait(2)
+                        else
+                            task.wait(1)
+                        end
+                        continue
+                    end
+                    local cf = underMapCF()
+                    local root = localRoot()
+                    if not cf or not root then
+                        setStatus("Ждём карту...")
+                        task.wait(0.5)
+                        continue
+                    end
+                    root.CFrame = cf
+                    pcall(function()
+                        root.AssemblyLinearVelocity = Vector3.zero
+                        root.AssemblyAngularVelocity = Vector3.zero
+                    end)
+                    local n = bringCoinsUnder()
+                    setStatus("Под картой · монет " .. tostring(n) .. " · +" .. tostring(collected))
+                    task.wait(0.12)
+                end
+                setNoclip(false)
+                setAntiVoid(false)
+                setStatus("Idle · " .. tostring(collected))
+            end)
+        end)
+        makeToggle(holder, "Coin Aura", function(on)
+            auraOn = on
+            if auraConn then auraConn:Disconnect(); auraConn = nil end
+            if not on then setStatus("Aura off"); return end
+            auraConn = RunService.Heartbeat:Connect(function()
+                if auraOn then collectAura() end
+            end)
+            notify("Coin Aura ON", 2)
+        end)
+        local radBtn = farmBtn(holder, "Aura radius: 8", function() end)
+        local rads, ri = { 4, 8, 16, 32, 64 }, 2
+        radBtn.MouseButton1Click:Connect(function()
+            ri = ri % #rads + 1
+            auraRadius = rads[ri]
+            radBtn.Text = "Aura radius: " .. tostring(auraRadius)
+        end)
+        makeToggle(holder, "Auto Grab Gun", function(on)
+            gunFarm = on
+            if not on then return end
+            task.spawn(function()
+                while gunFarm do
+                    local drop = workspace:FindFirstChild("GunDrop", true)
+                    local root = localRoot()
+                    if drop and root and not hasTool("Gun") then
+                        local part = drop:IsA("BasePart") and drop or drop:FindFirstChildWhichIsA("BasePart", true)
+                        if part then touch(root, part) end
+                    end
+                    task.wait(0.45)
+                end
+            end)
+        end)
+        makeToggle(holder, "Reset when bag full", function(on) resetFull = on end)
+        makeToggle(holder, "Disable 3D Rendering", function(on)
+            noRenderOn = on
+            pcall(function() RunService:Set3dRenderingEnabled(not on) end)
+        end)
+        makeToggle(holder, "Auto-Kill All", function(on)
+            killAllOn = on
+            if not on then return end
+            task.spawn(function()
+                while killAllOn do
+                    local char = LocalPlayer.Character
+                    local knife = char and char:FindFirstChild("Knife") or (LocalPlayer:FindFirstChild("Backpack") and LocalPlayer.Backpack:FindFirstChild("Knife"))
+                    local events = knife and knife:FindFirstChild("Events")
+                    local ht = events and events:FindFirstChild("HandleTouched")
+                    if ht then
+                        for _, plr in ipairs(Players:GetPlayers()) do
+                            if plr ~= LocalPlayer and plr.Character then
+                                local t = plr.Character:FindFirstChild("UpperTorso") or plr.Character:FindFirstChild("HumanoidRootPart")
+                                if t then pcall(function() ht:FireServer(t) end) end
+                            end
+                        end
+                    end
+                    task.wait(1)
+                end
+            end)
+        end)
+        makeToggle(holder, "Auto-Shoot Murd", function(on)
+            shootMurdOn = on
+            if not on then return end
+            task.spawn(function()
+                while shootMurdOn do
+                    local gun = hasTool("Gun")
+                    local murd = findByKnife and findByKnife()
+                    if gun and murd and murd.Character then
+                        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                        if hum and gun.Parent == LocalPlayer:FindFirstChild("Backpack") then pcall(function() hum:EquipTool(gun) end) end
+                        pcall(function()
+                            local vu = game:GetService("VirtualUser")
+                            local cam = workspace.CurrentCamera
+                            local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                            vu:Button1Down(center, cam.CFrame)
+                            task.wait(0.08)
+                            vu:Button1Up(center, cam.CFrame)
+                        end)
+                    end
+                    task.wait(0.5)
+                end
+            end)
+        end)
+        farmBtn(holder, "Bring coins now", function()
+            local n = bringCoinsUnder()
+            notify("Brought " .. tostring(n) .. " coins", 2)
         end)
     end
 end
