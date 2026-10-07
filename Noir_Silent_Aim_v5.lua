@@ -1495,6 +1495,7 @@ do
             return pickFrom(map)
         end
                 local function lobbyCFrame()
+            local map = findMapModel()
             local function fromSpawns(folder)
                 if not folder then return nil end
                 local parts = {}
@@ -1508,17 +1509,57 @@ do
                 end
                 if #parts > 0 then return parts[math.random(1, #parts)].CFrame + Vector3.new(0, 3, 0) end
             end
-            local lobby = workspace:FindFirstChild("Lobby")
-            if lobby then
-                local cf = fromSpawns(lobby:FindFirstChild("Spawns") or lobby:FindFirstChild("Spawn"))
+            local function fromInst(inst)
+                if not inst then return nil end
+                if map and (inst == map or inst:IsDescendantOf(map)) then return nil end
+                local cf = fromSpawns(inst:FindFirstChild("Spawns") or inst:FindFirstChild("Spawn") or inst:FindFirstChild("SpawnLocation") or inst:FindFirstChild("PlayerSpawns"))
                 if cf then return cf end
-                local sl = lobby:FindFirstChildWhichIsA("SpawnLocation", true)
+                local sl = inst:FindFirstChildWhichIsA("SpawnLocation", true)
                 if sl then return sl.CFrame + Vector3.new(0, 4, 0) end
+                if inst:IsA("SpawnLocation") or inst:IsA("BasePart") then
+                    return inst.CFrame + Vector3.new(0, 4, 0)
+                end
+                if inst:IsA("Model") then
+                    local ok, pivot = pcall(function() return inst:GetPivot() end)
+                    if ok and typeof(pivot) == "CFrame" then return pivot * CFrame.new(0, 6, 0) end
+                end
             end
-            for _, inst in ipairs(workspace:GetDescendants()) do
-                if inst.Name == "Spawns" and inst.Parent and inst.Parent.Name == "Lobby" then
-                    local cf = fromSpawns(inst)
+            local function isLobbyName(n)
+                n = string.lower(tostring(n or ""))
+                return n == "lobby" or string.find(n, "lobby", 1, true) ~= nil
+                    or n == "waiting" or n == "waitingroom" or n == "vote" or n == "voting" or n == "votingroom"
+            end
+            for _, child in ipairs(workspace:GetChildren()) do
+                if isLobbyName(child.Name) then
+                    local cf = fromInst(child)
                     if cf then return cf end
+                end
+            end
+            local okDesc, descendants = pcall(function() return workspace:GetDescendants() end)
+            if okDesc and descendants then
+                for i = 1, #descendants do
+                    local inst = descendants[i]
+                    local n = inst.Name
+                    if (n == "Spawns" or n == "Spawn" or n == "PlayerSpawns") and inst.Parent and isLobbyName(inst.Parent.Name) then
+                        local cf = fromSpawns(inst)
+                        if cf then return cf end
+                    elseif isLobbyName(n) and (inst:IsA("Model") or inst:IsA("Folder")) then
+                        local cf = fromInst(inst)
+                        if cf then return cf end
+                    end
+                end
+                for i = 1, #descendants do
+                    local inst = descendants[i]
+                    if inst:IsA("SpawnLocation") and not (map and inst:IsDescendantOf(map)) then
+                        return inst.CFrame + Vector3.new(0, 4, 0)
+                    end
+                end
+                for i = 1, #descendants do
+                    local inst = descendants[i]
+                    if (inst.Name == "Spawns" or inst.Name == "Spawn") and not (map and inst:IsDescendantOf(map)) then
+                        local cf = fromSpawns(inst)
+                        if cf then return cf end
+                    end
                 end
             end
             return nil
@@ -1560,7 +1601,8 @@ do
         end)
         makeBtn(tpHolder, "Teleport to Lobby", function()
             local cf = lobbyCFrame()
-            if cf and tpToCF(cf) then notify("Телепорт в лобби", 2) else notify("Лобби не найдено", 3) end
+            if not cf then notify("Лобби не найдено", 3); return end
+            if tpToCF(cf) then notify("Телепорт в лобби", 2) end
         end)
         makeBtn(tpHolder, "Teleport to Murder", function()
             local target = currentMurder()
