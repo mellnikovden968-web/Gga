@@ -12963,30 +12963,196 @@ local function applySkinCore(container, srcObj)
     return true
 end
 
+local function equippedName(kind)
+    local pd = playerData()
+    if type(pd) ~= "table" then return nil end
+    local weapons = raw(pd, "Weapons") or raw(pd, "weapons")
+    local equipped = type(weapons) == "table" and (raw(weapons, "Equipped") or raw(weapons, "equipped"))
+    if type(equipped) == "table" then
+        if kind == "Gun" then return equipped.Gun or equipped.gun end
+        return equipped.Knife or equipped.knife
+    end
+    if kind == "Gun" then return pd.Gun or pd.EquippedGun end
+    return pd.Knife or pd.EquippedKnife
+end
+
+local function stashTemplate(name, inst)
+    if type(name) ~= "string" or name == "" or not inst then return end
+    if name == "Knife" or name == "Gun" or name == "KnifeDisplay" or name == "GunDisplay" or JUNK_NAME[string.lower(name)] then return end
+    if state.templates[name] then return end
+    local ok, cl = pcall(function() return inst:Clone() end)
+    if ok and cl then state.templates[name] = cl end
+end
+
 local function capturePlayers()
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer then
-            local char = plr.Character
-            if char then
-                for _, slot in ipairs({ "Knife", "Gun" }) do
-                    local tool = char:FindFirstChild(slot)
-                    if tool and tool:IsA("Tool") then
-                        local guess = tool:GetAttribute("ItemName") or tool:GetAttribute("SkinName") or tool.Name
-                        if type(guess) == "string" and guess ~= "" and guess ~= slot and not state.templates[guess] then
-                            local ok, cl = pcall(function() return tool:Clone() end)
-                            if ok and cl then state.templates[guess] = cl end
-                        end
-                    end
-                    local display = getDisplayObj(char, slot)
-                    if display then
-                        local guess = display:GetAttribute("ItemName") or display:GetAttribute("SkinName")
-                        if type(guess) == "string" and guess ~= "" and not state.templates[guess] then
-                            local ok, cl = pcall(function() return display:Clone() end)
-                            if ok and cl then state.templates[guess] = cl end
-                        end
+        local char = plr.Character
+        if char then
+            for _, slot in ipairs({ "Knife", "Gun" }) do
+                local fromData = plr == LocalPlayer and equippedName(slot) or nil
+                local tool = char:FindFirstChild(slot)
+                if tool then
+                    local guess = tool:GetAttribute("ItemName") or tool:GetAttribute("SkinName") or fromData
+                    if guess and guess ~= slot then stashTemplate(guess, tool) end
+                end
+                local display = getDisplayObj(char, slot)
+                if display then
+                    local guess = display:GetAttribute("ItemName") or display:GetAttribute("SkinName") or fromData
+                    if guess then stashTemplate(guess, display) end
+                end
+            end
+        end
+    end
+end
+
+local function tryGetObjects(value)
+    local id = tostring(value or ""):match("(%d%d%d%d%d+)")
+    if not id then return nil end
+    local ok, objs = pcall(function()
+        return game:GetObjects("rbxassetid://" .. id)
+    end)
+    if not (ok and type(objs) == "table") then return nil end
+    for _, obj in ipairs(objs) do
+        if obj:IsA("Tool") or obj:IsA("Model") or obj:IsA("Accessory") or obj:IsA("BasePart") then return obj end
+        local inner = obj:FindFirstChildWhichIsA("Tool", true) or obj:FindFirstChildWhichIsA("Model", true) or obj:FindFirstChildWhichIsA("BasePart", true)
+        if inner then return inner end
+    end
+end
+
+local function stealViewport()
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return nil end
+    local best
+    pcall(function()
+        for _, v in ipairs(gui:GetDescendants()) do
+            if v:IsA("ViewportFrame") then
+                for _, d in ipairs(v:GetDescendants()) do
+                    if d:IsA("Model") or d:IsA("MeshPart") or (d:IsA("BasePart") and d:FindFirstChildOfClass("SpecialMesh")) then
+                        if d.Name ~= "WorldModel" and d.Name ~= "Camera" then best = d end
                     end
                 end
             end
+        end
+    end)
+    return best
+end
+
+local function clickNamed(name)
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return end
+    local want = string.lower(name)
+    pcall(function()
+        for _, v in ipairs(gui:GetDescendants()) do
+            if (v:IsA("TextLabel") or v:IsA("TextButton")) and string.lower(v.Text or "") == want then
+                local btn = v
+                for _ = 1, 6 do
+                    if not btn then break end
+                    if btn:IsA("GuiButton") then
+                        pcall(function() firesignal(btn.MouseButton1Click) end)
+                        pcall(function() firesignal(btn.Activated) end)
+                        return
+                    end
+                    btn = btn.Parent
+                end
+            end
+        end
+    end)
+end
+
+local MESH_DB = {
+    Corrupt = { "rbxassetid://121944778", "rbxassetid://162016526", 1, 1, 1 },
+    Candleflame = { "rbxassetid://7791364860", "rbxassetid://8272172218", 0.064, 0.064, 0.064 },
+    ["Chroma Candleflame"] = { "rbxassetid://7791364860", "rbxassetid://8272172218", 0.064, 0.064, 0.064 },
+    Icebreaker = { "rbxassetid://6124173614", "rbxassetid://6124173821", 1, 1, 1 },
+    Candy = { "rbxassetid://19040337", "rbxassetid://19040326", 1, 1.3, 1 },
+}
+local CATALOG_DB = {
+    Batwing = 306971294,
+    ["Nik's Scythe"] = 375690925,
+}
+
+local function makeMeshPart(name)
+    local d = MESH_DB[name]
+    if not d then return nil end
+    if state.templates[name] then return state.templates[name] end
+    local part = Instance.new("Part")
+    part.Name = name
+    part.Size = Vector3.new(1, 1, 1)
+    part.CanCollide = false
+    local mesh = Instance.new("SpecialMesh")
+    mesh.MeshType = Enum.MeshType.FileMesh
+    mesh.MeshId = d[1]
+    mesh.TextureId = d[2]
+    mesh.Scale = Vector3.new(d[3], d[4], d[5])
+    mesh.Parent = part
+    state.templates[name] = part
+    return part
+end
+
+local function applyMeshDirect(kind, meshId, texId, scale)
+    if type(meshId) ~= "string" or meshId == "" then return false end
+    local ok = false
+    for _, target in ipairs(visualTargets(kind)) do
+        local part = getAnchor(target)
+        if part then
+            local mesh = part:FindFirstChildOfClass("SpecialMesh")
+            if not mesh then
+                mesh = Instance.new("SpecialMesh")
+                mesh.MeshType = Enum.MeshType.FileMesh
+                mesh.Name = "Mesh"
+                mesh.Parent = part
+            end
+            pcall(function()
+                mesh.MeshId = meshId
+                if type(texId) == "string" and texId ~= "" then mesh.TextureId = texId end
+                if typeof(scale) == "Vector3" then mesh.Scale = scale end
+            end)
+            ok = true
+        end
+    end
+    return ok
+end
+
+local function loadModel(name, kind)
+    local built = makeMeshPart(name)
+    if built then return built end
+    if CATALOG_DB[name] then
+        local obj = tryGetObjects(CATALOG_DB[name])
+        if obj then
+            state.templates[name] = obj
+            return obj
+        end
+    end
+    capturePlayers()
+    local t = getTemplate(name)
+    if t then return t end
+    pcall(function()
+        if type(getrenv) ~= "function" then return end
+        local db = getrenv()._G and getrenv()._G.Database
+        local item = db and raw(db, "Item")
+        item = type(item) == "table" and (item[name] or (raw(item, kind) and raw(item, kind)[name]))
+        if type(item) ~= "table" then return end
+        for _, key in ipairs({ "AssetId", "ModelId", "MeshId", "AssetID", "Model", "Id", "ItemId" }) do
+            local obj = tryGetObjects(raw(item, key))
+            if obj then
+                state.templates[name] = obj
+                return
+            end
+        end
+    end)
+    t = getTemplate(name)
+    if t then return t end
+    clickNamed(name)
+    task.wait(0.25)
+    capturePlayers()
+    t = getTemplate(name)
+    if t then return t end
+    local stolen = stealViewport()
+    if stolen then
+        local ok, cl = pcall(function() return stolen:Clone() end)
+        if ok and cl then
+            state.templates[name] = cl
+            return cl
         end
     end
 end
@@ -13040,12 +13206,18 @@ local function writePlayerData(kind, skinName)
     end)
 end
 
-local function applyKind(kind)
+local function applyKind(kind, allowLoad)
     if not state.enabled then return false end
     local skinName = kind == "Gun" and state.selectedGun or state.selectedKnife
     if type(skinName) ~= "string" or skinName == "" then return false end
     writePlayerData(kind, skinName)
+    local db = MESH_DB[skinName]
+    if db then
+        local scale = Vector3.new(db[3], db[4], db[5])
+        if applyMeshDirect(kind, db[1], db[2], scale) then return true end
+    end
     local template = getTemplate(skinName)
+    if not template and allowLoad then template = loadModel(skinName, kind) end
     if not template then return false end
     local ok = false
     for _, target in ipairs(visualTargets(kind)) do
@@ -13195,12 +13367,14 @@ local function rebuildGrid()
             if not state.enabled then
                 notify("Turn Enable on first", 2)
             else
-                local ok = applyKind(state.kind)
-                if ok then
-                    notify("Skin: " .. item.name, 2)
-                else
-                    notify("No 3D model for " .. item.name, 2)
-                end
+                task.spawn(function()
+                    local ok = applyKind(state.kind, true)
+                    if ok then
+                        notify("Skin: " .. item.name, 2)
+                    else
+                        notify("No 3D model for " .. item.name, 2)
+                    end
+                end)
             end
             rebuildGrid()
         end
