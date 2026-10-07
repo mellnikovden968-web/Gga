@@ -12891,10 +12891,7 @@ local function rebuildCatalog()
     pcall(function()
         for k, v in pairs(MESH_DB) do
             if type(v) == "table" then
-                local img = ""
-                local c = CATALOG_DB[k]
-                if type(c) == "table" then img = c.Image or "" end
-                addItem(k, v.kind or "Knife", v.rarity or "Godly", img)
+                addItem(k, v.kind or "Knife", v.rarity or "Godly", skinIcon(k))
             end
         end
         for k, v in pairs(CATALOG_DB) do
@@ -13110,8 +13107,8 @@ end
 
 local MESH_DB = {
     ["AmericaGun"] = { mesh = "rbxassetid://25298496", tex = "rbxassetid://164669251", sx = 1.5, sy = 1.5, sz = 1.5, kind = "Gun", name = "America", rarity = "Classic", itemid = 196751752, mk = "SpecialMesh", grip = {0,-0.65,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["AmericaSword"] = { mesh = "rbxassetid://262027449", tex = "rbxassetid://445805934", sx = 0.6, sy = 0.6, sz = 0.6, kind = "Knife", name = "Old Glory", rarity = "Godly", itemid = 473570051, mk = "SpecialMesh", grip = {0.054822,0.179559,1.24594,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {0.0177259,0.0807257,-0.124788,0.999176,0.00772075,0.0398573,-0.0403774,0.0867157,0.995415,0.00422909,-0.996203,0.0869559} },
-    ["Amerilaser"] = { mesh = "rbxassetid://116657254", tex = "rbxassetid://445884341", sx = 0.7, sy = 0.7, sz = 0.7, kind = "Gun", name = "Amerilaser", rarity = "Godly", itemid = 446050753, mk = "SpecialMesh", grip = {0.054822,-0.366262,0.815063,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.1,-0.270276,0.243827,1,0,0,0,0.207886,0.978153,0,-0.978153,0.207886} },
+    ["AmericaSword"] = { mesh = "rbxassetid://262027449", tex = "rbxassetid://445805934", sx = 0.6, sy = 0.6, sz = 0.6, kind = "Knife", name = "Old Glory", rarity = "Godly", itemid = 473570051, mk = "SpecialMesh", grip = {0.054822,0.179559,1.24594,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {0.0177259,0.0807257,-0.124788,0.999176,0.00772075,0.0398573,-0.0403774,0.0867157,0.995415,0.00422909,-0.996203,0.0869559}, snd = "rbxassetid://12222225", spd = 1.25 },
+    ["Amerilaser"] = { mesh = "rbxassetid://116657254", tex = "rbxassetid://445884341", sx = 0.7, sy = 0.7, sz = 0.7, kind = "Gun", name = "Amerilaser", rarity = "Godly", itemid = 446050753, mk = "SpecialMesh", grip = {0.054822,-0.366262,0.815063,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.1,-0.270276,0.243827,1,0,0,0,0.207886,0.978153,0,-0.978153,0.207886}, snd = "rbxassetid://106018135", spd = 0.5 },
     ["AuroraGun"] = { mesh = "rbxassetid://16070198638", tex = "rbxassetid://107873598804292", sx = 0.0469345, sy = 0.0469345, sz = 0.0469345, kind = "Gun", name = "Borealis", rarity = "Godly", itemid = 108635848059846, mk = "MeshPart", grip = {0,-0.217888,0.660378,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
     ["AuroraKnife"] = { mesh = "rbxassetid://16025287191", tex = "rbxassetid://97521579968070", sx = 0.0753198, sy = 0.0753198, sz = 0.0753198, kind = "Knife", name = "Australis", rarity = "Godly", itemid = 101343256002049, mk = "MeshPart", grip = {0,-1.19981,-0.104736,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["BattleAxe"] = { mesh = "rbxassetid://1084767698", tex = "rbxassetid://1084767901", sx = 0.55, sy = 0.55, sz = 0.555, kind = "Knife", name = "BattleAxe", rarity = "Godly", itemid = 1133237368, mk = "SpecialMesh", grip = {0.0177402,-0.713677,0.0700035,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13128,7 +13125,7 @@ local MESH_DB = {
     ["Bloom"] = { mesh = "rbxassetid://73266355643345", tex = "rbxassetid://103489229144925", sx = 0.074, sy = 0.074, sz = 0.074, kind = "Knife", name = "Bloom", rarity = "Godly", itemid = 128553215441980, mk = "MeshPart", grip = {0,-1.19981,-0.023262,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Blossom_G"] = { mesh = "rbxassetid://12322809632", tex = "rbxassetid://12322809917", sx = 0.0437653, sy = 0.0437653, sz = 0.0437653, kind = "Gun", name = "Blossom", rarity = "Godly", itemid = 12339377105, mk = "MeshPart", grip = {4.76837e-07,-0.313024,0.631208,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
     ["BlueCandy"] = { mesh = "rbxassetid://19040337", tex = "rbxassetid://131330386966411", sx = 1.1, sy = 1.4, sz = 1.1, kind = "Knife", name = "Blue Candy", rarity = "Unique", itemid = 1489495701, mk = "SpecialMesh", grip = {0.0770696,0.794289,0,-4.98295e-05,1.04494e-06,1,-0.0418635,-0.999123,-1.04494e-06,0.999123,-0.0418635,4.98891e-05}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["BlueHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://8194214938", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Blue Harvester", rarity = "Unique", itemid = 8194219645, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
+    ["BlueHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://8194214938", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Blue Harvester", rarity = "Unique", itemid = 8194219645, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.00392157, bg = 0.352941, bb = 1, bw = 0.2 },
     ["BlueSeer"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://3184062977", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Blue Seer", rarity = "Godly", itemid = 3184125087, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["BlueSugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://126757843697598", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Blue Sugar", rarity = "Unique", itemid = 3215262120, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
     ["BlueVampiresEdge"] = { mesh = "rbxassetid://5841895234", tex = "rbxassetid://116887066557099", sx = 0.067029, sy = 0.067029, sz = 0.067029, kind = "Knife", name = "Blue Vamp's Edge", rarity = "Unique", itemid = 6084854835, mk = "MeshPart", grip = {0.0177402,-1.31739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13136,7 +13133,7 @@ local MESH_DB = {
     ["BonebladeChroma"] = { mesh = "rbxassetid://1857106669", tex = "rbxassetid://2513576265", sx = 0.73, sy = 0.73, sz = 0.73, kind = "Knife", name = "Boneblade", rarity = "Godly", itemid = 2513598419, mk = "SpecialMesh", grip = {0,-1,-0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["BronzeCandy"] = { mesh = "rbxassetid://19040337", tex = "rbxassetid://122395366490499", sx = 1.1, sy = 1.4, sz = 1.1, kind = "Knife", name = "Bronze Candy", rarity = "Unique", itemid = 1520189487, mk = "SpecialMesh", grip = {0.0770696,0.794289,0,-4.98295e-05,1.04494e-06,1,-0.0418635,-0.999123,-1.04494e-06,0.999123,-0.0418635,4.98891e-05}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["BronzeHallow"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://71680119591069", sx = 0.57, sy = 0.57, sz = 0.57, kind = "Knife", name = "Bronze Hallow", rarity = "Unique", itemid = 2511342846, mk = "SpecialMesh", grip = {0,-0.953644,0.0308308,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["BronzeHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://117093283533361", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Bronze Harvester", rarity = "Unique", itemid = 8194221072, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
+    ["BronzeHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://117093283533361", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Bronze Harvester", rarity = "Unique", itemid = 8194221072, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.961959, bg = 0.42591, bb = 0, bw = 0.2 },
     ["BronzeIceblaster"] = { mesh = "rbxassetid://6125828567", tex = "rbxassetid://6246948951", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Bronze Iceblaster", rarity = "Unique", itemid = 6404167442, mk = "MeshPart", grip = {-0.00846958,-0.700001,-0.546006,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["BronzeIcebreaker"] = { mesh = "rbxassetid://6124173614", tex = "rbxassetid://6237991982", sx = 0.968497, sy = 0.968497, sz = 0.968497, kind = "Knife", name = "Bronze Icebreaker", rarity = "Unique", itemid = 6404127119, mk = "MeshPart", grip = {0,-0.95,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["BronzeSugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://134631320762313", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Bronze Sugar", rarity = "Unique", itemid = 3215261913, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
@@ -13152,7 +13149,7 @@ local MESH_DB = {
     ["Chill"] = { mesh = "rbxassetid://105329941", tex = "rbxassetid://105978218", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Knife", name = "Chill", rarity = "Godly", itemid = 332022166, mk = "SpecialMesh", grip = {0,-0.9,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["ChromaDarkbringer"] = { mesh = "rbxassetid://4730813852", tex = "rbxassetid://4728494788", sx = 0.039, sy = 0.039, sz = 0.039, kind = "Gun", name = "Darkbringer", rarity = "Godly", itemid = 4751501078, mk = "SpecialMesh", grip = {-3.58615e-06,-0.606,0.7,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {5.49779e-15,-0.186602,0.123206,1,0,0,0,0.173624,0.984812,0,-0.984812,0.173624} },
     ["ChromaLightbringer"] = { mesh = "rbxassetid://4730813852", tex = "rbxassetid://4728487789", sx = 0.039, sy = 0.039, sz = 0.039, kind = "Gun", name = "Lightbringer", rarity = "Godly", itemid = 4751500761, mk = "SpecialMesh", grip = {-3.58615e-06,-0.606,0.7,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {5.49779e-15,-0.186602,0.123206,1,0,0,0,0.173624,0.984812,0,-0.984812,0.173624} },
-    ["Clockwork"] = { mesh = "rbxassetid://352571495", tex = "rbxassetid://352570357", sx = 1.1, sy = 1.6, sz = 1.2, kind = "Knife", name = "Clockwork", rarity = "Godly", itemid = 473570519, mk = "SpecialMesh", grip = {8.74227e-09,-0.0120606,1.13687,-1,0,0,0,0,-1,0,-1,0}, att = "CustomAttachment", acf = {0.00150982,-0.126983,-0.154513,-0.998668,0.037272,0.035678,-0.0409772,-0.152762,-0.987413,-0.0313526,-0.98756,0.154086} },
+    ["Clockwork"] = { mesh = "rbxassetid://352571495", tex = "rbxassetid://352570357", sx = 1.1, sy = 1.6, sz = 1.2, kind = "Knife", name = "Clockwork", rarity = "Godly", itemid = 473570519, mk = "SpecialMesh", grip = {8.74227e-09,-0.0120606,1.13687,-1,0,0,0,0,-1,0,-1,0}, att = "CustomAttachment", acf = {0.00150982,-0.126983,-0.154513,-0.998668,0.037272,0.035678,-0.0409772,-0.152762,-0.987413,-0.0313526,-0.98756,0.154086}, snd = "rbxassetid://12222225" },
     ["Constellation"] = { mesh = "rbxassetid://124598402927958", tex = "rbxassetid://79010754957272", sx = 0.100662, sy = 0.100662, sz = 0.100662, kind = "Gun", name = "Constellation", rarity = "Godly", itemid = 114197436469014, mk = "MeshPart", grip = {0,-0.355123,0.703253,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
     ["Constellation_Bronze"] = { mesh = "rbxassetid://124598402927958", tex = "rbxassetid://85789126329446", sx = 0.100662, sy = 0.100662, sz = 0.100662, kind = "Gun", name = "Bronze Constellation", rarity = "Unique", itemid = 112811587103866, mk = "MeshPart", grip = {0,0,0.8,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
     ["Constellation_Gold"] = { mesh = "rbxassetid://124598402927958", tex = "rbxassetid://108397462027809", sx = 0.100662, sy = 0.100662, sz = 0.100662, kind = "Gun", name = "Gold Constellation", rarity = "Unique", itemid = 132975248521820, mk = "MeshPart", grip = {0,0,0.8,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
@@ -13205,11 +13202,11 @@ local MESH_DB = {
     ["Gingermint_G"] = { mesh = "rbxassetid://11866444071", tex = "rbxassetid://11866444253", sx = 0.0475529, sy = 0.0475529, sz = 0.0475529, kind = "Gun", name = "Gingermint", rarity = "Godly", itemid = 11872179646, mk = "MeshPart", grip = {5.19329e-07,-0.250001,0.700008,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0946884,-0.0992584,0.236683,0.991792,0.113654,0.0585769,-0.115783,0.60394,0.788575,0.0542479,-0.788884,0.612142} },
     ["Gingermint_K"] = { mesh = "rbxassetid://11837984324", tex = "rbxassetid://11837984504", sx = 0.0664162, sy = 0.0664162, sz = 0.0664162, kind = "Knife", name = "Cookiecane", rarity = "Godly", itemid = 11855306927, mk = "MeshPart", grip = {0.00698853,-1.25001,-0.0497513,0.997562,0,-0.0697919,0,1,0,0.0697919,0,0.997562}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Gingermint_KChroma"] = { mesh = "rbxassetid://11837984324", tex = "rbxassetid://11837984504", sx = 0.0686548, sy = 0.0686548, sz = 0.0686548, kind = "Knife", name = "Cookiecane", rarity = "Godly", itemid = 11873640255, mk = "SpecialMesh", grip = {0,-1.4,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["Gingerscope"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://15409041564", sx = 0.0841985, sy = 0.0841985, sz = 0.0841985, kind = "Gun", name = "Gingerscope", rarity = "Ancient", itemid = 15666469505, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134} },
-    ["Gingerscope_Blue"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://100142423147247", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Blue Gingerscope", rarity = "Unique", itemid = 16964462231, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134} },
-    ["Gingerscope_Bronze"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://93684911189915", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Bronze Gingerscope", rarity = "Unique", itemid = 16964465320, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134} },
-    ["Gingerscope_Gold"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://75888854860786", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Gold Gingerscope", rarity = "Unique", itemid = 16964471890, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134} },
-    ["Gingerscope_Silver"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://129527194826480", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Silver Gingerscope", rarity = "Unique", itemid = 16964468980, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134} },
+    ["Gingerscope"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://15409041564", sx = 0.0841985, sy = 0.0841985, sz = 0.0841985, kind = "Gun", name = "Gingerscope", rarity = "Ancient", itemid = 15666469505, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 1, bg = 1, bb = 1, btex = "rbxassetid://15374653796", bw = 1 },
+    ["Gingerscope_Blue"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://100142423147247", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Blue Gingerscope", rarity = "Unique", itemid = 16964462231, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0, bg = 0.235294, bb = 1, btex = "rbxassetid://16221396385", bw = 1 },
+    ["Gingerscope_Bronze"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://93684911189915", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Bronze Gingerscope", rarity = "Unique", itemid = 16964465320, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.952407, bg = 0.398367, bb = 0, btex = "rbxassetid://16221396385", bw = 1 },
+    ["Gingerscope_Gold"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://75888854860786", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Gold Gingerscope", rarity = "Unique", itemid = 16964471890, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.96434, bg = 0.814771, bb = 0.0339513, btex = "rbxassetid://16221396385", bw = 1 },
+    ["Gingerscope_Silver"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://129527194826480", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Silver Gingerscope", rarity = "Unique", itemid = 16964468980, mk = "MeshPart", grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.807843, bg = 0.984314, bb = 1, btex = "rbxassetid://106972878353658", bw = 0.5 },
     ["Gingerscythe_Ancient"] = { mesh = "rbxassetid://15395668244", tex = "rbxassetid://15409195246", sx = 0.0637743, sy = 0.0637743, sz = 0.0637743, kind = "Knife", name = "Gingerscythe", rarity = "Ancient", itemid = 15683188776, mk = "MeshPart", grip = {7.62939e-06,-0.187927,1.0434,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Gingerscythe_Blue"] = { mesh = "rbxassetid://15397282571", tex = "rbxassetid://103762316034631", sx = 0.0696348, sy = 0.0696348, sz = 0.0696348, kind = "Knife", name = "Blue Gingerscythe", rarity = "Unique", itemid = 16964448042, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Gingerscythe_Bronze"] = { mesh = "rbxassetid://15397282571", tex = "rbxassetid://94302913285936", sx = 0.0696348, sy = 0.0696348, sz = 0.0696348, kind = "Knife", name = "Bronze Gingerscythe", rarity = "Unique", itemid = 16964449392, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13218,7 +13215,7 @@ local MESH_DB = {
     ["GoldCandy"] = { mesh = "rbxassetid://19040337", tex = "rbxassetid://124067045659964", sx = 1.1, sy = 1.4, sz = 1.1, kind = "Knife", name = "Gold Candy", rarity = "Unique", itemid = 1520188792, mk = "SpecialMesh", grip = {0.0770696,0.794289,0,-4.98295e-05,1.04494e-06,1,-0.0418635,-0.999123,-1.04494e-06,0.999123,-0.0418635,4.98891e-05}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["GoldenGun"] = { mesh = "rbxassetid://25298496", tex = "rbxassetid://134632723", sx = 1.5, sy = 1.5, sz = 1.5, kind = "Gun", name = "Golden", rarity = "Classic", itemid = 196751989, mk = "SpecialMesh", grip = {0,-0.65,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["GoldHallow"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://94638424624420", sx = 0.57, sy = 0.57, sz = 0.57, kind = "Knife", name = "Gold Hallow", rarity = "Unique", itemid = 2511340308, mk = "SpecialMesh", grip = {0,-0.953644,0.0308308,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["GoldHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://130531096424715", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Gold Harvester", rarity = "Unique", itemid = 8194222523, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
+    ["GoldHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://130531096424715", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Gold Harvester", rarity = "Unique", itemid = 8194222523, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.961959, bg = 0.818204, bb = 0, bw = 0.2 },
     ["GoldIceblaster"] = { mesh = "rbxassetid://6125828567", tex = "rbxassetid://6246949956", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Gold Iceblaster", rarity = "Unique", itemid = 6404165933, mk = "MeshPart", grip = {-0.00846958,-0.700001,-0.546006,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["GoldIcebreaker"] = { mesh = "rbxassetid://6124173614", tex = "rbxassetid://6237993632", sx = 0.968497, sy = 0.968497, sz = 0.968497, kind = "Knife", name = "Gold Icebreaker", rarity = "Unique", itemid = 6404115112, mk = "MeshPart", grip = {0,-0.95,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["GoldSugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://132002664307056", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Gold Sugar", rarity = "Unique", itemid = 3215260149, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
@@ -13230,7 +13227,7 @@ local MESH_DB = {
     ["HallowsBlade"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://1132750758", sx = 0.55, sy = 0.55, sz = 0.555, kind = "Knife", name = "Hallow's Blade", rarity = "Godly", itemid = 1132775323, mk = "SpecialMesh", grip = {0.0177402,-1.21739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Hallowscythe"] = { mesh = "rbxassetid://5841877975", tex = "rbxassetid://5841879647", sx = 0.070831, sy = 0.070831, sz = 0.070831, kind = "Knife", name = "Hallowscythe", rarity = "Ancient", itemid = 5877016863, mk = "MeshPart", grip = {0.079792,-0.895706,0.676565,1,0,0,0,0.999885,0.0151922,0,-0.0151922,0.999885}, att = "CustomAttachment", acf = {0.00824374,0.05459,0.624058,-0.998682,0.0469117,0.0208489,0.0457347,0.997507,-0.0537364,-0.0233178,-0.052712,-0.998338} },
     ["Handsaw"] = { mesh = "rbxassetid://54430772", tex = "rbxassetid://54430066", sx = 0.4, sy = 0.6, sz = 0.53, kind = "Knife", name = "Handsaw", rarity = "Godly", itemid = 473572138, mk = "SpecialMesh", grip = {0,0.104716,-0.727579,-1,0,0,0,0,1,0,1,0}, att = "CustomAttachment", acf = {0.00497055,0.0763541,0.129017,-0.996987,0.0736893,0.0242452,0.0243051,-8.42811e-05,0.999705,0.0736695,0.997281,-0.001707} },
-    ["Harvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://7775245551", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Harvester", rarity = "Ancient", itemid = 7800847534, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
+    ["Harvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://7775245551", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Harvester", rarity = "Ancient", itemid = 7800847534, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0, bg = 1, bb = 0, bw = 0.2 },
     ["Heartblade"] = { mesh = "rbxassetid://6404140078", tex = "rbxassetid://6413074818", sx = 1.10033, sy = 1.10033, sz = 1.10033, kind = "Knife", name = "Heartblade", rarity = "Godly", itemid = 6413145922, mk = "MeshPart", grip = {0.0177402,-1.41739,0.0200024,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["HeartWand"] = { mesh = "rbxassetid://77738838473091", tex = "rbxassetid://76246633927299", sx = 0.0781557, sy = 0.0781557, sz = 0.0781557, kind = "Knife", name = "Heart Wand", rarity = "Godly", itemid = 118334707962654, mk = "MeshPart", grip = {0,-0.839715,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["HeartWandChroma"] = { mesh = "rbxassetid://77738838473091", tex = "rbxassetid://78842905206144", sx = 0.0782133, sy = 0.0782133, sz = 0.0782133, kind = "Knife", name = "Heart Wand", rarity = "Godly", itemid = 78479059410850, mk = "SpecialMesh", grip = {0,-0.84,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13246,11 +13243,11 @@ local MESH_DB = {
     ["IceHammerGold"] = { mesh = "rbxassetid://11848711686", tex = "rbxassetid://132842079563749", sx = 0.073617, sy = 0.073617, sz = 0.073617, kind = "Knife", name = "Gold Icecrusher", rarity = "Unique", itemid = 12227137860, mk = "MeshPart", grip = {0,-0.446154,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["IceHammerRed"] = { mesh = "rbxassetid://11848711686", tex = "rbxassetid://71714696554176", sx = 0.073617, sy = 0.073617, sz = 0.073617, kind = "Knife", name = "Red Icecrusher", rarity = "Unique", itemid = 12227186408, mk = "MeshPart", grip = {0,-0.446154,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["IceHammerSilver"] = { mesh = "rbxassetid://11848711686", tex = "rbxassetid://108890976731643", sx = 0.073617, sy = 0.073617, sz = 0.073617, kind = "Knife", name = "Silver Icecrusher", rarity = "Unique", itemid = 12227142478, mk = "MeshPart", grip = {0,-0.446154,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["Icepiercer"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://11869075814", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Icepiercer", rarity = "Ancient", itemid = 11874071041, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
-    ["IcepiercerBronze"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://136041212037383", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Bronze Icepiercer", rarity = "Unique", itemid = 12226920195, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
-    ["IcepiercerGold"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://89221956008018", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Gold Icepiercer", rarity = "Unique", itemid = 12226688172, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
-    ["IcepiercerRed"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://12196203001", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Red Icepiercer", rarity = "Unique", itemid = 12227133450, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
-    ["IcepiercerSilver"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://122077395445706", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Silver Icepiercer", rarity = "Unique", itemid = 12226843957, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
+    ["Icepiercer"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://11869075814", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Icepiercer", rarity = "Ancient", itemid = 11874071041, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0, bg = 0.898039, bb = 1, bw = 0.2 },
+    ["IcepiercerBronze"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://136041212037383", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Bronze Icepiercer", rarity = "Unique", itemid = 12226920195, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.844236, bg = 0.366995, bb = 0.0916762, bw = 0.2 },
+    ["IcepiercerGold"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://89221956008018", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Gold Icepiercer", rarity = "Unique", itemid = 12226688172, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 1, bg = 0.846952, bb = 0.292454, bw = 0.2 },
+    ["IcepiercerRed"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://12196203001", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Red Icepiercer", rarity = "Unique", itemid = 12227133450, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 1, bg = 0, bb = 0, bw = 0.2 },
+    ["IcepiercerSilver"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://122077395445706", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Silver Icepiercer", rarity = "Unique", itemid = 12226843957, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.827451, bg = 0.835294, bb = 0.835294, bw = 0.2 },
     ["IceShard"] = { mesh = "rbxassetid://188539751", tex = "rbxassetid://188539820", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Ice Shard", rarity = "Godly", itemid = 1268710824, mk = "SpecialMesh", grip = {0.0407002,0.133125,1.12955,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.00999929,-0.137043,-0.176407,0.997816,-0.0657253,-0.00656065,0.000875115,-0.0861623,0.996281,-0.0660461,-0.994111,-0.0859166} },
     ["Icewing"] = { mesh = "rbxassetid://3183449780", tex = "rbxassetid://2279588369", sx = 0.085, sy = 0.085, sz = 0.085, kind = "Knife", name = "Icewing", rarity = "Ancient", itemid = 3183085102, mk = "SpecialMesh", grip = {0.0962919,-0.656312,0.180963,0.999517,-0.00434376,-0.0307792,-0.0060457,0.944113,-0.329567,0.0304906,0.329593,0.943631}, att = "CustomAttachment", acf = {0.00309754,-0.00952182,0.205912,-0.999764,0.0167396,0.013862,0.0203675,0.944196,0.328755,-0.00758521,0.328959,-0.944314} },
     ["Jinglegun"] = { mesh = "rbxassetid://6125843704", tex = "rbxassetid://6125843755", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Jinglegun", rarity = "Godly", itemid = 6125742758, mk = "MeshPart", grip = {1.90735e-06,-0.55,-0.600001,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13282,7 +13279,7 @@ local MESH_DB = {
     ["Peppermint"] = { mesh = "rbxassetid://6085025295", tex = "rbxassetid://6074789360", sx = 0.05928, sy = 0.05928, sz = 0.05928, kind = "Knife", name = "Peppermint", rarity = "Godly", itemid = 6085035357, mk = "MeshPart", grip = {2.38419e-07,-1.25,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Phantom2022"] = { mesh = "rbxassetid://11158775938", tex = "rbxassetid://11158776140", sx = 0.0689691, sy = 0.0689691, sz = 0.0689691, kind = "Knife", name = "Phantom", rarity = "Godly", itemid = 11229732037, mk = "MeshPart", grip = {0,-1,-0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Phaser"] = { mesh = "rbxassetid://69486593", tex = "rbxassetid://69486519", sx = 0.8, sy = 0.8, sz = 0.8, kind = "Gun", name = "Phaser", rarity = "Classic", itemid = 196752144, mk = "SpecialMesh", grip = {0,-0.65,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["Pixel"] = { mesh = "rbxassetid://361629844", tex = "rbxassetid://361630114", sx = 2, sy = 3, sz = 3, kind = "Knife", name = "Pixel", rarity = "Godly", itemid = 473573054, mk = "SpecialMesh", grip = {0.0409632,0.0228622,1.10536,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.00634003,0.0351667,-0.220734,0.998168,-0.0604927,-0.000748175,0.0060784,0.0879775,0.996104,-0.0601912,-0.994284,0.0881841} },
+    ["Pixel"] = { mesh = "rbxassetid://361629844", tex = "rbxassetid://361630114", sx = 2, sy = 3, sz = 3, kind = "Knife", name = "Pixel", rarity = "Godly", itemid = 473573054, mk = "SpecialMesh", grip = {0.0409632,0.0228622,1.10536,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.00634003,0.0351667,-0.220734,0.998168,-0.0604927,-0.000748175,0.0060784,0.0879775,0.996104,-0.0601912,-0.994284,0.0881841}, snd = "rbxassetid://12222208" },
     ["Plasmabeam"] = { mesh = "rbxassetid://9702755186", tex = "rbxassetid://10015208201", sx = 0.0435385, sy = 0.0435385, sz = 0.0435385, kind = "Gun", name = "Plasmabeam", rarity = "Godly", itemid = 10014717343, mk = "MeshPart", grip = {4.76837e-07,-0.366637,0.688645,1,0,0,0,0.999392,0.0348688,0,-0.0348688,0.999392}, att = "CustomAttachment", acf = {0.0642943,0.056468,0.191866,1,0,0,0,0.292319,0.956321,0,-0.956321,0.292319} },
     ["Plasmablade"] = { mesh = "rbxassetid://9702732853", tex = "rbxassetid://10015130416", sx = 0.00161661, sy = 0.00161661, sz = 0.00161661, kind = "Knife", name = "Plasmablade", rarity = "Godly", itemid = 10014680882, mk = "MeshPart", grip = {0.00261497,-1.25,0.0499308,0.998632,0,0.0522932,0,1,0,-0.0522932,0,0.998632}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Prismatic"] = { mesh = "rbxassetid://5355753728", tex = "rbxassetid://5355747943", sx = 0.0654659, sy = 0.0654659, sz = 0.0654659, kind = "Knife", name = "Prismatic", rarity = "Godly", itemid = 5360359935, mk = "MeshPart", grip = {-1.4117e-06,-1.2,-1.49012e-08,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13290,12 +13287,12 @@ local MESH_DB = {
     ["PurpleSeer"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://3184063317", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Purple Seer", rarity = "Godly", itemid = 3184125244, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Rainbow_G"] = { mesh = "rbxassetid://12921221200", tex = "rbxassetid://12921231088", sx = 0.0518927, sy = 0.0518927, sz = 0.0518927, kind = "Gun", name = "Rainbow Gun", rarity = "Godly", itemid = 12966354606, mk = "MeshPart", grip = {4.76837e-07,-0.313025,0.724285,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
     ["Rainbow_K"] = { mesh = "rbxassetid://12921240966", tex = "rbxassetid://12921241867", sx = 0.065222, sy = 0.065222, sz = 0.065222, kind = "Knife", name = "Rainbow", rarity = "Godly", itemid = 12966184630, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["Raygun"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://127881437685243", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Raygun", rarity = "Godly", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
-    ["RaygunBronze"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://95710988105793", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Bronze Raygun", rarity = "Unique", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
-    ["RaygunChroma"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://127881437685243", sx = 0.047203, sy = 0.047203, sz = 0.047203, kind = "Gun", name = "Raygun", rarity = "Godly", itemid = 139431943195380, mk = "SpecialMesh", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
-    ["RaygunGold"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://77180826972361", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Gold Raygun", rarity = "Unique", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
-    ["RaygunRed"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://140527708015963", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Red Raygun", rarity = "Unique", itemid = 132354489228618, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
-    ["RaygunSilver"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://138772116957894", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Silver Raygun", rarity = "Unique", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Raygun"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://127881437685243", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Raygun", rarity = "Godly", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 0, bg = 1, bb = 0, bw = 0.2 },
+    ["RaygunBronze"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://95710988105793", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Bronze Raygun", rarity = "Unique", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 1, bg = 0.392157, bb = 0, bw = 0.2 },
+    ["RaygunChroma"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://127881437685243", sx = 0.047203, sy = 0.047203, sz = 0.047203, kind = "Gun", name = "Raygun", rarity = "Godly", itemid = 139431943195380, mk = "SpecialMesh", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.6, br = 1, bg = 0, bb = 0.0156863, bw = 0.2 },
+    ["RaygunGold"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://77180826972361", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Gold Raygun", rarity = "Unique", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 1, bg = 0.823529, bb = 0.156863, bw = 0.2 },
+    ["RaygunRed"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://140527708015963", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Red Raygun", rarity = "Unique", itemid = 132354489228618, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 1, bg = 0, bb = 0, bw = 0.2 },
+    ["RaygunSilver"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://138772116957894", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Silver Raygun", rarity = "Unique", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 0.784314, bg = 0.784314, bb = 1, bw = 0.2 },
     ["Reaver_Ancient"] = { mesh = "rbxassetid://7774148738", tex = "rbxassetid://93300711960239", sx = 0.272558, sy = 0.272558, sz = 0.272558, kind = "Knife", name = "Reaver", rarity = "Ancient", itemid = 7791640819, mk = "MeshPart", grip = {0,0,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["RedHallow"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://127350385960219", sx = 0.57, sy = 0.57, sz = 0.57, kind = "Knife", name = "Red Hallow", rarity = "Unique", itemid = 2511343130, mk = "SpecialMesh", grip = {0,-0.953644,0.0308308,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["RedIceblaster"] = { mesh = "rbxassetid://6125828567", tex = "rbxassetid://6246951385", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Red Iceblaster", rarity = "Unique", itemid = 6404168049, mk = "MeshPart", grip = {-0.00846958,-0.700001,-0.546006,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13313,18 +13310,18 @@ local MESH_DB = {
     ["SharkSeeker"] = { mesh = "rbxassetid://6967743598", tex = "rbxassetid://116456411083958", sx = 0.747508, sy = 0.747508, sz = 0.747508, kind = "Gun", name = "SharkSeeker", rarity = "Unique", itemid = 6967771328, mk = "MeshPart", grip = {0.100067,-0.460144,-0.500244,1,0,0,0,0,-1,0,1,0}, att = "CustomAttachment", acf = {0.150013,-0.132543,-0.259675,1,-9.02003e-06,-8.58495e-05,-9.02003e-06,0.978163,-0.207842,8.58495e-05,0.207842,0.978163} },
     ["SilverCandy"] = { mesh = "rbxassetid://19040337", tex = "rbxassetid://121270219768463", sx = 1.1, sy = 1.4, sz = 1.1, kind = "Knife", name = "Silver Candy", rarity = "Unique", itemid = 1520190188, mk = "SpecialMesh", grip = {0.0770696,0.794289,0,-4.98295e-05,1.04494e-06,1,-0.0418635,-0.999123,-1.04494e-06,0.999123,-0.0418635,4.98891e-05}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["SilverHallow"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://89776718839618", sx = 0.57, sy = 0.57, sz = 0.57, kind = "Knife", name = "Silver Hallow", rarity = "Unique", itemid = 2511341094, mk = "SpecialMesh", grip = {0,-0.953644,0.0308308,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["SilverHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://135754701701228", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Silver Harvester", rarity = "Unique", itemid = 8194217388, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5} },
+    ["SilverHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://135754701701228", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Silver Harvester", rarity = "Unique", itemid = 8194217388, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.754406, bg = 0.756634, bb = 0.717739, bw = 0.2 },
     ["SilverIceblaster"] = { mesh = "rbxassetid://6125828567", tex = "rbxassetid://6246950589", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Silver Iceblaster", rarity = "Unique", itemid = 6404166698, mk = "MeshPart", grip = {-0.00846958,-0.700001,-0.546006,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["SilverIcebreaker"] = { mesh = "rbxassetid://6124173614", tex = "rbxassetid://6237992602", sx = 0.968497, sy = 0.968497, sz = 0.968497, kind = "Knife", name = "Silver Icebreaker", rarity = "Unique", itemid = 6404126280, mk = "MeshPart", grip = {0,-0.95,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["SilverSugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://94596753362122", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Silver Sugar", rarity = "Unique", itemid = 3215261680, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
     ["SilverVampiresEdge"] = { mesh = "rbxassetid://5841895234", tex = "rbxassetid://93427229045342", sx = 0.067029, sy = 0.067029, sz = 0.067029, kind = "Knife", name = "Silver Vamp's Edge", rarity = "Unique", itemid = 6084840560, mk = "MeshPart", grip = {0.0177402,-1.31739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Slasher"] = { mesh = "rbxassetid://283709822", tex = "rbxassetid://313894904", sx = 0.45, sy = 0.45, sz = 0.45, kind = "Knife", name = "Slasher", rarity = "Godly", itemid = 315506122, mk = "SpecialMesh", grip = {0,-1.1,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["SlasherChroma"] = { mesh = "rbxassetid://283709822", tex = "rbxassetid://3171107559", sx = 0.45, sy = 0.45, sz = 0.45, kind = "Knife", name = "Slasher", rarity = "Godly", itemid = 3187393285, mk = "SpecialMesh", grip = {0,-1.1,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["Snowcannon"] = { mesh = "rbxassetid://99836890880541", tex = "rbxassetid://122392330922281", sx = 0.0499913, sy = 0.0499913, sz = 0.0499913, kind = "Gun", name = "Snowcannon", rarity = "Godly", itemid = 129186939023729, mk = "MeshPart", grip = {0,-0.0631877,0.533081,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,0,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
-    ["SnowcannonChroma"] = { mesh = "rbxassetid://99836890880541", tex = "rbxassetid://122392330922281", sx = 0.0496382, sy = 0.0496382, sz = 0.0496382, kind = "Gun", name = "Snowcannon", rarity = "Godly", itemid = 129186939023729, mk = "SpecialMesh", grip = {0,-0.0631877,0.533081,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.251504,0.113062,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Snowcannon"] = { mesh = "rbxassetid://99836890880541", tex = "rbxassetid://122392330922281", sx = 0.0499913, sy = 0.0499913, sz = 0.0499913, kind = "Gun", name = "Snowcannon", rarity = "Godly", itemid = 129186939023729, mk = "MeshPart", grip = {0,-0.0631877,0.533081,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,0,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://138706272607549", spd = 1.4, br = 1, bg = 1, bb = 1, bw = 0.5 },
+    ["SnowcannonChroma"] = { mesh = "rbxassetid://99836890880541", tex = "rbxassetid://122392330922281", sx = 0.0496382, sy = 0.0496382, sz = 0.0496382, kind = "Gun", name = "Snowcannon", rarity = "Godly", itemid = 129186939023729, mk = "SpecialMesh", grip = {0,-0.0631877,0.533081,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.251504,0.113062,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://138706272607549", spd = 1.4, br = 1, bg = 0, bb = 0.0156863, bw = 0.5 },
     ["SnowDagger"] = { mesh = "rbxassetid://140633396635861", tex = "rbxassetid://77812964601215", sx = 0.0598018, sy = 0.0598018, sz = 0.0598018, kind = "Knife", name = "Snow Dagger", rarity = "Godly", itemid = 95328449981238, mk = "MeshPart", grip = {0,-0.811623,-0.0925598,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["SnowDaggerChroma"] = { mesh = "rbxassetid://140633396635861", tex = "rbxassetid://77812964601215", sx = 0.0597824, sy = 0.0597823, sz = 0.0597824, kind = "Knife", name = "Snow Dagger", rarity = "Godly", itemid = 95328449981238, mk = "SpecialMesh", grip = {0,-0.812,-0.093,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["Snowflake"] = { mesh = "rbxassetid://582120569", tex = "rbxassetid://582120836", sx = 0.3, sy = 0.5, sz = 0.5, kind = "Knife", name = "Snowflake", rarity = "Godly", itemid = 1268932977, mk = "SpecialMesh", grip = {-0.0485067,-1.32605,-0.140247,-0.998247,0,-0.059191,0,1,0,0.059191,0,-0.998247}, att = "CustomAttachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Snowflake"] = { mesh = "rbxassetid://582120569", tex = "rbxassetid://582120836", sx = 0.3, sy = 0.5, sz = 0.5, kind = "Knife", name = "Snowflake", rarity = "Godly", itemid = 1268932977, mk = "SpecialMesh", grip = {-0.0485067,-1.32605,-0.140247,-0.998247,0,-0.059191,0,1,0,0.059191,0,-0.998247}, att = "CustomAttachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1}, snd = "rbxassetid://12222208" },
     ["Snowstorm"] = { mesh = "rbxassetid://86944837615327", tex = "rbxassetid://84853425379784", sx = 0.07704, sy = 0.07704, sz = 0.07704, kind = "Knife", name = "Snowstorm", rarity = "Godly", itemid = 70973050894155, mk = "MeshPart", grip = {0,-1.24664,-0.20897,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["SnowstormChroma"] = { mesh = "rbxassetid://86944837615327", tex = "rbxassetid://86253759560362", sx = 0.0770485, sy = 0.0770485, sz = 0.0770485, kind = "Knife", name = "Snowstorm", rarity = "Godly", itemid = 70973050894155, mk = "SpecialMesh", grip = {0,-1.247,-0.209,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Sorry"] = { mesh = "rbxassetid://121944778", tex = "rbxassetid://162016526", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Corrupt", rarity = "Unique", itemid = 197879343, mk = "SpecialMesh", grip = {0,-1,-0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13355,8 +13352,8 @@ local MESH_DB = {
     ["Synthwave_Gold"] = { mesh = "rbxassetid://108638551470204", tex = "rbxassetid://138590993593024", sx = 0.0853938, sy = 0.0853938, sz = 0.0853938, kind = "Knife", name = "Gold Synthwave", rarity = "Unique", itemid = 138834911796124, mk = "SpecialMesh", grip = {0,-0.900002,0.400002,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Synthwave_Silver"] = { mesh = "rbxassetid://108638551470204", tex = "rbxassetid://123410713974388", sx = 0.0853938, sy = 0.0853938, sz = 0.0853938, kind = "Knife", name = "Silver Synthwave", rarity = "Unique", itemid = 103455022994358, mk = "SpecialMesh", grip = {0,-0.900002,0.400002,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["TheSeer"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://156092253", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Seer", rarity = "Godly", itemid = 198441783, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["Tides"] = { mesh = "rbxassetid://238314382", tex = "rbxassetid://238314431", sx = 0.7, sy = 0.9, sz = 0.7, kind = "Knife", name = "Tides", rarity = "Godly", itemid = 473569625, mk = "SpecialMesh", grip = {-0.00129008,-0.0207807,1.27181,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.0034008,0.12727,-0.215154,0.99799,-0.0632672,-0.00356949,0.00362949,0.000833333,0.999993,-0.0632638,-0.997996,0.00106129} },
-    ["TidesChroma"] = { mesh = "rbxassetid://238314382", tex = "rbxassetid://3171168641", sx = 0.7, sy = 0.9, sz = 0.7, kind = "Knife", name = "Tides", rarity = "Godly", itemid = 3187394934, mk = "SpecialMesh", grip = {-0.00129008,-0.0207807,1.27181,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.0034008,0.12727,-0.215154,0.99799,-0.0632672,-0.00356949,0.00362949,0.000833333,0.999993,-0.0632638,-0.997996,0.00106129} },
+    ["Tides"] = { mesh = "rbxassetid://238314382", tex = "rbxassetid://238314431", sx = 0.7, sy = 0.9, sz = 0.7, kind = "Knife", name = "Tides", rarity = "Godly", itemid = 473569625, mk = "SpecialMesh", grip = {-0.00129008,-0.0207807,1.27181,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.0034008,0.12727,-0.215154,0.99799,-0.0632672,-0.00356949,0.00362949,0.000833333,0.999993,-0.0632638,-0.997996,0.00106129}, snd = "rbxassetid://96667910" },
+    ["TidesChroma"] = { mesh = "rbxassetid://238314382", tex = "rbxassetid://3171168641", sx = 0.7, sy = 0.9, sz = 0.7, kind = "Knife", name = "Tides", rarity = "Godly", itemid = 3187394934, mk = "SpecialMesh", grip = {-0.00129008,-0.0207807,1.27181,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.0034008,0.12727,-0.215154,0.99799,-0.0632672,-0.00356949,0.00362949,0.000833333,0.999993,-0.0632638,-0.997996,0.00106129}, snd = "rbxassetid://96667910" },
     ["TimeKnife"] = { mesh = "rbxassetid://70990583", tex = "rbxassetid://70990591", sx = 0.5, sy = 0.8, sz = 0.6, kind = "Knife", name = "Prince", rarity = "Classic", itemid = 473575049, mk = "SpecialMesh", grip = {0,0,-0.9,0,0,1,1,0,0,0,1,0}, att = "CustomAttachment", acf = {0.0869875,-0.00751591,0.121968,0.0420246,0.0839162,0.995586,0.995594,-0.0871232,-0.0346815,0.0838284,0.992657,-0.0872077} },
     ["TravelerAxe"] = { mesh = "rbxassetid://15057341638", tex = "rbxassetid://15057460725", sx = 0.06812, sy = 0.06812, sz = 0.06812, kind = "Knife", name = "Traveler's Axe", rarity = "Ancient", itemid = 15070870271, mk = "MeshPart", grip = {0,-1.06253,0.209976,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["TravelerAxeBronze"] = { mesh = "rbxassetid://15057341638", tex = "rbxassetid://132387132630890", sx = 0.06812, sy = 0.06812, sz = 0.06812, kind = "Knife", name = "Bronze Traveler's", rarity = "Unique", itemid = 15695407020, mk = "MeshPart", grip = {0,-1.06253,0.209976,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13371,7 +13368,7 @@ local MESH_DB = {
     ["TreeGun2023Chroma"] = { mesh = "rbxassetid://15408863676", tex = "", sx = 0.021, sy = 0.021, sz = 0.0205, kind = "Gun", name = "Evergun", rarity = "Godly", itemid = 15682703596, mk = "SpecialMesh", grip = {0,-0.399999,0.700001,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
     ["TreeKnife2023"] = { mesh = "rbxassetid://15408280573", tex = "rbxassetid://15408244684", sx = 0.00460388, sy = 0.00460388, sz = 0.00460388, kind = "Knife", name = "Evergreen", rarity = "Godly", itemid = 15667157715, mk = "SpecialMesh", grip = {0,-1.78239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["TreeKnife2023Chroma"] = { mesh = "rbxassetid://15408280573", tex = "", sx = 0.00460388, sy = 0.00460388, sz = 0.00460388, kind = "Knife", name = "Evergreen", rarity = "Godly", itemid = 15694110573, mk = "SpecialMesh", grip = {0,-1.78239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["Turkey2023"] = { mesh = "rbxassetid://15320557481", tex = "rbxassetid://15320558272", sx = 0.056, sy = 0.056, sz = 0.056, kind = "Knife", name = "Turkey", rarity = "Godly", itemid = 15413149176, mk = "SpecialMesh", grip = {0,-0.869298,-0.00832939,0.29273,0,-0.956195,0,1,0,0.956195,0,0.29273}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Turkey2023"] = { mesh = "rbxassetid://15320557481", tex = "rbxassetid://15320558272", sx = 0.056, sy = 0.056, sz = 0.056, kind = "Knife", name = "Turkey", rarity = "Godly", itemid = 15413149176, mk = "SpecialMesh", grip = {0,-0.869298,-0.00832939,0.29273,0,-0.956195,0,1,0,0.956195,0,0.29273}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1}, snd = "rbxassetid://22593942", spd = 2 },
     ["UFOKnife"] = { mesh = "rbxassetid://86649405964534", tex = "rbxassetid://94763497877100", sx = 0.0758249, sy = 0.0758249, sz = 0.0758249, kind = "Knife", name = "Alienbeam", rarity = "Godly", itemid = 77607127867154, mk = "MeshPart", grip = {0,-1.33999,-0.0485134,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["UFOKnifeChroma"] = { mesh = "rbxassetid://86649405964534", tex = "rbxassetid://94763497877100", sx = 0.0769716, sy = 0.0769716, sz = 0.0769716, kind = "Knife", name = "Alienbeam", rarity = "Godly", itemid = 77607127867154, mk = "SpecialMesh", grip = {0,-1.33999,-0.0485134,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["VampireAxe"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://73008954478338", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Vampire's Axe", rarity = "Ancient", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -13403,287 +13400,287 @@ do local alias = {}
 end
 
 local CATALOG_DB = {
-    ["AmericaSword"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=446047742", ItemID = 473570051, ItemName = "Old Glory", ItemType = "Knife", Rarity = "Godly" },
-    ["Amerilaser"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=446050753", ItemID = 446050753, ItemName = "Amerilaser", ItemType = "Gun", Rarity = "Godly" },
+    ["AmericaSword"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=446047742", ItemID = 473570051, ItemName = "Old Glory", ItemType = "Knife", Rarity = "Godly" },
+    ["Amerilaser"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=446050753", ItemID = 446050753, ItemName = "Amerilaser", ItemType = "Gun", Rarity = "Godly" },
     ["AuroraGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=108635848059846", ItemID = 108635848059846, ItemName = "Borealis", ItemType = "Gun", Rarity = "Godly" },
     ["AuroraKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=101343256002049", ItemID = 101343256002049, ItemName = "Australis", ItemType = "Knife", Rarity = "Godly" },
-    ["BattleAxe"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1133237368", ItemID = 1133237368, ItemName = "BattleAxe", ItemType = "Knife", Rarity = "Godly" },
-    ["BattleAxe2"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2513535503", ItemID = 2513535503, ItemName = "BattleAxe II", ItemType = "Knife", Rarity = "Godly" },
+    ["BattleAxe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1133237368", ItemID = 1133237368, ItemName = "BattleAxe", ItemType = "Knife", Rarity = "Godly" },
+    ["BattleAxe2"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2513535503", ItemID = 2513535503, ItemName = "BattleAxe II", ItemType = "Knife", Rarity = "Godly" },
     ["Bauble"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=84481559639371", ItemID = 84481559639371, ItemName = "Bauble", ItemType = "Gun", Rarity = "Godly" },
     ["BaubleChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=137938731902685", ItemID = 84481559639371, ItemName = "Bauble", ItemType = "Gun", Rarity = "Godly" },
     ["BaubleKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=111092946728824", ItemID = 111092946728824, ItemName = "Ornament", ItemType = "Knife", Rarity = "Godly" },
     ["BaubleKnifeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=74528014775455", ItemID = 111092946728824, ItemName = "Ornament", ItemType = "Knife", Rarity = "Godly" },
-    ["Bioblade"] = { Image = "http://www.roblox.com/asset/?id=4751540097", ItemID = 4751539262, ItemName = "Bioblade", ItemType = "Knife", Rarity = "Godly" },
-    ["Blaster"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=386277381", ItemID = 386277381, ItemName = "Blaster", ItemType = "Gun", Rarity = "Godly" },
+    ["Bioblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751540097", ItemID = 4751539262, ItemName = "Bioblade", ItemType = "Knife", Rarity = "Godly" },
+    ["Blaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=386277381", ItemID = 386277381, ItemName = "Blaster", ItemType = "Gun", Rarity = "Godly" },
     ["Blizzard"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=88928894807422", ItemID = 88928894807422, ItemName = "Blizzard", ItemType = "Gun", Rarity = "Godly" },
-    ["BlizzardChroma"] = { Image = "rbxassetid://139495852635932", ItemID = 88928894807422, ItemName = "Blizzard", ItemType = "Gun", Rarity = "Godly" },
-    ["Bloom"] = { Image = "rbxassetid://132419834610569", ItemID = 128553215441980, ItemName = "Bloom", ItemType = "Knife", Rarity = "Godly" },
-    ["Blossom_G"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12339377105", ItemID = 12339377105, ItemName = "Blossom", ItemType = "Gun", Rarity = "Godly" },
-    ["BlueCandy"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1489495701", ItemID = 1489495701, ItemName = "Blue Candy", ItemType = "Knife", Rarity = "Unique" },
-    ["BlueHarvester"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8194219645", ItemID = 8194219645, ItemName = "Blue Harvester", ItemType = "Gun", Rarity = "Unique" },
-    ["BlueSeer"] = { Image = "rbxassetid://3184139996", ItemID = 3184125087, ItemName = "Blue Seer", ItemType = "Knife", Rarity = "Godly" },
-    ["BlueSugar"] = { Image = "rbxassetid://3215355152", ItemID = 3215262120, ItemName = "Blue Sugar", ItemType = "Gun", Rarity = "Unique" },
-    ["BlueVampiresEdge"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12253491988", ItemID = 6084854835, ItemName = "Blue Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
-    ["Boneblade"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2513505477", ItemID = 2513505477, ItemName = "Boneblade", ItemType = "Knife", Rarity = "Godly" },
-    ["BonebladeChroma"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2513597845", ItemID = 2513598419, ItemName = "Boneblade", ItemType = "Knife", Rarity = "Godly" },
-    ["BronzeCandy"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1520189487", ItemID = 1520189487, ItemName = "Bronze Candy", ItemType = "Knife", Rarity = "Unique" },
-    ["BronzeHallow"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2511342846", ItemID = 2511342846, ItemName = "Bronze Hallow", ItemType = "Knife", Rarity = "Unique" },
-    ["BronzeHarvester"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8194221072", ItemID = 8194221072, ItemName = "Bronze Harvester", ItemType = "Gun", Rarity = "Unique" },
-    ["BronzeIceblaster"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6404167442", ItemID = 6404167442, ItemName = "Bronze Iceblaster", ItemType = "Gun", Rarity = "Unique" },
-    ["BronzeIcebreaker"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6404127119", ItemID = 6404127119, ItemName = "Bronze Icebreaker", ItemType = "Knife", Rarity = "Unique" },
-    ["BronzeSugar"] = { Image = "rbxassetid://3215355397", ItemID = 3215261913, ItemName = "Bronze Sugar", ItemType = "Gun", Rarity = "Unique" },
-    ["BronzeVampiresEdge"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12253493272", ItemID = 6084842077, ItemName = "Bronze Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
-    ["Candleflame"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=7805833970", ItemID = 7805833970, ItemName = "Candleflame", ItemType = "Knife", Rarity = "Godly" },
-    ["CandleflameChroma"] = { Image = "http://www.roblox.com/asset/?id=7806149582", ItemID = 7806121918, ItemName = "Candleflame", ItemType = "Knife", Rarity = "Godly" },
-    ["Candy"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=332021011", ItemID = 332021011, ItemName = "Candy", ItemType = "Knife", Rarity = "Godly" },
+    ["BlizzardChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=139495852635932", ItemID = 88928894807422, ItemName = "Blizzard", ItemType = "Gun", Rarity = "Godly" },
+    ["Bloom"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=132419834610569", ItemID = 128553215441980, ItemName = "Bloom", ItemType = "Knife", Rarity = "Godly" },
+    ["Blossom_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12339377105", ItemID = 12339377105, ItemName = "Blossom", ItemType = "Gun", Rarity = "Godly" },
+    ["BlueCandy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1489495701", ItemID = 1489495701, ItemName = "Blue Candy", ItemType = "Knife", Rarity = "Unique" },
+    ["BlueHarvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8194219645", ItemID = 8194219645, ItemName = "Blue Harvester", ItemType = "Gun", Rarity = "Unique" },
+    ["BlueSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139996", ItemID = 3184125087, ItemName = "Blue Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["BlueSugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215355152", ItemID = 3215262120, ItemName = "Blue Sugar", ItemType = "Gun", Rarity = "Unique" },
+    ["BlueVampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12253491988", ItemID = 6084854835, ItemName = "Blue Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
+    ["Boneblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2513505477", ItemID = 2513505477, ItemName = "Boneblade", ItemType = "Knife", Rarity = "Godly" },
+    ["BonebladeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2513597845", ItemID = 2513598419, ItemName = "Boneblade", ItemType = "Knife", Rarity = "Godly" },
+    ["BronzeCandy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1520189487", ItemID = 1520189487, ItemName = "Bronze Candy", ItemType = "Knife", Rarity = "Unique" },
+    ["BronzeHallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2511342846", ItemID = 2511342846, ItemName = "Bronze Hallow", ItemType = "Knife", Rarity = "Unique" },
+    ["BronzeHarvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8194221072", ItemID = 8194221072, ItemName = "Bronze Harvester", ItemType = "Gun", Rarity = "Unique" },
+    ["BronzeIceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404167442", ItemID = 6404167442, ItemName = "Bronze Iceblaster", ItemType = "Gun", Rarity = "Unique" },
+    ["BronzeIcebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404127119", ItemID = 6404127119, ItemName = "Bronze Icebreaker", ItemType = "Knife", Rarity = "Unique" },
+    ["BronzeSugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215355397", ItemID = 3215261913, ItemName = "Bronze Sugar", ItemType = "Gun", Rarity = "Unique" },
+    ["BronzeVampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12253493272", ItemID = 6084842077, ItemName = "Bronze Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
+    ["Candleflame"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7805833970", ItemID = 7805833970, ItemName = "Candleflame", ItemType = "Knife", Rarity = "Godly" },
+    ["CandleflameChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7806149582", ItemID = 7806121918, ItemName = "Candleflame", ItemType = "Knife", Rarity = "Godly" },
+    ["Candy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332021011", ItemID = 332021011, ItemName = "Candy", ItemType = "Knife", Rarity = "Godly" },
     ["Celestial"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=136673966529736", ItemID = 136673966529736, ItemName = "Celestial", ItemType = "Knife", Rarity = "Ancient" },
     ["Celestial_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=119399643874968", ItemID = 119399643874968, ItemName = "Bronze Celestial", ItemType = "Knife", Rarity = "Unique" },
     ["Celestial_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=104229967982042", ItemID = 104229967982042, ItemName = "Gold Celestial", ItemType = "Knife", Rarity = "Unique" },
     ["Celestial_Red"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=119157529694972", ItemID = 119157529694972, ItemName = "Red Celestial", ItemType = "Knife", Rarity = "Unique" },
     ["Celestial_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=90241292303974", ItemID = 90241292303974, ItemName = "Silver Celestial", ItemType = "Knife", Rarity = "Unique" },
-    ["Chill"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=332022166", ItemID = 332022166, ItemName = "Chill", ItemType = "Knife", Rarity = "Godly" },
-    ["ChromaDarkbringer"] = { Image = "http://www.roblox.com/asset/?id=4751507011", ItemID = 4751501078, ItemName = "Darkbringer", ItemType = "Gun", Rarity = "Godly" },
-    ["ChromaLightbringer"] = { Image = "http://www.roblox.com/asset/?id=4751507078", ItemID = 4751500761, ItemName = "Lightbringer", ItemType = "Gun", Rarity = "Godly" },
-    ["Clockwork"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=360609441", ItemID = 473570519, ItemName = "Clockwork", ItemType = "Knife", Rarity = "Godly" },
+    ["Chill"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332022166", ItemID = 332022166, ItemName = "Chill", ItemType = "Knife", Rarity = "Godly" },
+    ["ChromaDarkbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751507011", ItemID = 4751501078, ItemName = "Darkbringer", ItemType = "Gun", Rarity = "Godly" },
+    ["ChromaLightbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751507078", ItemID = 4751500761, ItemName = "Lightbringer", ItemType = "Gun", Rarity = "Godly" },
+    ["Clockwork"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=360609441", ItemID = 473570519, ItemName = "Clockwork", ItemType = "Knife", Rarity = "Godly" },
     ["Constellation"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=114197436469014", ItemID = 114197436469014, ItemName = "Constellation", ItemType = "Gun", Rarity = "Godly" },
     ["Constellation_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=112811587103866", ItemID = 112811587103866, ItemName = "Bronze Constellation", ItemType = "Gun", Rarity = "Unique" },
     ["Constellation_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=132975248521820", ItemID = 132975248521820, ItemName = "Gold Constellation", ItemType = "Gun", Rarity = "Unique" },
     ["Constellation_Red"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=85766514163212", ItemID = 85766514163212, ItemName = "Red Constellation", ItemType = "Gun", Rarity = "Unique" },
     ["Constellation_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=100747436297625", ItemID = 100747436297625, ItemName = "Silver Constellation", ItemType = "Gun", Rarity = "Unique" },
     ["ConstellationChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=98517109155878", ItemID = 114197436469014, ItemName = "Constellation", ItemType = "Gun", Rarity = "Godly" },
-    ["Cookieblade"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6121574620", ItemID = 6125733703, ItemName = "Cookieblade", ItemType = "Knife", Rarity = "Godly" },
-    ["Darkbringer"] = { Image = "http://www.roblox.com/asset/?id=4751387674", ItemID = 4749071819, ItemName = "Darkbringer", ItemType = "Gun", Rarity = "Godly" },
-    ["Darkshot"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15080280688", ItemID = 15080280688, ItemName = "Darkshot", ItemType = "Gun", Rarity = "Godly" },
-    ["Darksword"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15080267070", ItemID = 15080267070, ItemName = "Darksword", ItemType = "Knife", Rarity = "Godly" },
-    ["Dartbringer"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8626617523", ItemID = 8626617523, ItemName = "Dartbringer", ItemType = "Gun", Rarity = "Unique" },
-    ["Deathshard"] = { Image = "rbxassetid://3175017717", ItemID = 196750305, ItemName = "Deathshard", ItemType = "Knife", Rarity = "Godly" },
-    ["DeathshardChroma"] = { Image = "rbxassetid://3187397317", ItemID = 3187390667, ItemName = "Deathshard", ItemType = "Knife", Rarity = "Godly" },
-    ["Eggblade"] = { Image = "http://www.roblox.com/asset/?id=6607512359", ItemID = 6607277825, ItemName = "Eggblade", ItemType = "Knife", Rarity = "Godly" },
-    ["ElderwoodGun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4468571736", ItemID = 4211142894, ItemName = "Elderwood Revolver", ItemType = "Gun", Rarity = "Godly" },
-    ["ElderwoodGunBlue"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4468574885", ItemID = 4468574885, ItemName = "Blue Elderwood", ItemType = "Gun", Rarity = "Unique" },
-    ["ElderwoodGunBronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4468585407", ItemID = 4468585407, ItemName = "Bronze Elderwood", ItemType = "Gun", Rarity = "Unique" },
-    ["ElderwoodGunGold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4468584345", ItemID = 4468584345, ItemName = "Gold Elderwood", ItemType = "Gun", Rarity = "Unique" },
-    ["ElderwoodGunSilver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4468583758", ItemID = 4468583758, ItemName = "Silver Elderwood", ItemType = "Gun", Rarity = "Unique" },
-    ["ElderwoodKnife"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11254879631", ItemID = 11262771067, ItemName = "Elderwood Blade", ItemType = "Knife", Rarity = "Godly" },
-    ["ElderwoodKnifeBlue"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11505913287", ItemID = 11505913287, ItemName = "Blue Elderwood", ItemType = "Knife", Rarity = "Unique" },
-    ["ElderwoodKnifeBronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11505914752", ItemID = 11505914752, ItemName = "Bronze Elderwood", ItemType = "Knife", Rarity = "Unique" },
-    ["ElderwoodKnifeChroma"] = { Image = "http://www.roblox.com/asset/?id=11255021976", ItemID = 11254975176, ItemName = "Elderwood Blade", ItemType = "Knife", Rarity = "Godly" },
-    ["ElderwoodKnifeGold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11505917850", ItemID = 11505917850, ItemName = "Gold Elderwood", ItemType = "Knife", Rarity = "Unique" },
-    ["ElderwoodKnifeSilver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11505916486", ItemID = 11505916486, ItemName = "Silver Elderwood", ItemType = "Knife", Rarity = "Unique" },
-    ["ElderwoodScythe"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4468593654", ItemID = 4211148191, ItemName = "Elderwood Scythe", ItemType = "Knife", Rarity = "Ancient" },
-    ["Emptybringer"] = { Image = "http://www.roblox.com/asset/?id=4751388150", ItemID = 4749071819, ItemName = "???", ItemType = "Gun", Rarity = "Godly" },
-    ["EmptybringerChroma"] = { Image = "http://www.roblox.com/asset/?id=4751388150", ItemID = 4749071819, ItemName = "???", ItemType = "Gun", Rarity = "Godly" },
-    ["Eternal"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=538706317", ItemID = 619605312, ItemName = "Eternal", ItemType = "Knife", Rarity = "Godly" },
-    ["Eternal2"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2545253030", ItemID = 2545253030, ItemName = "Eternal II", ItemType = "Knife", Rarity = "Godly" },
-    ["Eternal3"] = { Image = "rbxassetid://3281170430", ItemID = 3279011390, ItemName = "Eternal III", ItemType = "Knife", Rarity = "Godly" },
-    ["Eternal4"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4999958740", ItemID = 4999958740, ItemName = "Eternal IV", ItemType = "Knife", Rarity = "Godly" },
-    ["EternalCane"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4488391411", ItemID = 4488391411, ItemName = "Eternalcane", ItemType = "Knife", Rarity = "Godly" },
-    ["Fang"] = { Image = "rbxassetid://3187397768", ItemID = 198442811, ItemName = "Fang", ItemType = "Knife", Rarity = "Godly" },
-    ["FangChroma"] = { Image = "rbxassetid://3187397850", ItemID = 3187392501, ItemName = "Fang", ItemType = "Knife", Rarity = "Godly" },
-    ["Flames"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=585873746", ItemID = 585873746, ItemName = "Flames", ItemType = "Knife", Rarity = "Godly" },
-    ["Flora"] = { Image = "rbxassetid://139276091458016", ItemID = 138204709945147, ItemName = "Flora", ItemType = "Gun", Rarity = "Godly" },
-    ["FlowerwoodGun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16963894455, ItemName = "Flowerwood Gun", ItemType = "Gun", Rarity = "Godly" },
-    ["FlowerwoodKnife"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16963860501, ItemName = "Flowerwood", ItemType = "Knife", Rarity = "Godly" },
-    ["Frostbite"] = { Image = "http://www.roblox.com/asset/?id=4528373246", ItemID = 4528484880, ItemName = "Frostbite", ItemType = "Knife", Rarity = "Godly" },
-    ["Frostsaber"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1268934541", ItemID = 1269580035, ItemName = "Frostsaber", ItemType = "Knife", Rarity = "Godly" },
-    ["Gemstone"] = { Image = "rbxassetid://3183657748", ItemID = 3183598040, ItemName = "Gemstone", ItemType = "Knife", Rarity = "Godly" },
-    ["GemstoneChroma"] = { Image = "rbxassetid://3183657875", ItemID = 3183597816, ItemName = "Gemstone", ItemType = "Knife", Rarity = "Godly" },
-    ["Ghostblade"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4217586790", ItemID = 4221789003, ItemName = "Ghostblade", ItemType = "Knife", Rarity = "Godly" },
-    ["Gingerblade"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2669336659", ItemID = 2669336659, ItemName = "Gingerblade", ItemType = "Knife", Rarity = "Godly" },
-    ["GingerbladeChroma"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2672351679", ItemID = 2672349340, ItemName = "Gingerblade", ItemType = "Knife", Rarity = "Godly" },
-    ["GingerLuger"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2674983099", ItemID = 2674983099, ItemName = "Ginger Luger", ItemType = "Gun", Rarity = "Godly" },
-    ["Gingermint_G"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11872179646", ItemID = 11872179646, ItemName = "Gingermint", ItemType = "Gun", Rarity = "Godly" },
-    ["Gingermint_K"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11855306927", ItemID = 11855306927, ItemName = "Cookiecane", ItemType = "Knife", Rarity = "Godly" },
-    ["Gingermint_KChroma"] = { Image = "rbxassetid://11979596437", ItemID = 11873640255, ItemName = "Cookiecane", ItemType = "Knife", Rarity = "Godly" },
-    ["Gingerscope"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15666596216", ItemID = 15666469505, ItemName = "Gingerscope", ItemType = "Gun", Rarity = "Ancient" },
-    ["Gingerscope_Blue"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16964462231, ItemName = "Blue Gingerscope", ItemType = "Gun", Rarity = "Unique" },
-    ["Gingerscope_Bronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16964465320, ItemName = "Bronze Gingerscope", ItemType = "Gun", Rarity = "Unique" },
-    ["Gingerscope_Gold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16964471890, ItemName = "Gold Gingerscope", ItemType = "Gun", Rarity = "Unique" },
-    ["Gingerscope_Silver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16964468980, ItemName = "Silver Gingerscope", ItemType = "Gun", Rarity = "Unique" },
-    ["Gingerscythe_Ancient"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15683188776", ItemID = 15683188776, ItemName = "Gingerscythe", ItemType = "Knife", Rarity = "Ancient" },
-    ["Gingerscythe_Blue"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16964448042, ItemName = "Blue Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
-    ["Gingerscythe_Bronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16964449392, ItemName = "Bronze Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
-    ["Gingerscythe_Godly"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15683175970", ItemID = 15683175970, ItemName = "Gingerscythe", ItemType = "Knife", Rarity = "Godly" },
-    ["Gingerscythe_Gold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16964452491, ItemName = "Gold Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
-    ["Gingerscythe_Silver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 16964450895, ItemName = "Silver Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
-    ["GoldCandy"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1520188792", ItemID = 1520188792, ItemName = "Gold Candy", ItemType = "Knife", Rarity = "Unique" },
-    ["GoldHallow"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2511340308", ItemID = 2511340308, ItemName = "Gold Hallow", ItemType = "Knife", Rarity = "Unique" },
-    ["GoldHarvester"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8194222523", ItemID = 8194222523, ItemName = "Gold Harvester", ItemType = "Gun", Rarity = "Unique" },
-    ["GoldIceblaster"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6404165933", ItemID = 6404165933, ItemName = "Gold Iceblaster", ItemType = "Gun", Rarity = "Unique" },
-    ["GoldIcebreaker"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6404115112", ItemID = 6404115112, ItemName = "Gold Icebreaker", ItemType = "Knife", Rarity = "Unique" },
-    ["GoldSugar"] = { Image = "rbxassetid://3215355797", ItemID = 3215260149, ItemName = "Gold Sugar", ItemType = "Gun", Rarity = "Unique" },
-    ["GoldVampiresEdge"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12253496571", ItemID = 6084838617, ItemName = "Gold Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
-    ["GreenLuger"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=332044679", ItemID = 332044679, ItemName = "Green Luger", ItemType = "Gun", Rarity = "Godly" },
-    ["Hallow"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=531878205", ItemID = 531878205, ItemName = "Hallow's Edge", ItemType = "Knife", Rarity = "Godly" },
-    ["Hallowgun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=5877089721", ItemID = 5878721461, ItemName = "Hallowgun", ItemType = "Gun", Rarity = "Godly" },
-    ["HallowsBlade"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1132775323", ItemID = 1132775323, ItemName = "Hallow's Blade", ItemType = "Knife", Rarity = "Godly" },
-    ["Hallowscythe"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=5877016863", ItemID = 5877016863, ItemName = "Hallowscythe", ItemType = "Knife", Rarity = "Ancient" },
-    ["Handsaw"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=332042435", ItemID = 473572138, ItemName = "Handsaw", ItemType = "Knife", Rarity = "Godly" },
-    ["Harvester"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=7800847534", ItemID = 7800847534, ItemName = "Harvester", ItemType = "Gun", Rarity = "Ancient" },
-    ["Heartblade"] = { Image = "http://www.roblox.com/asset/?id=6413214382", ItemID = 6413145922, ItemName = "Heartblade", ItemType = "Knife", Rarity = "Godly" },
+    ["Cookieblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6121574620", ItemID = 6125733703, ItemName = "Cookieblade", ItemType = "Knife", Rarity = "Godly" },
+    ["Darkbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751387674", ItemID = 4749071819, ItemName = "Darkbringer", ItemType = "Gun", Rarity = "Godly" },
+    ["Darkshot"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15080280688", ItemID = 15080280688, ItemName = "Darkshot", ItemType = "Gun", Rarity = "Godly" },
+    ["Darksword"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15080267070", ItemID = 15080267070, ItemName = "Darksword", ItemType = "Knife", Rarity = "Godly" },
+    ["Dartbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8626617523", ItemID = 8626617523, ItemName = "Dartbringer", ItemType = "Gun", Rarity = "Unique" },
+    ["Deathshard"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3175017717", ItemID = 196750305, ItemName = "Deathshard", ItemType = "Knife", Rarity = "Godly" },
+    ["DeathshardChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187397317", ItemID = 3187390667, ItemName = "Deathshard", ItemType = "Knife", Rarity = "Godly" },
+    ["Eggblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6607512359", ItemID = 6607277825, ItemName = "Eggblade", ItemType = "Knife", Rarity = "Godly" },
+    ["ElderwoodGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468571736", ItemID = 4211142894, ItemName = "Elderwood Revolver", ItemType = "Gun", Rarity = "Godly" },
+    ["ElderwoodGunBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468574885", ItemID = 4468574885, ItemName = "Blue Elderwood", ItemType = "Gun", Rarity = "Unique" },
+    ["ElderwoodGunBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468585407", ItemID = 4468585407, ItemName = "Bronze Elderwood", ItemType = "Gun", Rarity = "Unique" },
+    ["ElderwoodGunGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468584345", ItemID = 4468584345, ItemName = "Gold Elderwood", ItemType = "Gun", Rarity = "Unique" },
+    ["ElderwoodGunSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468583758", ItemID = 4468583758, ItemName = "Silver Elderwood", ItemType = "Gun", Rarity = "Unique" },
+    ["ElderwoodKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11254879631", ItemID = 11262771067, ItemName = "Elderwood Blade", ItemType = "Knife", Rarity = "Godly" },
+    ["ElderwoodKnifeBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11505913287", ItemID = 11505913287, ItemName = "Blue Elderwood", ItemType = "Knife", Rarity = "Unique" },
+    ["ElderwoodKnifeBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11505914752", ItemID = 11505914752, ItemName = "Bronze Elderwood", ItemType = "Knife", Rarity = "Unique" },
+    ["ElderwoodKnifeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11255021976", ItemID = 11254975176, ItemName = "Elderwood Blade", ItemType = "Knife", Rarity = "Godly" },
+    ["ElderwoodKnifeGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11505917850", ItemID = 11505917850, ItemName = "Gold Elderwood", ItemType = "Knife", Rarity = "Unique" },
+    ["ElderwoodKnifeSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11505916486", ItemID = 11505916486, ItemName = "Silver Elderwood", ItemType = "Knife", Rarity = "Unique" },
+    ["ElderwoodScythe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468593654", ItemID = 4211148191, ItemName = "Elderwood Scythe", ItemType = "Knife", Rarity = "Ancient" },
+    ["Emptybringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751388150", ItemID = 4749071819, ItemName = "???", ItemType = "Gun", Rarity = "Godly" },
+    ["EmptybringerChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751388150", ItemID = 4749071819, ItemName = "???", ItemType = "Gun", Rarity = "Godly" },
+    ["Eternal"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=538706317", ItemID = 619605312, ItemName = "Eternal", ItemType = "Knife", Rarity = "Godly" },
+    ["Eternal2"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2545253030", ItemID = 2545253030, ItemName = "Eternal II", ItemType = "Knife", Rarity = "Godly" },
+    ["Eternal3"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3281170430", ItemID = 3279011390, ItemName = "Eternal III", ItemType = "Knife", Rarity = "Godly" },
+    ["Eternal4"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4999958740", ItemID = 4999958740, ItemName = "Eternal IV", ItemType = "Knife", Rarity = "Godly" },
+    ["EternalCane"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4488391411", ItemID = 4488391411, ItemName = "Eternalcane", ItemType = "Knife", Rarity = "Godly" },
+    ["Fang"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187397768", ItemID = 198442811, ItemName = "Fang", ItemType = "Knife", Rarity = "Godly" },
+    ["FangChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187397850", ItemID = 3187392501, ItemName = "Fang", ItemType = "Knife", Rarity = "Godly" },
+    ["Flames"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=585873746", ItemID = 585873746, ItemName = "Flames", ItemType = "Knife", Rarity = "Godly" },
+    ["Flora"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=139276091458016", ItemID = 138204709945147, ItemName = "Flora", ItemType = "Gun", Rarity = "Godly" },
+    ["FlowerwoodGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16963894455", ItemID = 16963894455, ItemName = "Flowerwood Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["FlowerwoodKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16963860501", ItemID = 16963860501, ItemName = "Flowerwood", ItemType = "Knife", Rarity = "Godly" },
+    ["Frostbite"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4528373246", ItemID = 4528484880, ItemName = "Frostbite", ItemType = "Knife", Rarity = "Godly" },
+    ["Frostsaber"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1268934541", ItemID = 1269580035, ItemName = "Frostsaber", ItemType = "Knife", Rarity = "Godly" },
+    ["Gemstone"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3183657748", ItemID = 3183598040, ItemName = "Gemstone", ItemType = "Knife", Rarity = "Godly" },
+    ["GemstoneChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3183657875", ItemID = 3183597816, ItemName = "Gemstone", ItemType = "Knife", Rarity = "Godly" },
+    ["Ghostblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4217586790", ItemID = 4221789003, ItemName = "Ghostblade", ItemType = "Knife", Rarity = "Godly" },
+    ["Gingerblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2669336659", ItemID = 2669336659, ItemName = "Gingerblade", ItemType = "Knife", Rarity = "Godly" },
+    ["GingerbladeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2672351679", ItemID = 2672349340, ItemName = "Gingerblade", ItemType = "Knife", Rarity = "Godly" },
+    ["GingerLuger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2674983099", ItemID = 2674983099, ItemName = "Ginger Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["Gingermint_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11872179646", ItemID = 11872179646, ItemName = "Gingermint", ItemType = "Gun", Rarity = "Godly" },
+    ["Gingermint_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11855306927", ItemID = 11855306927, ItemName = "Cookiecane", ItemType = "Knife", Rarity = "Godly" },
+    ["Gingermint_KChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11979596437", ItemID = 11873640255, ItemName = "Cookiecane", ItemType = "Knife", Rarity = "Godly" },
+    ["Gingerscope"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15666596216", ItemID = 15666469505, ItemName = "Gingerscope", ItemType = "Gun", Rarity = "Ancient" },
+    ["Gingerscope_Blue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964462231", ItemID = 16964462231, ItemName = "Blue Gingerscope", ItemType = "Gun", Rarity = "Unique" },
+    ["Gingerscope_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964465320", ItemID = 16964465320, ItemName = "Bronze Gingerscope", ItemType = "Gun", Rarity = "Unique" },
+    ["Gingerscope_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964471890", ItemID = 16964471890, ItemName = "Gold Gingerscope", ItemType = "Gun", Rarity = "Unique" },
+    ["Gingerscope_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964468980", ItemID = 16964468980, ItemName = "Silver Gingerscope", ItemType = "Gun", Rarity = "Unique" },
+    ["Gingerscythe_Ancient"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15683188776", ItemID = 15683188776, ItemName = "Gingerscythe", ItemType = "Knife", Rarity = "Ancient" },
+    ["Gingerscythe_Blue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964448042", ItemID = 16964448042, ItemName = "Blue Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
+    ["Gingerscythe_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964449392", ItemID = 16964449392, ItemName = "Bronze Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
+    ["Gingerscythe_Godly"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15683175970", ItemID = 15683175970, ItemName = "Gingerscythe", ItemType = "Knife", Rarity = "Godly" },
+    ["Gingerscythe_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964452491", ItemID = 16964452491, ItemName = "Gold Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
+    ["Gingerscythe_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964450895", ItemID = 16964450895, ItemName = "Silver Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
+    ["GoldCandy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1520188792", ItemID = 1520188792, ItemName = "Gold Candy", ItemType = "Knife", Rarity = "Unique" },
+    ["GoldHallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2511340308", ItemID = 2511340308, ItemName = "Gold Hallow", ItemType = "Knife", Rarity = "Unique" },
+    ["GoldHarvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8194222523", ItemID = 8194222523, ItemName = "Gold Harvester", ItemType = "Gun", Rarity = "Unique" },
+    ["GoldIceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404165933", ItemID = 6404165933, ItemName = "Gold Iceblaster", ItemType = "Gun", Rarity = "Unique" },
+    ["GoldIcebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404115112", ItemID = 6404115112, ItemName = "Gold Icebreaker", ItemType = "Knife", Rarity = "Unique" },
+    ["GoldSugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215355797", ItemID = 3215260149, ItemName = "Gold Sugar", ItemType = "Gun", Rarity = "Unique" },
+    ["GoldVampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12253496571", ItemID = 6084838617, ItemName = "Gold Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
+    ["GreenLuger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332044679", ItemID = 332044679, ItemName = "Green Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["Hallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=531878205", ItemID = 531878205, ItemName = "Hallow's Edge", ItemType = "Knife", Rarity = "Godly" },
+    ["Hallowgun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=5877089721", ItemID = 5878721461, ItemName = "Hallowgun", ItemType = "Gun", Rarity = "Godly" },
+    ["HallowsBlade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1132775323", ItemID = 1132775323, ItemName = "Hallow's Blade", ItemType = "Knife", Rarity = "Godly" },
+    ["Hallowscythe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=5877016863", ItemID = 5877016863, ItemName = "Hallowscythe", ItemType = "Knife", Rarity = "Ancient" },
+    ["Handsaw"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332042435", ItemID = 473572138, ItemName = "Handsaw", ItemType = "Knife", Rarity = "Godly" },
+    ["Harvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7800847534", ItemID = 7800847534, ItemName = "Harvester", ItemType = "Gun", Rarity = "Ancient" },
+    ["Heartblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6413214382", ItemID = 6413145922, ItemName = "Heartblade", ItemType = "Knife", Rarity = "Godly" },
     ["HeartWand"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=118334707962654", ItemID = 118334707962654, ItemName = "Heart Wand", ItemType = "Knife", Rarity = "Godly" },
-    ["HeartWandChroma"] = { Image = "rbxassetid://99154743764163", ItemID = 78479059410850, ItemName = "Heart Wand", ItemType = "Knife", Rarity = "Godly" },
-    ["Heat"] = { Image = "rbxassetid://3187444758", ItemID = 201238541, ItemName = "Heat", ItemType = "Knife", Rarity = "Godly" },
-    ["HeatChroma"] = { Image = "rbxassetid://3187444849", ItemID = 3187395238, ItemName = "Heat", ItemType = "Knife", Rarity = "Godly" },
-    ["Icebeam"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8305000161", ItemID = 8311005531, ItemName = "Icebeam", ItemType = "Gun", Rarity = "Godly" },
-    ["Iceblaster"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6121579464", ItemID = 6125814417, ItemName = "Iceblaster", ItemType = "Gun", Rarity = "Godly" },
-    ["Icebreaker"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6121572723", ItemID = 6125729383, ItemName = "Icebreaker", ItemType = "Knife", Rarity = "Ancient" },
-    ["IceDragon"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=585846454", ItemID = 585872642, ItemName = "Ice Dragon", ItemType = "Knife", Rarity = "Godly" },
-    ["Iceflake"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8304818186", ItemID = 8304818186, ItemName = "Iceflake", ItemType = "Knife", Rarity = "Godly" },
-    ["IceHammer_Ancient"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11855274019", ItemID = 11855274019, ItemName = "Icecrusher", ItemType = "Knife", Rarity = "Ancient" },
-    ["IceHammer_Godly"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11855282546", ItemID = 11855282546, ItemName = "Icecrusher", ItemType = "Knife", Rarity = "Godly" },
-    ["IceHammerBronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12227148356", ItemID = 12227148356, ItemName = "Bronze Icecrusher", ItemType = "Knife", Rarity = "Unique" },
-    ["IceHammerGold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12227137860", ItemID = 12227137860, ItemName = "Gold Icecrusher", ItemType = "Knife", Rarity = "Unique" },
-    ["IceHammerRed"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12227186408", ItemID = 12227186408, ItemName = "Red Icecrusher", ItemType = "Knife", Rarity = "Unique" },
-    ["IceHammerSilver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12227142478", ItemID = 12227142478, ItemName = "Silver Icecrusher", ItemType = "Knife", Rarity = "Unique" },
-    ["Icepiercer"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11874071041", ItemID = 11874071041, ItemName = "Icepiercer", ItemType = "Gun", Rarity = "Ancient" },
-    ["IcepiercerBronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12226920195", ItemID = 12226920195, ItemName = "Bronze Icepiercer", ItemType = "Gun", Rarity = "Unique" },
-    ["IcepiercerGold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12226688172", ItemID = 12226688172, ItemName = "Gold Icepiercer", ItemType = "Gun", Rarity = "Unique" },
-    ["IcepiercerRed"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12227133450", ItemID = 12227133450, ItemName = "Red Icepiercer", ItemType = "Gun", Rarity = "Unique" },
-    ["IcepiercerSilver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12226843957", ItemID = 12226843957, ItemName = "Silver Icepiercer", ItemType = "Gun", Rarity = "Unique" },
-    ["IceShard"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1268710824", ItemID = 1268710824, ItemName = "Ice Shard", ItemType = "Knife", Rarity = "Godly" },
-    ["Icewing"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2669997196", ItemID = 3183085102, ItemName = "Icewing", ItemType = "Knife", Rarity = "Ancient" },
-    ["Jinglegun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6121678262", ItemID = 6125742758, ItemName = "Jinglegun", ItemType = "Gun", Rarity = "Godly" },
-    ["Laser"] = { Image = "rbxassetid://3187422496", ItemID = 238546983, ItemName = "Laser", ItemType = "Gun", Rarity = "Godly" },
-    ["LaserChroma"] = { Image = "rbxassetid://3187422628", ItemID = 3187395952, ItemName = "Laser", ItemType = "Gun", Rarity = "Godly" },
-    ["Lightbringer"] = { Image = "http://www.roblox.com/asset/?id=4751387063", ItemID = 4749070432, ItemName = "Lightbringer", ItemType = "Gun", Rarity = "Godly" },
-    ["Logchopper"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4528268775", ItemID = 4535644282, ItemName = "Logchopper", ItemType = "Knife", Rarity = "Ancient" },
-    ["LogchopperBlue"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4753353471", ItemID = 4753353471, ItemName = "Blue Logchopper", ItemType = "Knife", Rarity = "Unique" },
-    ["LogchopperBronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4753354123", ItemID = 4753354123, ItemName = "Bronze Logchopper", ItemType = "Knife", Rarity = "Unique" },
-    ["LogchopperGold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4753354638", ItemID = 4753354638, ItemName = "Gold Logchopper", ItemType = "Knife", Rarity = "Unique" },
-    ["LogchopperSilver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4753352581", ItemID = 4753352581, ItemName = "Silver Logchopper", ItemType = "Knife", Rarity = "Unique" },
-    ["Luger"] = { Image = "rbxassetid://3187399148", ItemID = 198042673, ItemName = "Luger", ItemType = "Gun", Rarity = "Godly" },
-    ["Lugercane"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4535482609", ItemID = 4535482609, ItemName = "Lugercane", ItemType = "Gun", Rarity = "Godly" },
-    ["LugerChroma"] = { Image = "rbxassetid://3187399258", ItemID = 3187395551, ItemName = "Luger", ItemType = "Gun", Rarity = "Godly" },
-    ["Makeshift"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11229837140", ItemID = 11229837140, ItemName = "Makeshift", ItemType = "Gun", Rarity = "Godly" },
-    ["Minty"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4528291487", ItemID = 4535408229, ItemName = "Minty", ItemType = "Gun", Rarity = "Godly" },
-    ["MintyBlue"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4753347062", ItemID = 4753347062, ItemName = "Blue Minty", ItemType = "Gun", Rarity = "Unique" },
-    ["MintyBronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4753348263", ItemID = 4753348263, ItemName = "Bronze Minty", ItemType = "Gun", Rarity = "Unique" },
-    ["MintyGold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4753347636", ItemID = 4753347636, ItemName = "Gold Minty", ItemType = "Gun", Rarity = "Unique" },
-    ["MintySilver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4753346087", ItemID = 4753346087, ItemName = "Silver Minty", ItemType = "Gun", Rarity = "Unique" },
-    ["Nebula"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6598123521", ItemID = 6598123521, ItemName = "Nebula", ItemType = "Knife", Rarity = "Godly" },
-    ["Nightblade"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=475478854", ItemID = 475478854, ItemName = "Nightblade", ItemType = "Knife", Rarity = "Godly" },
-    ["NikKnife"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2533350813", ItemID = 2533351841, ItemName = "Nik's Scythe", ItemType = "Knife", Rarity = "Ancient" },
-    ["Ocean_G"] = { Image = "rbxassetid://13933165014", ItemID = 13945898892, ItemName = "Ocean", ItemType = "Gun", Rarity = "Godly" },
-    ["OrangeSeer"] = { Image = "rbxassetid://3184139504", ItemID = 3184124504, ItemName = "Orange Seer", ItemType = "Knife", Rarity = "Godly" },
-    ["Pearl_G"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 18322646152, ItemName = "Pearlshine", ItemType = "Gun", Rarity = "Godly" },
-    ["Pearl_K"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 18322621319, ItemName = "Pearl", ItemType = "Knife", Rarity = "Godly" },
-    ["Peppermint"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6076067750", ItemID = 6085035357, ItemName = "Peppermint", ItemType = "Knife", Rarity = "Godly" },
-    ["Phantom2022"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11229732037", ItemID = 11229732037, ItemName = "Phantom", ItemType = "Knife", Rarity = "Godly" },
-    ["Pixel"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=365347166", ItemID = 473573054, ItemName = "Pixel", ItemType = "Knife", Rarity = "Godly" },
-    ["Plasmabeam"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=10014717343", ItemID = 10014717343, ItemName = "Plasmabeam", ItemType = "Gun", Rarity = "Godly" },
-    ["Plasmablade"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=10014680882", ItemID = 10014680882, ItemName = "Plasmablade", ItemType = "Knife", Rarity = "Godly" },
-    ["Prismatic"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=5360359935", ItemID = 5360359935, ItemName = "Prismatic", ItemType = "Knife", Rarity = "Godly" },
-    ["Pumpking"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1133082421", ItemID = 1138143590, ItemName = "Pumpking", ItemType = "Knife", Rarity = "Godly" },
-    ["PurpleSeer"] = { Image = "rbxassetid://3184140119", ItemID = 3184125244, ItemName = "Purple Seer", ItemType = "Knife", Rarity = "Godly" },
-    ["Rainbow_G"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12966354606", ItemID = 12966354606, ItemName = "Rainbow Gun", ItemType = "Gun", Rarity = "Godly" },
-    ["Rainbow_K"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12966184630", ItemID = 12966184630, ItemName = "Rainbow", ItemType = "Knife", Rarity = "Godly" },
+    ["HeartWandChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=99154743764163", ItemID = 78479059410850, ItemName = "Heart Wand", ItemType = "Knife", Rarity = "Godly" },
+    ["Heat"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187444758", ItemID = 201238541, ItemName = "Heat", ItemType = "Knife", Rarity = "Godly" },
+    ["HeatChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187444849", ItemID = 3187395238, ItemName = "Heat", ItemType = "Knife", Rarity = "Godly" },
+    ["Icebeam"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8305000161", ItemID = 8311005531, ItemName = "Icebeam", ItemType = "Gun", Rarity = "Godly" },
+    ["Iceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6121579464", ItemID = 6125814417, ItemName = "Iceblaster", ItemType = "Gun", Rarity = "Godly" },
+    ["Icebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6121572723", ItemID = 6125729383, ItemName = "Icebreaker", ItemType = "Knife", Rarity = "Ancient" },
+    ["IceDragon"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=585846454", ItemID = 585872642, ItemName = "Ice Dragon", ItemType = "Knife", Rarity = "Godly" },
+    ["Iceflake"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8304818186", ItemID = 8304818186, ItemName = "Iceflake", ItemType = "Knife", Rarity = "Godly" },
+    ["IceHammer_Ancient"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11855274019", ItemID = 11855274019, ItemName = "Icecrusher", ItemType = "Knife", Rarity = "Ancient" },
+    ["IceHammer_Godly"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11855282546", ItemID = 11855282546, ItemName = "Icecrusher", ItemType = "Knife", Rarity = "Godly" },
+    ["IceHammerBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227148356", ItemID = 12227148356, ItemName = "Bronze Icecrusher", ItemType = "Knife", Rarity = "Unique" },
+    ["IceHammerGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227137860", ItemID = 12227137860, ItemName = "Gold Icecrusher", ItemType = "Knife", Rarity = "Unique" },
+    ["IceHammerRed"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227186408", ItemID = 12227186408, ItemName = "Red Icecrusher", ItemType = "Knife", Rarity = "Unique" },
+    ["IceHammerSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227142478", ItemID = 12227142478, ItemName = "Silver Icecrusher", ItemType = "Knife", Rarity = "Unique" },
+    ["Icepiercer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11874071041", ItemID = 11874071041, ItemName = "Icepiercer", ItemType = "Gun", Rarity = "Ancient" },
+    ["IcepiercerBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12226920195", ItemID = 12226920195, ItemName = "Bronze Icepiercer", ItemType = "Gun", Rarity = "Unique" },
+    ["IcepiercerGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12226688172", ItemID = 12226688172, ItemName = "Gold Icepiercer", ItemType = "Gun", Rarity = "Unique" },
+    ["IcepiercerRed"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227133450", ItemID = 12227133450, ItemName = "Red Icepiercer", ItemType = "Gun", Rarity = "Unique" },
+    ["IcepiercerSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12226843957", ItemID = 12226843957, ItemName = "Silver Icepiercer", ItemType = "Gun", Rarity = "Unique" },
+    ["IceShard"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1268710824", ItemID = 1268710824, ItemName = "Ice Shard", ItemType = "Knife", Rarity = "Godly" },
+    ["Icewing"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2669997196", ItemID = 3183085102, ItemName = "Icewing", ItemType = "Knife", Rarity = "Ancient" },
+    ["Jinglegun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6121678262", ItemID = 6125742758, ItemName = "Jinglegun", ItemType = "Gun", Rarity = "Godly" },
+    ["Laser"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187422496", ItemID = 238546983, ItemName = "Laser", ItemType = "Gun", Rarity = "Godly" },
+    ["LaserChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187422628", ItemID = 3187395952, ItemName = "Laser", ItemType = "Gun", Rarity = "Godly" },
+    ["Lightbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751387063", ItemID = 4749070432, ItemName = "Lightbringer", ItemType = "Gun", Rarity = "Godly" },
+    ["Logchopper"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4528268775", ItemID = 4535644282, ItemName = "Logchopper", ItemType = "Knife", Rarity = "Ancient" },
+    ["LogchopperBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753353471", ItemID = 4753353471, ItemName = "Blue Logchopper", ItemType = "Knife", Rarity = "Unique" },
+    ["LogchopperBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753354123", ItemID = 4753354123, ItemName = "Bronze Logchopper", ItemType = "Knife", Rarity = "Unique" },
+    ["LogchopperGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753354638", ItemID = 4753354638, ItemName = "Gold Logchopper", ItemType = "Knife", Rarity = "Unique" },
+    ["LogchopperSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753352581", ItemID = 4753352581, ItemName = "Silver Logchopper", ItemType = "Knife", Rarity = "Unique" },
+    ["Luger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187399148", ItemID = 198042673, ItemName = "Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["Lugercane"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4535482609", ItemID = 4535482609, ItemName = "Lugercane", ItemType = "Gun", Rarity = "Godly" },
+    ["LugerChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187399258", ItemID = 3187395551, ItemName = "Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["Makeshift"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11229837140", ItemID = 11229837140, ItemName = "Makeshift", ItemType = "Gun", Rarity = "Godly" },
+    ["Minty"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4528291487", ItemID = 4535408229, ItemName = "Minty", ItemType = "Gun", Rarity = "Godly" },
+    ["MintyBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753347062", ItemID = 4753347062, ItemName = "Blue Minty", ItemType = "Gun", Rarity = "Unique" },
+    ["MintyBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753348263", ItemID = 4753348263, ItemName = "Bronze Minty", ItemType = "Gun", Rarity = "Unique" },
+    ["MintyGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753347636", ItemID = 4753347636, ItemName = "Gold Minty", ItemType = "Gun", Rarity = "Unique" },
+    ["MintySilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753346087", ItemID = 4753346087, ItemName = "Silver Minty", ItemType = "Gun", Rarity = "Unique" },
+    ["Nebula"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6598123521", ItemID = 6598123521, ItemName = "Nebula", ItemType = "Knife", Rarity = "Godly" },
+    ["Nightblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=475478854", ItemID = 475478854, ItemName = "Nightblade", ItemType = "Knife", Rarity = "Godly" },
+    ["NikKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2533350813", ItemID = 2533351841, ItemName = "Nik's Scythe", ItemType = "Knife", Rarity = "Ancient" },
+    ["Ocean_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=13933165014", ItemID = 13945898892, ItemName = "Ocean", ItemType = "Gun", Rarity = "Godly" },
+    ["OrangeSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139504", ItemID = 3184124504, ItemName = "Orange Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Pearl_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=18322646152", ItemID = 18322646152, ItemName = "Pearlshine", ItemType = "Gun", Rarity = "Godly" },
+    ["Pearl_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=18322621319", ItemID = 18322621319, ItemName = "Pearl", ItemType = "Knife", Rarity = "Godly" },
+    ["Peppermint"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6076067750", ItemID = 6085035357, ItemName = "Peppermint", ItemType = "Knife", Rarity = "Godly" },
+    ["Phantom2022"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11229732037", ItemID = 11229732037, ItemName = "Phantom", ItemType = "Knife", Rarity = "Godly" },
+    ["Pixel"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=365347166", ItemID = 473573054, ItemName = "Pixel", ItemType = "Knife", Rarity = "Godly" },
+    ["Plasmabeam"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=10014717343", ItemID = 10014717343, ItemName = "Plasmabeam", ItemType = "Gun", Rarity = "Godly" },
+    ["Plasmablade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=10014680882", ItemID = 10014680882, ItemName = "Plasmablade", ItemType = "Knife", Rarity = "Godly" },
+    ["Prismatic"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=5360359935", ItemID = 5360359935, ItemName = "Prismatic", ItemType = "Knife", Rarity = "Godly" },
+    ["Pumpking"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1133082421", ItemID = 1138143590, ItemName = "Pumpking", ItemType = "Knife", Rarity = "Godly" },
+    ["PurpleSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184140119", ItemID = 3184125244, ItemName = "Purple Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Rainbow_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12966354606", ItemID = 12966354606, ItemName = "Rainbow Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["Rainbow_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12966184630", ItemID = 12966184630, ItemName = "Rainbow", ItemType = "Knife", Rarity = "Godly" },
     ["Raygun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=139431943195380", ItemID = 139431943195380, ItemName = "Raygun", ItemType = "Gun", Rarity = "Godly" },
     ["RaygunBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=138881346504998", ItemID = 139431943195380, ItemName = "Bronze Raygun", ItemType = "Gun", Rarity = "Unique" },
     ["RaygunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=83259634072260", ItemID = 139431943195380, ItemName = "Raygun", ItemType = "Gun", Rarity = "Godly" },
     ["RaygunGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=76250851065456", ItemID = 139431943195380, ItemName = "Gold Raygun", ItemType = "Gun", Rarity = "Unique" },
     ["RaygunRed"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=132354489228618", ItemID = 132354489228618, ItemName = "Red Raygun", ItemType = "Gun", Rarity = "Unique" },
     ["RaygunSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=71511736314707", ItemID = 139431943195380, ItemName = "Silver Raygun", ItemType = "Gun", Rarity = "Unique" },
-    ["Reaver_Ancient"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=7791640819", ItemID = 7791640819, ItemName = "Reaver", ItemType = "Knife", Rarity = "Ancient" },
-    ["Reaver_Godly"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=7791511648", ItemID = 7791511648, ItemName = "Reaver", ItemType = "Knife", Rarity = "Godly" },
-    ["RedHallow"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2511343130", ItemID = 2511343130, ItemName = "Red Hallow", ItemType = "Knife", Rarity = "Unique" },
-    ["RedIceblaster"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6404168049", ItemID = 6404168049, ItemName = "Red Iceblaster", ItemType = "Gun", Rarity = "Unique" },
-    ["RedIcebreaker"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6404129111", ItemID = 6404129111, ItemName = "Red Icebreaker", ItemType = "Knife", Rarity = "Unique" },
-    ["RedLuger"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=332044583", ItemID = 332044583, ItemName = "Red Luger", ItemType = "Gun", Rarity = "Godly" },
-    ["RedSeer"] = { Image = "rbxassetid://3184139367", ItemID = 3184122829, ItemName = "Red Seer", ItemType = "Knife", Rarity = "Godly" },
-    ["Sakura_K"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12339366064", ItemID = 12339366064, ItemName = "Sakura", ItemType = "Knife", Rarity = "Godly" },
-    ["Saw"] = { Image = "rbxassetid://3187397991", ItemID = 235381341, ItemName = "Saw", ItemType = "Knife", Rarity = "Godly" },
-    ["SawChroma"] = { Image = "rbxassetid://3187398132", ItemID = 3187392992, ItemName = "Saw", ItemType = "Knife", Rarity = "Godly" },
-    ["Scythe"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=375690925", ItemID = 2511791893, ItemName = "Batwing", ItemType = "Knife", Rarity = "Ancient" },
-    ["SeerChroma"] = { Image = "rbxassetid://3184140321", ItemID = 3184125538, ItemName = "Seer", ItemType = "Knife", Rarity = "Godly" },
-    ["Shark"] = { Image = "rbxassetid://3187421705", ItemID = 203858533, ItemName = "Shark", ItemType = "Gun", Rarity = "Godly" },
-    ["SharkChroma"] = { Image = "rbxassetid://3187421856", ItemID = 3187395738, ItemName = "Shark", ItemType = "Gun", Rarity = "Godly" },
-    ["SharkSeeker"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6967771328", ItemID = 6967771328, ItemName = "SharkSeeker", ItemType = "Gun", Rarity = "Unique" },
-    ["SilverCandy"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1520190188", ItemID = 1520190188, ItemName = "Silver Candy", ItemType = "Knife", Rarity = "Unique" },
-    ["SilverHallow"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=2511341094", ItemID = 2511341094, ItemName = "Silver Hallow", ItemType = "Knife", Rarity = "Unique" },
-    ["SilverHarvester"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8194217388", ItemID = 8194217388, ItemName = "Silver Harvester", ItemType = "Gun", Rarity = "Unique" },
-    ["SilverIceblaster"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6404166698", ItemID = 6404166698, ItemName = "Silver Iceblaster", ItemType = "Gun", Rarity = "Unique" },
-    ["SilverIcebreaker"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=6404126280", ItemID = 6404126280, ItemName = "Silver Icebreaker", ItemType = "Knife", Rarity = "Unique" },
-    ["SilverSugar"] = { Image = "rbxassetid://3215355602", ItemID = 3215261680, ItemName = "Silver Sugar", ItemType = "Gun", Rarity = "Unique" },
-    ["SilverVampiresEdge"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=12253494893", ItemID = 6084840560, ItemName = "Silver Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
-    ["Slasher"] = { Image = "rbxassetid://3187398274", ItemID = 315506122, ItemName = "Slasher", ItemType = "Knife", Rarity = "Godly" },
-    ["SlasherChroma"] = { Image = "rbxassetid://3187398385", ItemID = 3187393285, ItemName = "Slasher", ItemType = "Knife", Rarity = "Godly" },
-    ["SlouseClown"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=315501118", ItemID = 315501118, ItemName = "Clown", ItemType = "Knife", Rarity = "Unique" },
-    ["SlouseClownGun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=4659627976", ItemID = 4659627976, ItemName = "Clown", ItemType = "Gun", Rarity = "Unique" },
+    ["Reaver_Ancient"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7791640819", ItemID = 7791640819, ItemName = "Reaver", ItemType = "Knife", Rarity = "Ancient" },
+    ["Reaver_Godly"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7791511648", ItemID = 7791511648, ItemName = "Reaver", ItemType = "Knife", Rarity = "Godly" },
+    ["RedHallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2511343130", ItemID = 2511343130, ItemName = "Red Hallow", ItemType = "Knife", Rarity = "Unique" },
+    ["RedIceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404168049", ItemID = 6404168049, ItemName = "Red Iceblaster", ItemType = "Gun", Rarity = "Unique" },
+    ["RedIcebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404129111", ItemID = 6404129111, ItemName = "Red Icebreaker", ItemType = "Knife", Rarity = "Unique" },
+    ["RedLuger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332044583", ItemID = 332044583, ItemName = "Red Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["RedSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139367", ItemID = 3184122829, ItemName = "Red Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Sakura_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12339366064", ItemID = 12339366064, ItemName = "Sakura", ItemType = "Knife", Rarity = "Godly" },
+    ["Saw"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187397991", ItemID = 235381341, ItemName = "Saw", ItemType = "Knife", Rarity = "Godly" },
+    ["SawChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398132", ItemID = 3187392992, ItemName = "Saw", ItemType = "Knife", Rarity = "Godly" },
+    ["Scythe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=375690925", ItemID = 2511791893, ItemName = "Batwing", ItemType = "Knife", Rarity = "Ancient" },
+    ["SeerChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184140321", ItemID = 3184125538, ItemName = "Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Shark"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187421705", ItemID = 203858533, ItemName = "Shark", ItemType = "Gun", Rarity = "Godly" },
+    ["SharkChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187421856", ItemID = 3187395738, ItemName = "Shark", ItemType = "Gun", Rarity = "Godly" },
+    ["SharkSeeker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6967771328", ItemID = 6967771328, ItemName = "SharkSeeker", ItemType = "Gun", Rarity = "Unique" },
+    ["SilverCandy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1520190188", ItemID = 1520190188, ItemName = "Silver Candy", ItemType = "Knife", Rarity = "Unique" },
+    ["SilverHallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2511341094", ItemID = 2511341094, ItemName = "Silver Hallow", ItemType = "Knife", Rarity = "Unique" },
+    ["SilverHarvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8194217388", ItemID = 8194217388, ItemName = "Silver Harvester", ItemType = "Gun", Rarity = "Unique" },
+    ["SilverIceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404166698", ItemID = 6404166698, ItemName = "Silver Iceblaster", ItemType = "Gun", Rarity = "Unique" },
+    ["SilverIcebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404126280", ItemID = 6404126280, ItemName = "Silver Icebreaker", ItemType = "Knife", Rarity = "Unique" },
+    ["SilverSugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215355602", ItemID = 3215261680, ItemName = "Silver Sugar", ItemType = "Gun", Rarity = "Unique" },
+    ["SilverVampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12253494893", ItemID = 6084840560, ItemName = "Silver Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
+    ["Slasher"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398274", ItemID = 315506122, ItemName = "Slasher", ItemType = "Knife", Rarity = "Godly" },
+    ["SlasherChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398385", ItemID = 3187393285, ItemName = "Slasher", ItemType = "Knife", Rarity = "Godly" },
+    ["SlouseClown"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=315501118", ItemID = 315501118, ItemName = "Clown", ItemType = "Knife", Rarity = "Unique" },
+    ["SlouseClownGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4659627976", ItemID = 4659627976, ItemName = "Clown", ItemType = "Gun", Rarity = "Unique" },
     ["Snowcannon"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=129186939023729", ItemID = 129186939023729, ItemName = "Snowcannon", ItemType = "Gun", Rarity = "Godly" },
-    ["SnowcannonChroma"] = { Image = "rbxassetid://110767110638211", ItemID = 129186939023729, ItemName = "Snowcannon", ItemType = "Gun", Rarity = "Godly" },
+    ["SnowcannonChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=110767110638211", ItemID = 129186939023729, ItemName = "Snowcannon", ItemType = "Gun", Rarity = "Godly" },
     ["SnowDagger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=95328449981238", ItemID = 95328449981238, ItemName = "Snow Dagger", ItemType = "Knife", Rarity = "Godly" },
-    ["SnowDaggerChroma"] = { Image = "rbxassetid://128749805685925", ItemID = 95328449981238, ItemName = "Snow Dagger", ItemType = "Knife", Rarity = "Godly" },
-    ["Snowflake"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1268932977", ItemID = 1268932977, ItemName = "Snowflake", ItemType = "Knife", Rarity = "Godly" },
+    ["SnowDaggerChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=128749805685925", ItemID = 95328449981238, ItemName = "Snow Dagger", ItemType = "Knife", Rarity = "Godly" },
+    ["Snowflake"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1268932977", ItemID = 1268932977, ItemName = "Snowflake", ItemType = "Knife", Rarity = "Godly" },
     ["Snowstorm"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=70973050894155", ItemID = 70973050894155, ItemName = "Snowstorm", ItemType = "Knife", Rarity = "Godly" },
-    ["SnowstormChroma"] = { Image = "rbxassetid://94202294092932", ItemID = 70973050894155, ItemName = "Snowstorm", ItemType = "Knife", Rarity = "Godly" },
-    ["Sorry"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=197879343", ItemID = 197879343, ItemName = "Corrupt", ItemType = "Knife", Rarity = "Unique" },
-    ["Spectre2022"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11229779932", ItemID = 11229779932, ItemName = "Spectre", ItemType = "Gun", Rarity = "Godly" },
-    ["Spider"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=315120760", ItemID = 473571549, ItemName = "Spider", ItemType = "Knife", Rarity = "Godly" },
-    ["Sugar"] = { Image = "rbxassetid://3215356000", ItemID = 332848695, ItemName = "Sugar", ItemType = "Gun", Rarity = "Godly" },
+    ["SnowstormChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=94202294092932", ItemID = 70973050894155, ItemName = "Snowstorm", ItemType = "Knife", Rarity = "Godly" },
+    ["Sorry"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=197879343", ItemID = 197879343, ItemName = "Corrupt", ItemType = "Knife", Rarity = "Unique" },
+    ["Spectre2022"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11229779932", ItemID = 11229779932, ItemName = "Spectre", ItemType = "Gun", Rarity = "Godly" },
+    ["Spider"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=315120760", ItemID = 473571549, ItemName = "Spider", ItemType = "Knife", Rarity = "Godly" },
+    ["Sugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215356000", ItemID = 332848695, ItemName = "Sugar", ItemType = "Gun", Rarity = "Godly" },
     ["SunsetGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=129480661108374", ItemID = 129480661108374, ItemName = "Sunrise", ItemType = "Gun", Rarity = "Godly" },
     ["SunsetGunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=124766755976937", ItemID = 129480661108374, ItemName = "Sunrise", ItemType = "Gun", Rarity = "Godly" },
     ["SunsetKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=103526268515240", ItemID = 103526268515240, ItemName = "Sunset", ItemType = "Knife", Rarity = "Godly" },
-    ["SunsetKnifeChroma"] = { Image = "rbxassetid://118232478609755", ItemID = 103526268515240, ItemName = "Sunset", ItemType = "Knife", Rarity = "Godly" },
+    ["SunsetKnifeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=118232478609755", ItemID = 103526268515240, ItemName = "Sunset", ItemType = "Knife", Rarity = "Godly" },
     ["Sweet"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=126937716954396", ItemID = 126937716954396, ItemName = "Sweet", ItemType = "Knife", Rarity = "Godly" },
-    ["SweetChroma"] = { Image = "rbxassetid://90923771881248", ItemID = 126937716954396, ItemName = "Sweet", ItemType = "Knife", Rarity = "Godly" },
-    ["SwirlyAxe"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8304801000", ItemID = 8304801000, ItemName = "Swirly Axe", ItemType = "Knife", Rarity = "Ancient" },
-    ["SwirlyAxeBlue"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=9552048857", ItemID = 9552048857, ItemName = "Blue Swirly", ItemType = "Knife", Rarity = "Unique" },
-    ["SwirlyAxeBronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=9552050165", ItemID = 9552050165, ItemName = "Bronze Swirly", ItemType = "Knife", Rarity = "Unique" },
-    ["SwirlyAxeGold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=9552054920", ItemID = 9552054920, ItemName = "Gold Swirly", ItemType = "Knife", Rarity = "Unique" },
-    ["SwirlyAxeSilver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=9552051805", ItemID = 9552051805, ItemName = "Silver Swirly", ItemType = "Knife", Rarity = "Unique" },
-    ["SwirlyBlade"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8304805693", ItemID = 8304805693, ItemName = "Swirly Blade", ItemType = "Knife", Rarity = "Godly" },
-    ["SwirlyGun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=8305002569", ItemID = 8305264097, ItemName = "Swirly Gun", ItemType = "Gun", Rarity = "Godly" },
-    ["SwirlyGunBlue"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=9552060741", ItemID = 9552060741, ItemName = "Blue Swirly", ItemType = "Gun", Rarity = "Unique" },
-    ["SwirlyGunBronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=9552063524", ItemID = 9552063524, ItemName = "Bronze Swirly", ItemType = "Gun", Rarity = "Unique" },
-    ["SwirlyGunChroma"] = { Image = "http://www.roblox.com/asset/?id=8311453396", ItemID = 8311393414, ItemName = "Swirly Gun", ItemType = "Gun", Rarity = "Godly" },
-    ["SwirlyGunGold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=9552065167", ItemID = 9552065167, ItemName = "Gold Swirly", ItemType = "Gun", Rarity = "Unique" },
-    ["SwirlyGunSilver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=9552064240", ItemID = 9552064240, ItemName = "Silver Swirly", ItemType = "Gun", Rarity = "Unique" },
+    ["SweetChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=90923771881248", ItemID = 126937716954396, ItemName = "Sweet", ItemType = "Knife", Rarity = "Godly" },
+    ["SwirlyAxe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8304801000", ItemID = 8304801000, ItemName = "Swirly Axe", ItemType = "Knife", Rarity = "Ancient" },
+    ["SwirlyAxeBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552048857", ItemID = 9552048857, ItemName = "Blue Swirly", ItemType = "Knife", Rarity = "Unique" },
+    ["SwirlyAxeBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552050165", ItemID = 9552050165, ItemName = "Bronze Swirly", ItemType = "Knife", Rarity = "Unique" },
+    ["SwirlyAxeGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552054920", ItemID = 9552054920, ItemName = "Gold Swirly", ItemType = "Knife", Rarity = "Unique" },
+    ["SwirlyAxeSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552051805", ItemID = 9552051805, ItemName = "Silver Swirly", ItemType = "Knife", Rarity = "Unique" },
+    ["SwirlyBlade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8304805693", ItemID = 8304805693, ItemName = "Swirly Blade", ItemType = "Knife", Rarity = "Godly" },
+    ["SwirlyGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8305002569", ItemID = 8305264097, ItemName = "Swirly Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["SwirlyGunBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552060741", ItemID = 9552060741, ItemName = "Blue Swirly", ItemType = "Gun", Rarity = "Unique" },
+    ["SwirlyGunBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552063524", ItemID = 9552063524, ItemName = "Bronze Swirly", ItemType = "Gun", Rarity = "Unique" },
+    ["SwirlyGunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8311453396", ItemID = 8311393414, ItemName = "Swirly Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["SwirlyGunGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552065167", ItemID = 9552065167, ItemName = "Gold Swirly", ItemType = "Gun", Rarity = "Unique" },
+    ["SwirlyGunSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552064240", ItemID = 9552064240, ItemName = "Silver Swirly", ItemType = "Gun", Rarity = "Unique" },
     ["Synthwave_Ancient"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=133828016595037", ItemID = 133828016595037, ItemName = "Synthwave", ItemType = "Knife", Rarity = "Ancient" },
-    ["Synthwave_Blue"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 122762984016505, ItemName = "Blue Synthwave", ItemType = "Knife", Rarity = "Unique" },
-    ["Synthwave_Bronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 72230744607038, ItemName = "Bronze Synthwave", ItemType = "Knife", Rarity = "Unique" },
+    ["Synthwave_Blue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=122762984016505", ItemID = 122762984016505, ItemName = "Blue Synthwave", ItemType = "Knife", Rarity = "Unique" },
+    ["Synthwave_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=72230744607038", ItemID = 72230744607038, ItemName = "Bronze Synthwave", ItemType = "Knife", Rarity = "Unique" },
     ["Synthwave_Godly"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=116075729415230", ItemID = 15683175970, ItemName = "Synthwave", ItemType = "Knife", Rarity = "Godly" },
-    ["Synthwave_Gold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 138834911796124, ItemName = "Gold Synthwave", ItemType = "Knife", Rarity = "Unique" },
-    ["Synthwave_Silver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 103455022994358, ItemName = "Silver Synthwave", ItemType = "Knife", Rarity = "Unique" },
-    ["TheSeer"] = { Image = "rbxassetid://3184139765", ItemID = 198441783, ItemName = "Seer", ItemType = "Knife", Rarity = "Godly" },
-    ["Tides"] = { Image = "rbxassetid://3187398809", ItemID = 473569625, ItemName = "Tides", ItemType = "Knife", Rarity = "Godly" },
-    ["TidesChroma"] = { Image = "rbxassetid://3187398906", ItemID = 3187394934, ItemName = "Tides", ItemType = "Knife", Rarity = "Godly" },
-    ["TravelerAxe"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15070870271", ItemID = 15070870271, ItemName = "Traveler's Axe", ItemType = "Knife", Rarity = "Ancient" },
-    ["TravelerAxeBronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15695407020", ItemID = 15695407020, ItemName = "Bronze Traveler's", ItemType = "Knife", Rarity = "Unique" },
-    ["TravelerAxeGold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15695408631", ItemID = 15695408631, ItemName = "Gold Traveler's", ItemType = "Knife", Rarity = "Unique" },
-    ["TravelerAxeRed"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15695405379", ItemID = 15695405379, ItemName = "Red Traveler's", ItemType = "Knife", Rarity = "Unique" },
-    ["TravelerAxeSilver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15695407742", ItemID = 15695407742, ItemName = "Silver Traveler's", ItemType = "Knife", Rarity = "Unique" },
-    ["TravelerGun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=15091442039", ItemID = 15091442039, ItemName = "Traveler's Gun", ItemType = "Gun", Rarity = "Godly" },
-    ["TravelerGunChroma"] = { Image = "rbxassetid://15097920149", ItemID = 15097897227, ItemName = "Traveler's Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["Synthwave_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=138834911796124", ItemID = 138834911796124, ItemName = "Gold Synthwave", ItemType = "Knife", Rarity = "Unique" },
+    ["Synthwave_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=103455022994358", ItemID = 103455022994358, ItemName = "Silver Synthwave", ItemType = "Knife", Rarity = "Unique" },
+    ["TheSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139765", ItemID = 198441783, ItemName = "Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Tides"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398809", ItemID = 473569625, ItemName = "Tides", ItemType = "Knife", Rarity = "Godly" },
+    ["TidesChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398906", ItemID = 3187394934, ItemName = "Tides", ItemType = "Knife", Rarity = "Godly" },
+    ["TravelerAxe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15070870271", ItemID = 15070870271, ItemName = "Traveler's Axe", ItemType = "Knife", Rarity = "Ancient" },
+    ["TravelerAxeBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15695407020", ItemID = 15695407020, ItemName = "Bronze Traveler's", ItemType = "Knife", Rarity = "Unique" },
+    ["TravelerAxeGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15695408631", ItemID = 15695408631, ItemName = "Gold Traveler's", ItemType = "Knife", Rarity = "Unique" },
+    ["TravelerAxeRed"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15695405379", ItemID = 15695405379, ItemName = "Red Traveler's", ItemType = "Knife", Rarity = "Unique" },
+    ["TravelerAxeSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15695407742", ItemID = 15695407742, ItemName = "Silver Traveler's", ItemType = "Knife", Rarity = "Unique" },
+    ["TravelerGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15091442039", ItemID = 15091442039, ItemName = "Traveler's Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["TravelerGunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15097920149", ItemID = 15097897227, ItemName = "Traveler's Gun", ItemType = "Gun", Rarity = "Godly" },
     ["Treat"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=131626924640663", ItemID = 131626924640663, ItemName = "Treat", ItemType = "Gun", Rarity = "Godly" },
-    ["TreatChroma"] = { Image = "rbxassetid://98449489175264", ItemID = 131626924640663, ItemName = "Treat", ItemType = "Gun", Rarity = "Godly" },
-    ["TreeGun2023"] = { Image = "rbxassetid://15694357721", ItemID = 15682703596, ItemName = "Evergun", ItemType = "Gun", Rarity = "Godly" },
-    ["TreeGun2023Chroma"] = { Image = "rbxassetid://15694208971", ItemID = 15682703596, ItemName = "Evergun", ItemType = "Gun", Rarity = "Godly" },
-    ["TreeKnife2023"] = { Image = "rbxassetid://15694357137", ItemID = 15667157715, ItemName = "Evergreen", ItemType = "Knife", Rarity = "Godly" },
-    ["TreeKnife2023Chroma"] = { Image = "rbxassetid://15694192241", ItemID = 15694110573, ItemName = "Evergreen", ItemType = "Knife", Rarity = "Godly" },
-    ["Turkey2023"] = { Image = "rbxassetid://15413162319", ItemID = 15413149176, ItemName = "Turkey", ItemType = "Knife", Rarity = "Godly" },
+    ["TreatChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=98449489175264", ItemID = 131626924640663, ItemName = "Treat", ItemType = "Gun", Rarity = "Godly" },
+    ["TreeGun2023"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15694357721", ItemID = 15682703596, ItemName = "Evergun", ItemType = "Gun", Rarity = "Godly" },
+    ["TreeGun2023Chroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15694208971", ItemID = 15682703596, ItemName = "Evergun", ItemType = "Gun", Rarity = "Godly" },
+    ["TreeKnife2023"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15694357137", ItemID = 15667157715, ItemName = "Evergreen", ItemType = "Knife", Rarity = "Godly" },
+    ["TreeKnife2023Chroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15694192241", ItemID = 15694110573, ItemName = "Evergreen", ItemType = "Knife", Rarity = "Godly" },
+    ["Turkey2023"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15413162319", ItemID = 15413149176, ItemName = "Turkey", ItemType = "Knife", Rarity = "Godly" },
     ["UFOKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=77607127867154", ItemID = 77607127867154, ItemName = "Alienbeam", ItemType = "Knife", Rarity = "Godly" },
     ["UFOKnifeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=104256106059730", ItemID = 77607127867154, ItemName = "Alienbeam", ItemType = "Knife", Rarity = "Godly" },
-    ["VampireAxe"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=130837676383567", ItemID = 130837676383567, ItemName = "Vampire's Axe", ItemType = "Knife", Rarity = "Ancient" },
-    ["VampireAxe_Bronze"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=124355442556907", ItemID = 130837676383567, ItemName = "Bronze Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
-    ["VampireAxe_Gold"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=78223003853564", ItemID = 130837676383567, ItemName = "Gold Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
-    ["VampireAxe_Purple"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=131000108157235", ItemID = 130837676383567, ItemName = "Purple Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
-    ["VampireAxe_Silver"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=112808340410054", ItemID = 130837676383567, ItemName = "Silver Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
-    ["VampireGun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=90274872705656", ItemID = 90274872705656, ItemName = "Vampire's Gun", ItemType = "Gun", Rarity = "Godly" },
-    ["VampireGunChroma"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=85107391551890", ItemID = 90274872705656, ItemName = "Vampire's Gun", ItemType = "Gun", Rarity = "Godly" },
-    ["VampiresEdge"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=5873256998", ItemID = 5873256998, ItemName = "Vampire's Edge", ItemType = "Knife", Rarity = "Godly" },
-    ["Virtual"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=386276987", ItemID = 386276987, ItemName = "Virtual", ItemType = "Knife", Rarity = "Godly" },
-    ["Watergun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 18351388416, ItemName = "Watergun", ItemType = "Gun", Rarity = "Godly" },
-    ["WatergunChroma"] = { Image = "rbxassetid://18351465514", ItemID = 18351401528, ItemName = "Watergun", ItemType = "Gun", Rarity = "Godly" },
-    ["Waves_K"] = { Image = "rbxassetid://13933066522", ItemID = 13945892398, ItemName = "Waves", ItemType = "Knife", Rarity = "Godly" },
-    ["WintersEdge"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=1268708987", ItemID = 1268708987, ItemName = "Winter's Edge", ItemType = "Knife", Rarity = "Godly" },
-    ["WraithGun"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 75233248021696, ItemName = "Soul", ItemType = "Gun", Rarity = "Godly" },
-    ["WraithKnife"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=", ItemID = 107190526940939, ItemName = "Spirit", ItemType = "Knife", Rarity = "Godly" },
+    ["VampireAxe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=130837676383567", ItemID = 130837676383567, ItemName = "Vampire's Axe", ItemType = "Knife", Rarity = "Ancient" },
+    ["VampireAxe_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=124355442556907", ItemID = 130837676383567, ItemName = "Bronze Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
+    ["VampireAxe_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=78223003853564", ItemID = 130837676383567, ItemName = "Gold Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
+    ["VampireAxe_Purple"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=131000108157235", ItemID = 130837676383567, ItemName = "Purple Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
+    ["VampireAxe_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=112808340410054", ItemID = 130837676383567, ItemName = "Silver Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
+    ["VampireGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=90274872705656", ItemID = 90274872705656, ItemName = "Vampire's Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["VampireGunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=85107391551890", ItemID = 90274872705656, ItemName = "Vampire's Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["VampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=5873256998", ItemID = 5873256998, ItemName = "Vampire's Edge", ItemType = "Knife", Rarity = "Godly" },
+    ["Virtual"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=386276987", ItemID = 386276987, ItemName = "Virtual", ItemType = "Knife", Rarity = "Godly" },
+    ["Watergun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=18351388416", ItemID = 18351388416, ItemName = "Watergun", ItemType = "Gun", Rarity = "Godly" },
+    ["WatergunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=18351465514", ItemID = 18351401528, ItemName = "Watergun", ItemType = "Gun", Rarity = "Godly" },
+    ["Waves_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=13933066522", ItemID = 13945892398, ItemName = "Waves", ItemType = "Knife", Rarity = "Godly" },
+    ["WintersEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1268708987", ItemID = 1268708987, ItemName = "Winter's Edge", ItemType = "Knife", Rarity = "Godly" },
+    ["WraithGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=75233248021696", ItemID = 75233248021696, ItemName = "Soul", ItemType = "Gun", Rarity = "Godly" },
+    ["WraithKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=107190526940939", ItemID = 107190526940939, ItemName = "Spirit", ItemType = "Knife", Rarity = "Godly" },
     ["XenoGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=96859273002742", ItemID = 79722325448464, ItemName = "Xenoshot", ItemType = "Gun", Rarity = "Godly" },
     ["XenoKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=115021756767182", ItemID = 100576599313371, ItemName = "Xenoknife", ItemType = "Knife", Rarity = "Godly" },
-    ["Xmas"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=332077449", ItemID = 473572568, ItemName = "Xmas", ItemType = "Knife", Rarity = "Godly" },
-    ["YellowSeer"] = { Image = "rbxassetid://3184139648", ItemID = 3184124768, ItemName = "Yellow Seer", ItemType = "Knife", Rarity = "Godly" },
-    ["ZombieBat"] = { Image = "http://www.roblox.com/Thumbs/Asset.ashx?format=png&width=250&height=250&assetId=11229814357", ItemID = 11229814357, ItemName = "Bat", ItemType = "Knife", Rarity = "Godly" },
+    ["Xmas"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332077449", ItemID = 473572568, ItemName = "Xmas", ItemType = "Knife", Rarity = "Godly" },
+    ["YellowSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139648", ItemID = 3184124768, ItemName = "Yellow Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["ZombieBat"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11229814357", ItemID = 11229814357, ItemName = "Bat", ItemType = "Knife", Rarity = "Godly" },
 }
 
 local function makeMeshPart(name)
@@ -13980,6 +13977,30 @@ local function applyGrip(kind, db)
 end
 
 local hudIconCache = { Equip = nil, Throw = nil }
+local lastHud = { Gun = "", Knife = "" }
+local DEFAULT_MARK = {
+    Gun = { "126534866", "198042673", "95356090" },
+    Knife = { "12222216", "121944778" },
+}
+
+local function isNoirGui(inst)
+    local p = inst
+    for _ = 1, 14 do
+        if not p then return false end
+        local n = p.Name
+        if n == "SkinsContent" or n == "NOIR" or n == "NoirHub" then return true end
+        p = p.Parent
+    end
+    return false
+end
+
+local function setIconTree(obj, img)
+    if not obj then return end
+    if obj:IsA("ImageButton") or obj:IsA("ImageLabel") then obj.Image = img end
+    for _, c in ipairs(obj:GetChildren()) do
+        if c:IsA("ImageButton") or c:IsA("ImageLabel") then c.Image = img end
+    end
+end
 
 local function cacheHudIcons()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
@@ -13989,9 +14010,11 @@ local function cacheHudIcons()
             if d:IsA("TextLabel") or d:IsA("TextButton") then
                 local t = string.lower(string.gsub(d.Text or "", "%s+", ""))
                 if t == "equip" or t == "throw" then
-                    local imgObj = d.Parent
-                    if not (imgObj and (imgObj:IsA("ImageButton") or imgObj:IsA("ImageLabel"))) then
-                        imgObj = nil
+                    local imgObj = d
+                    while imgObj and not (imgObj:IsA("ImageButton") or imgObj:IsA("ImageLabel")) do
+                        imgObj = imgObj.Parent
+                    end
+                    if not imgObj then
                         local p = d.Parent
                         if p then
                             for _, s in ipairs(p:GetChildren()) do
@@ -14002,7 +14025,7 @@ local function cacheHudIcons()
                             end
                         end
                     end
-                    if imgObj then
+                    if imgObj and not isNoirGui(imgObj) then
                         if t == "equip" then hudIconCache.Equip = imgObj else hudIconCache.Throw = imgObj end
                     end
                 end
@@ -14044,10 +14067,135 @@ local function applyIcons(kind, skinName)
             if tool:IsA("Tool") then tool.TextureId = img end
         end)
     end)
-    if not hudIconCache.Equip or not hudIconCache.Equip.Parent then cacheHudIcons() end
+    cacheHudIcons()
     pcall(function()
-        if kind == "Gun" and hudIconCache.Equip then hudIconCache.Equip.Image = img end
-        if kind == "Knife" and hudIconCache.Throw then hudIconCache.Throw.Image = img end
+        if kind == "Gun" then setIconTree(hudIconCache.Equip, img) end
+        if kind == "Knife" then setIconTree(hudIconCache.Throw, img) end
+        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+        if not pg then return end
+        local prev = lastHud[kind]
+        local marks = DEFAULT_MARK[kind]
+        for _, d in ipairs(pg:GetDescendants()) do
+            if (d:IsA("ImageButton") or d:IsA("ImageLabel")) and not isNoirGui(d) then
+                local cur = d.Image
+                local hit = (prev ~= "" and cur == prev)
+                if not hit and type(cur) == "string" then
+                    for i = 1, #marks do
+                        if string.find(cur, marks[i], 1, true) then hit = true break end
+                    end
+                end
+                if hit then d.Image = img end
+            end
+        end
+    end)
+    lastHud[kind] = img
+end
+
+local function paintFXInst(inst, db, kind)
+    if not inst or type(db) ~= "table" then return end
+    if inst:IsA("Sound") and type(db.snd) == "string" and kind == "Gun" then
+        local n = string.lower(inst.Name)
+        if string.find(n, "shoot") or string.find(n, "fire") or string.find(n, "alt") or n == "sound" or string.find(n, "gun") then
+            inst.SoundId = db.snd
+            if type(db.spd) == "number" then inst.PlaybackSpeed = db.spd end
+        end
+    elseif inst:IsA("Beam") and type(db.br) == "number" then
+        inst.Color = ColorSequence.new(Color3.new(db.br, db.bg or 1, db.bb or 1))
+        if type(db.btex) == "string" and db.btex ~= "" then inst.Texture = db.btex end
+        if type(db.bw) == "number" then inst.Width0 = db.bw inst.Width1 = db.bw end
+    elseif inst:IsA("Trail") and type(db.br) == "number" then
+        inst.Color = ColorSequence.new(Color3.new(db.br, db.bg or 1, db.bb or 1))
+    end
+end
+
+local function applyFX(kind, db)
+    if type(db) ~= "table" then return end
+    pcall(function()
+        eachSlotTool(kind, function(tool)
+            for _, d in ipairs(tool:GetDescendants()) do paintFXInst(d, db, kind) end
+            if kind == "Gun" and type(db.snd) == "string" then
+                local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+                if handle and not handle:FindFirstChild("NoirShoot") then
+                    local s = Instance.new("Sound")
+                    s.Name = "NoirShoot"
+                    s.SoundId = db.snd
+                    s.Volume = 1
+                    if type(db.spd) == "number" then s.PlaybackSpeed = db.spd end
+                    s.Parent = handle
+                    tool.Activated:Connect(function()
+                        if state.enabled then s:Play() end
+                    end)
+                elseif handle and handle:FindFirstChild("NoirShoot") then
+                    handle.NoirShoot.SoundId = db.snd
+                    if type(db.spd) == "number" then handle.NoirShoot.PlaybackSpeed = db.spd end
+                end
+            end
+        end)
+        local character = LocalPlayer.Character
+        if character then
+            local slot = kind == "Gun" and "Gun" or "Knife"
+            local display = getDisplayObj(character, slot)
+            if display then
+                for _, d in ipairs(display:GetDescendants()) do paintFXInst(d, db, kind) end
+            end
+        end
+    end)
+end
+
+local animCache = {}
+local noirAnimTrack
+local function applyHoldAnim(kind, skinName)
+    if kind ~= "Gun" or type(skinName) ~= "string" then return end
+    pcall(function()
+        if noirAnimTrack then
+            noirAnimTrack:Stop(0.08)
+            noirAnimTrack = nil
+        end
+        local cached = animCache[skinName]
+        if cached == false then return end
+        local found = cached
+        if type(found) ~= "string" then
+            found = nil
+            local needle = string.lower(skinName)
+            local function scan(root)
+                if not root or found then return end
+                for _, d in ipairs(root:GetDescendants()) do
+                    if d:IsA("Animation") then
+                        local n = string.lower(d.Name .. tostring(d.Parent and d.Parent.Name or ""))
+                        if string.find(n, needle, 1, true) then
+                            found = d.AnimationId
+                            return
+                        end
+                    end
+                    if found then return end
+                end
+            end
+            scan(ReplicatedStorage)
+            if not found then
+                local g = getrenv and getrenv()._G
+                local item = g and g.Database and g.Database.Item
+                item = type(item) == "table" and (item[skinName] or (MESH_DB[skinName] and item[MESH_DB[skinName].name]))
+                if type(item) == "table" then
+                    for _, key in ipairs({ "IdleAnimation", "HoldAnimation", "AnimationId", "Idle", "Hold", "Animation" }) do
+                        local v = raw(item, key)
+                        if type(v) == "string" and string.find(v, "%d") then found = v break end
+                        if type(v) == "number" and v > 100 then found = "rbxassetid://" .. tostring(v) break end
+                    end
+                end
+            end
+            animCache[skinName] = found or false
+        end
+        if type(found) ~= "string" or found == "" then return end
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        local animator = hum:FindFirstChildOfClass("Animator") or hum
+        local a = Instance.new("Animation")
+        a.AnimationId = found
+        noirAnimTrack = animator:LoadAnimation(a)
+        noirAnimTrack.Looped = true
+        noirAnimTrack.Priority = Enum.AnimationPriority.Action
+        noirAnimTrack:Play()
     end)
 end
 
@@ -14063,6 +14211,8 @@ local function applyKind(kind, allowLoad)
         applyGrip(kind, db)
         applyHolster(kind, db)
         applyIcons(kind, skinName)
+        applyFX(kind, db)
+        applyHoldAnim(kind, skinName)
         if painted then return true end
     end
     local lib = state.meshLib[skinName]
@@ -14089,6 +14239,8 @@ local function applyKind(kind, allowLoad)
     applyGrip(kind, MESH_DB[skinName])
     applyHolster(kind, MESH_DB[skinName])
     applyIcons(kind, skinName)
+    applyFX(kind, MESH_DB[skinName])
+    applyHoldAnim(kind, skinName)
     return ok
 end
 
@@ -14273,13 +14425,20 @@ task.defer(function()
     pcall(function()
         for k, v in pairs(MESH_DB) do
             if type(v) == "table" then
-                local img = ""
-                local c = CATALOG_DB[k]
-                if type(c) == "table" then img = c.Image or "" end
-                addItem(k, v.kind or "Knife", v.rarity or "Godly", img)
+                addItem(k, v.kind or "Knife", v.rarity or "Godly", skinIcon(k))
             end
         end
         rebuildGrid()
+    end)
+end)
+
+pcall(function()
+    workspace.DescendantAdded:Connect(function(inst)
+        if not state.enabled then return end
+        local cls = inst.ClassName
+        if cls ~= "Beam" and cls ~= "Sound" and cls ~= "Trail" then return end
+        local db = MESH_DB[state.selectedGun]
+        if type(db) == "table" then paintFXInst(inst, db, "Gun") end
     end)
 end)
 
