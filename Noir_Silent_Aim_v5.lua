@@ -1479,28 +1479,9 @@ do
             end
             return pickFrom(map)
         end
-        local LOBBY_CF = CFrame.new(-109.56, 141, -11.75)
+                -- MM2 lobby HRP (from in-game dump). Old house coords (-109,141,-11) are void now.
+        local LOBBY_CF = CFrame.new(33.6801758, 291.254089, 8967.01953, 1, 0, 0, 0, 1, 0, 0, 0, 1)
         local function lobbyCFrame()
-            local lobby = workspace:FindFirstChild("Lobby")
-            if not lobby then
-                for _, child in ipairs(workspace:GetChildren()) do
-                    local n = string.lower(child.Name)
-                    if n == "lobby" or n == "lobbyhouse" or n == "house" or n == "voting" or n == "votingroom" then
-                        lobby = child
-                        break
-                    end
-                end
-            end
-            if lobby then
-                local cf = pickFrom(lobby)
-                if cf then return cf end
-            end
-            local map = findMapModel()
-            for _, child in ipairs(workspace:GetChildren()) do
-                if child:IsA("SpawnLocation") and (not map or not child:IsDescendantOf(map)) then
-                    return child.CFrame + Vector3.new(0, 4, 0)
-                end
-            end
             return LOBBY_CF
         end
         local function tpToPlayer(player)
