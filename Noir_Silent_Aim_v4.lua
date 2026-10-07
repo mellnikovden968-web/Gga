@@ -212,6 +212,7 @@ do
         { "aim",    16898613777, Vector2.new(967, 759), "Combat" },
         { "world",  16898613509, Vector2.new(771, 563), "World" },
         { "visual", 16898613353, Vector2.new(771, 563), "Visuals" },
+        { "skins",  16898613353, Vector2.new(771, 563), "Skins" },
         { "emotes", 16898613777, Vector2.new(967, 759), "Emotes" },
         { "misc",   16898613509, Vector2.new(820, 147), "Misc" },
     }
@@ -242,6 +243,16 @@ do
             glyphPart(UDim2.fromOffset(15, 20), UDim2.fromOffset(20, 4), 2)
             glyphPart(UDim2.fromOffset(19, 27), UDim2.fromOffset(4, 8), 2)
             glyphPart(UDim2.fromOffset(27, 27), UDim2.fromOffset(4, 8), 2)
+        elseif d[1] == "skins" then
+            ic.Visible = false
+            glyphs = {}
+            local function glyphPart(position, size, rounded)
+                local part = New("Frame", { Parent = b, Position = position, Size = size, BackgroundColor3 = C.dim, BorderSizePixel = 0 })
+                if rounded then corner(part, rounded) end
+                glyphs[#glyphs + 1] = part
+            end
+            glyphPart(UDim2.fromOffset(22, 10), UDim2.fromOffset(8, 24), 3)
+            glyphPart(UDim2.fromOffset(20, 8), UDim2.fromOffset(12, 6), 2)
         elseif d[1] == "misc" then
             -- Requested Misc mark: a circular outline containing three dots.
             ic.Visible = false
@@ -411,58 +422,52 @@ restore.MouseButton1Click:Connect(function()
 end)
 
 local content = New("ScrollingFrame", { Parent = win, Position = UDim2.fromOffset(275, 110), Size = UDim2.new(1, -300, 1, -130),
-    BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 7, ScrollBarImageColor3 = C.accent,
-    CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollingDirection = Enum.ScrollingDirection.Y,
-    ScrollingEnabled = true, Active = true, ElasticBehavior = Enum.ElasticBehavior.WhenScrollable, VerticalScrollBarInset = Enum.ScrollBarInset.Always })
-local cols = {}
-for i = 1, 2 do
-    cols[i] = New("Frame", { Parent = content, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = cols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+    BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
+    CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.None,
+    ScrollingDirection = Enum.ScrollingDirection.Y, ScrollingEnabled = false, Active = false,
+    ElasticBehavior = Enum.ElasticBehavior.Never, VerticalScrollBarInset = Enum.ScrollBarInset.Always })
+local cols, configContent, configCols, visualContent, visualCols, mainContent, mainCols, worldContent, worldCols, emotesContent, emotesCols, miscContent, miscCols
+
+do
+-- Each tab owns two real ScrollingFrames.  The previous outer canvas made both columns move
+-- together; these independent rails allow the left and right sections to be scrolled separately.
+local function makeDualScrollColumns(parent)
+    local columns = {}
+    for i = 1, 2 do
+        columns[i] = New("ScrollingFrame", { Parent = parent, Name = "NoirColumn" .. tostring(i),
+            Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 1, 0),
+            BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 5, ScrollBarImageColor3 = C.accent,
+            CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            ScrollingDirection = Enum.ScrollingDirection.Y, ScrollingEnabled = true, Active = true,
+            ElasticBehavior = Enum.ElasticBehavior.WhenScrollable, VerticalScrollBarInset = Enum.ScrollBarInset.Always })
+        New("UIListLayout", { Parent = columns[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+        New("UIPadding", { Parent = columns[i], PaddingBottom = UDim.new(0, 16) })
+    end
+    return columns
 end
-local configContent = content:Clone(); configContent.Name = "ConfigContent"; configContent.Parent = win; configContent.Visible = false; configContent:ClearAllChildren()
-local configCols = {}
-for i = 1, 2 do
-    configCols[i] = New("Frame", { Parent = configContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = configCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+local function configureDualScrollPage(page)
+    page.ScrollingEnabled = false
+    page.Active = false
+    page.ScrollBarThickness = 0
+    page.AutomaticCanvasSize = Enum.AutomaticSize.None
+    page.CanvasSize = UDim2.fromOffset(0, 0)
 end
+
+cols = makeDualScrollColumns(content)
+configContent = content:Clone(); configContent.Name = "ConfigContent"; configContent.Parent = win; configContent.Visible = false; configContent:ClearAllChildren(); configureDualScrollPage(configContent)
+configCols = makeDualScrollColumns(configContent)
 content.Position = UDim2.fromOffset(282, 104); content.Size = UDim2.new(1, -306, 1, -128); content.Visible = false
 configContent.Position = content.Position; configContent.Size = content.Size
-local visualContent = content:Clone(); visualContent.Name = "VisualContent"; visualContent.Parent = win; visualContent.Visible = false; visualContent:ClearAllChildren()
-local visualCols = {}
-for i = 1, 2 do
-    visualCols[i] = New("Frame", { Parent = visualContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = visualCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
-end
-local mainContent = content:Clone(); mainContent.Name = "MainContent"; mainContent.Parent = win; mainContent.Visible = false; mainContent:ClearAllChildren()
-local mainCols = {}
-for i = 1, 2 do
-    mainCols[i] = New("Frame", { Parent = mainContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = mainCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
-end
-local worldContent = content:Clone(); worldContent.Name = "WorldContent"; worldContent.Parent = win; worldContent.Visible = false; worldContent:ClearAllChildren()
-local worldCols = {}
-for i = 1, 2 do
-    worldCols[i] = New("Frame", { Parent = worldContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = worldCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
-end
-local emotesContent = content:Clone(); emotesContent.Name = "EmotesContent"; emotesContent.Parent = win; emotesContent.Visible = false; emotesContent:ClearAllChildren()
-local emotesCols = {}
-for i = 1, 2 do
-    emotesCols[i] = New("Frame", { Parent = emotesContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = emotesCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
-end
-local miscContent = content:Clone(); miscContent.Name = "MiscContent"; miscContent.Parent = win; miscContent.Visible = false; miscContent:ClearAllChildren()
-local miscCols = {}
-for i = 1, 2 do
-    miscCols[i] = New("Frame", { Parent = miscContent, Position = UDim2.new((i - 1) * .5, (i - 1) * 10, 0, 0), Size = UDim2.new(.5, -10, 0, 0),
-        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.Y })
-    New("UIListLayout", { Parent = miscCols[i], Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder })
+visualContent = content:Clone(); visualContent.Name = "VisualContent"; visualContent.Parent = win; visualContent.Visible = false; visualContent:ClearAllChildren(); configureDualScrollPage(visualContent)
+visualCols = makeDualScrollColumns(visualContent)
+mainContent = content:Clone(); mainContent.Name = "MainContent"; mainContent.Parent = win; mainContent.Visible = false; mainContent:ClearAllChildren(); configureDualScrollPage(mainContent)
+mainCols = makeDualScrollColumns(mainContent)
+worldContent = content:Clone(); worldContent.Name = "WorldContent"; worldContent.Parent = win; worldContent.Visible = false; worldContent:ClearAllChildren(); configureDualScrollPage(worldContent)
+worldCols = makeDualScrollColumns(worldContent)
+emotesContent = content:Clone(); emotesContent.Name = "EmotesContent"; emotesContent.Parent = win; emotesContent.Visible = false; emotesContent:ClearAllChildren(); configureDualScrollPage(emotesContent)
+emotesCols = makeDualScrollColumns(emotesContent)
+miscContent = content:Clone(); miscContent.Name = "MiscContent"; miscContent.Parent = win; miscContent.Visible = false; miscContent:ClearAllChildren(); configureDualScrollPage(miscContent)
+miscCols = makeDualScrollColumns(miscContent)
 end
 
 local dashboard = New("Frame", { Parent = win, Position = content.Position, Size = content.Size, BackgroundTransparency = 1 })
@@ -522,6 +527,11 @@ local activePage = "home"
 local selectPage
 do
     local pageObjects = { home = dashboard, main = mainContent, aim = content, world = worldContent, visual = visualContent, emotes = emotesContent, misc = miscContent }
+    pcall(function()
+        getgenv().__NoirRegisterPage = function(name, object)
+            if type(name) == "string" and typeof(object) == "Instance" then pageObjects[name] = object end
+        end
+    end)
     local pageBasePosition = content.Position
     local pageTransitionId = 0
     local function pageScaleFor(object)
@@ -592,18 +602,11 @@ selectPage("home")
 local sectionCount, mainSectionCount, worldSectionCount, visualSectionCount, emotesSectionCount, miscSectionCount, configSectionCount = 0, 0, 0, 0, 0, 0, 0
 local sectionPanels, controls = {}, {}
 function refreshCanvas()
+    -- Canvas lengths are automatic on the independent left/right rails.  Keep every outer page
+    -- pinned at zero so a swipe can never move both columns together.
     task.defer(function()
-        content.CanvasSize = UDim2.fromOffset(0, math.max(cols[1].AbsoluteSize.Y, cols[2].AbsoluteSize.Y) + 165)
-        configContent.CanvasSize = UDim2.fromOffset(0, math.max(configCols[1].AbsoluteSize.Y, configCols[2].AbsoluteSize.Y) + 165)
-        visualContent.CanvasSize = UDim2.fromOffset(0, math.max(visualCols[1].AbsoluteSize.Y, visualCols[2].AbsoluteSize.Y) + 165)
-        mainContent.CanvasSize = UDim2.fromOffset(0, math.max(mainCols[1].AbsoluteSize.Y, mainCols[2].AbsoluteSize.Y) + 165)
-        worldContent.CanvasSize = UDim2.fromOffset(0, math.max(worldCols[1].AbsoluteSize.Y, worldCols[2].AbsoluteSize.Y) + 130)
-        miscContent.CanvasSize = UDim2.fromOffset(0, math.max(miscCols[1].AbsoluteSize.Y, miscCols[2].AbsoluteSize.Y) + 165)
-        local embeddedEmotes = emotesContent:FindFirstChild("NoirEmotesNative") or emotesContent:FindFirstChild("NoirEmbeddedEmotesCanvas")
-        if embeddedEmotes then
-            emotesContent.CanvasSize = UDim2.fromOffset(0, embeddedEmotes.Position.Y.Offset + embeddedEmotes.Size.Y.Offset + 16)
-        else
-            emotesContent.CanvasSize = UDim2.fromOffset(0, math.max(emotesCols[1].AbsoluteSize.Y, emotesCols[2].AbsoluteSize.Y) + 165)
+        for _, page in ipairs({ content, configContent, visualContent, mainContent, worldContent, emotesContent, miscContent }) do
+            if page and page.Parent then page.CanvasSize = UDim2.fromOffset(0, 0) end
         end
     end)
 end
@@ -739,7 +742,15 @@ function host.CreateTab()
                 callback(state)
                 if persist ~= false then NoirPersistence.data.toggles[storagePrefix .. label] = state; NoirPersistence.Save() end
             end
-            pill.MouseButton1Click:Connect(function() set(not state, true) end)
+            local lastClick = 0
+            local function toggleClick()
+                local now = os.clock()
+                if now - lastClick < .18 then return end
+                lastClick = now
+                set(not state, true)
+            end
+            pill.MouseButton1Click:Connect(toggleClick)
+            pill.Activated:Connect(toggleClick)
             set(state, false)
             return function(v) set(v == nil and not state or v, true) end
         end
@@ -749,7 +760,15 @@ function host.CreateTab()
             corner(b, 12); stroke(b, C.border, .5)
             b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(48,52,56) }):Play() end)
             b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn }):Play() end)
-            b.MouseButton1Click:Connect(callback)
+            local lastClick = 0
+            local function fire()
+                local now = os.clock()
+                if now - lastClick < .18 then return end
+                lastClick = now
+                callback()
+            end
+            b.MouseButton1Click:Connect(fire)
+            b.Activated:Connect(fire)
             return b
         end
         function api:AddSlider(label, min, max, default, callback)
@@ -822,9 +841,18 @@ function host.CreateTab()
                     local item = New("TextButton", { Parent = popup, Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, Text = tostring(v),
                         TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, ZIndex = 51 })
                     item.MouseButton1Click:Connect(function() set(v); close() end)
+                    item.Activated:Connect(function() set(v); close() end)
                 end
             end
-            b.MouseButton1Click:Connect(function() if popup then close() else open() end end)
+            local lastOpen = 0
+            local function togglePopup()
+                local now = os.clock()
+                if now - lastOpen < .18 then return end
+                lastOpen = now
+                if popup then close() else open() end
+            end
+            b.MouseButton1Click:Connect(togglePopup)
+            b.Activated:Connect(togglePopup)
             local ctl = {}
             function ctl:SetValue(v) set(v) end
             function ctl:Select(v) set(v) end
@@ -1103,13 +1131,38 @@ local config = {
     knifeWallCheck = false,
     knifePrioritizeSheriff = false,
     knifeAutoThrow = false,
+    -- Native Knife Silent Aim utilities, kept separate from the original redirect settings.
+    knifeDualEffect = false,
+    knifeInstantThrow = false,
+    knifeFastThrow = false,
+    knifeAutoKillEveryone = false,
+    knifeAutoKillSheriff = false,
+    knifeKillPlayer = "N/A",
+    knifeSheriffBind = false,
+    knifeSheriffBindShape = "Circle",
     -- Preserve the prior always-on behavior while allowing the thrown-knife touch aura to be disabled independently.
     knifeThrownAura = true,
     knifeRadius = 15,
     showShootButton = false,
     lockShootButton = false,
+    -- Native Silent Aim gun utilities.
+    gunDualEffect = false,
+    gunTriggerBot = false,
+    gunTriggerBotWallCheck = true,
+    gunTriggerBotPrediction = true,
     selectedPlayer = nil,
 }
+
+-- Disable legacy Dual Effect preference values that could invoke unsafe client rig visuals.
+NoirPersistence.data.toggles["SILENT AIM::Use Gun Dual Effect"] = false
+NoirPersistence.data.toggles["KNIFE SILENT AIM::Use Knife Dual Effect"] = false
+-- Stop and remove a renderer left behind by an earlier injected version before this safe build runs.
+do
+    local oldProjectedDual = getgenv().__NoirCameraProjectedDual
+    if type(oldProjectedDual) == "table" and type(oldProjectedDual.Stop) == "function" then pcall(oldProjectedDual.Stop, oldProjectedDual) end
+    getgenv().__NoirCameraProjectedDual = nil
+end
+NoirPersistence.Save()
 
 local murderer, sheriff, hero
 local cachedPing = 0.05
@@ -1607,7 +1660,7 @@ function leadTime(profile)
     -- smoothly adds up to 75ms while keeping a strict 300ms safety ceiling.
     local simulationCap = settings.maxSimulationMs / 1000
     if settings.adaptive then
-        simulationCap = math.min(.30, simulationCap + math.clamp(observedPing - .10, 0, .25) * .30)
+        simulationCap = math.min(.30, simulationCap + math.clamp(observedPing - .10, 0, .25) * .45)
     end
     return math.clamp(prediction, 0.02, simulationCap)
 end
@@ -1655,19 +1708,23 @@ function calculateAim(part)
     end
     local horizontal = config.horizontalMultiplier / 100
     local vertical = config.verticalMultiplier / 100
-    local yVelocity = config.predictJump and velocity.Y * vertical or 0
-    local predictedVelocity = Vector3.new(velocity.X * horizontal, yVelocity, velocity.Z * horizontal)
     local time = leadTime()
-    local displacement = predictedVelocity * time
+    -- Horizontal Omega values remain a velocity multiplier.  For a jumping character, however,
+    -- the vertical Omega multiplier must affect both initial velocity and gravity time.  Applying
+    -- it only to velocity (the previous code) over-led every jump arc, especially at 250–400 ms.
+    local displacement = Vector3.new(velocity.X * horizontal * time, 0, velocity.Z * horizontal * time)
     if config.predictLag then
         local horizontalAcceleration = Vector3.new(acceleration.X, 0, acceleration.Z)
         displacement = displacement + horizontalAcceleration * (0.5 * time * time)
     end
     if config.predictJump then
+        local verticalTime = time * vertical
+        local verticalDisplacement = velocity.Y * verticalTime
         local humanoid = part.Parent and part.Parent:FindFirstChildWhichIsA("Humanoid")
         if humanoid and humanoid.FloorMaterial == Enum.Material.Air then
-            displacement = displacement + Vector3.new(0, -0.5 * Workspace.Gravity * time * time, 0)
+            verticalDisplacement = verticalDisplacement - 0.5 * Workspace.Gravity * verticalTime * verticalTime
         end
+        displacement = displacement + Vector3.new(0, verticalDisplacement, 0)
     end
     if displacement.Magnitude > 18 then displacement = displacement.Unit * 18 end
     local offset = Vector3.new(part.Size.X * config.offsetX / 100, part.Size.Y * config.offsetY / 100, part.Size.Z * config.offsetZ / 100)
@@ -1707,13 +1764,30 @@ end
 local function piercerShotOrigin(origin, aim, part, enabled)
     if not enabled or not origin or not aim or not part then return origin end
     local direction = aim - origin
-    if direction.Magnitude <= 0.01 then return origin end
+    local distance = direction.Magnitude
+    if distance <= 0.05 then return origin end
+    local dir = direction.Unit
     local character = LocalPlayer.Character
-    wallCheckParams.FilterDescendantsInstances = character and { character } or {}
-    local result = Workspace:Raycast(origin, direction, wallCheckParams)
-    if not result or result.Instance:IsDescendantOf(part.Parent) then return origin end
-    local spacing = math.clamp(part.Size.Magnitude * 0.75, 2.5, 4.5)
-    return aim - direction.Unit * spacing
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local filter = { character, part.Parent }
+    local gun = (character and character:FindFirstChild("Gun")) or (backpack and backpack:FindFirstChild("Gun"))
+    if gun then filter[#filter + 1] = gun end
+    for _, player in ipairs(getPlayers()) do
+        if player.Character and player.Character ~= character then filter[#filter + 1] = player.Character end
+    end
+    wallCheckParams.FilterDescendantsInstances = filter
+    local blocked = Workspace:Raycast(origin, dir * distance, wallCheckParams)
+    if not blocked then return origin end
+    local inner = Workspace:Raycast(aim, -dir * distance, wallCheckParams)
+    local candidate = inner and (inner.Position + dir * 0.9) or (aim - dir * 0.9)
+    if (aim - candidate).Magnitude > 0.02 and not Workspace:Raycast(candidate, aim - candidate, wallCheckParams) then
+        return candidate
+    end
+    candidate = aim - dir * 0.5
+    if (aim - candidate).Magnitude > 0.02 and not Workspace:Raycast(candidate, aim - candidate, wallCheckParams) then
+        return candidate
+    end
+    return aim - dir * 0.4
 end
 
 function knifeRemote(remote, args)
@@ -1834,6 +1908,14 @@ function redirect(remote, args)
     redirected = redirected + 1
 end
 
+local function swallowKnifeRemote(self)
+    if typeof(self) ~= "Instance" or self.ClassName ~= "RemoteEvent" then return false end
+    if string.lower(tostring(self.Name or "")) ~= "knifethrown" then return false end
+    if not (config.knifeInstantThrow or config.knifeFastThrow) then return false end
+    local runtime
+    pcall(function() runtime = getgenv().__NoirKnifeUtilityRuntime end)
+    return type(runtime) == "table" and type(runtime.lastInstantThrow) == "number" and os.clock() - runtime.lastInstantThrow < .48
+end
 function installHook()
     if hooked then return true end
     local wrap = type(newcclosure) == "function" and newcclosure or function(callback) return callback end
@@ -1843,11 +1925,15 @@ function installHook()
         local ok, err = pcall(function()
             old = hookmetamethod(game, "__namecall", wrap(function(self, ...)
                 local method = getnamecallmethod()
-                if method == "FireServer" and typeof(self) == "Instance" and self.ClassName == "RemoteEvent" and not isOwnCall() then
-                    local args = table.pack(...)
-                    pcall(redirect, self, args)
-                    if type(setnamecallmethod) == "function" then setnamecallmethod(method) end
-                    return old(self, table.unpack(args, 1, args.n))
+                local methodLower = string.lower(tostring(method or ""))
+                if (methodLower == "fireserver" or methodLower == "invokeserver" or methodLower == "fire") and typeof(self) == "Instance" then
+                    if swallowKnifeRemote(self) then return end
+                    if self.ClassName == "RemoteEvent" and methodLower == "fireserver" and not isOwnCall() then
+                        local args = table.pack(...)
+                        pcall(redirect, self, args)
+                        if type(setnamecallmethod) == "function" then setnamecallmethod(method) end
+                        return old(self, table.unpack(args, 1, args.n))
+                    end
                 end
                 return old(self, ...)
             end))
@@ -1864,7 +1950,10 @@ function installHook()
     local ok, err = pcall(function()
         original = hookfunction(probe.FireServer, wrap(function(self, ...)
             local args = table.pack(...)
-            if typeof(self) == "Instance" and self.ClassName == "RemoteEvent" and not isOwnCall() then pcall(redirect, self, args) end
+            if typeof(self) == "Instance" then
+                if swallowKnifeRemote(self) then return end
+                if self.ClassName == "RemoteEvent" and not isOwnCall() then pcall(redirect, self, args) end
+            end
             return original(self, table.unpack(args, 1, args.n))
         end))
     end)
@@ -2004,6 +2093,346 @@ do
     end)
 end
 
+-- Native Knife Silent Aim utility layer.  It intentionally uses only the currently equipped
+-- Knife and its own remotes; no Overdrive loader, paid API, or opaque external dependency is used.
+task.defer(function()
+    local prior = getgenv().__NoirKnifeUtilityRuntime
+    if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
+
+    local runtime = { stopped = false, connections = {}, bindConnections = {}, gui = nil, button = nil,
+        dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
+        dualOriginalC0 = nil, dualOriginalTransform = nil, ghostModel = nil, ghostParts = {}, hiddenParts = {}, dualTorso = nil,
+        poseBind = "NoirKnifeDualArmPose", nextAction = 0, lastInstantThrow = 0, lastStab = {} }
+    local function connect(signal, callback)
+        local connection = signal:Connect(callback)
+        runtime.connections[#runtime.connections + 1] = connection
+        return connection
+    end
+    local function findKnifeTool(parent)
+        if not parent then return nil end
+        local named = parent:FindFirstChild("Knife")
+        if named and named:IsA("Tool") then return named end
+        for _, child in ipairs(parent:GetChildren()) do
+            if child:IsA("Tool") and (child:FindFirstChild("KnifeThrown", true) or child:FindFirstChild("KnifeStabbed", true) or child:FindFirstChild("HandleTouched", true)) then
+                return child
+            end
+        end
+        return nil
+    end
+    local function equippedKnife()
+        return findKnifeTool(LocalPlayer.Character)
+    end
+    local function limbFor(character, side)
+        return character and (character:FindFirstChild(side .. "Hand") or character:FindFirstChild(side .. " Arm") or character:FindFirstChild(side .. "LowerArm")) or nil
+    end
+    local function shoulderFor(character, side)
+        local joint = character and (character:FindFirstChild(side .. "Shoulder", true) or character:FindFirstChild(side .. " Shoulder", true))
+        return joint and joint:IsA("Motor6D") and joint or nil
+    end
+    local function rootFor(player)
+        local character = player and player.Character
+        return character and (character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart) or nil
+    end
+    local function killPlayerByName()
+        local name = tostring(config.knifeKillPlayer or "N/A")
+        local player = name ~= "N/A" and Players:FindFirstChild(name) or nil
+        return validTarget(player) and player or nil
+    end
+    local function sheriffTarget()
+        if validTarget(sheriff) then return sheriff end
+        local fallback = findByGun()
+        return validTarget(fallback) and fallback or nil
+    end
+    local function knifeThrowRemote(tool)
+        for _, object in ipairs(tool:GetDescendants()) do
+            if object:IsA("RemoteEvent") and object.Name == "KnifeThrown" then return object end
+        end
+        return nil
+    end
+    local function throwCooldown()
+        if config.knifeInstantThrow then return .05 end
+        if config.knifeFastThrow then return .12 end
+        return .38
+    end
+    local function throwAt(player)
+        local tool, part = equippedKnife(), getAimPart(player)
+        local handle = tool and tool:FindFirstChild("Handle", true)
+        local remote = tool and knifeThrowRemote(tool)
+        if not tool then return false, "equip" end
+        if not part or not handle or not handle:IsA("BasePart") or not remote then return false end
+        local now = os.clock()
+        if now < runtime.nextAction then return false end
+        runtime.nextAction = now + throwCooldown()
+        local origin = handle.Position
+        local aim = calculateKnifeAim(part, origin)
+        local look = CFrame.lookAt(origin, aim)
+        local hit = CFrame.new(aim)
+        local ok = pcall(function() remote:FireServer(look, hit) end)
+        if not ok then ok = pcall(function() remote:FireServer(hit) end) end
+        if not ok then ok = pcall(function() remote:FireServer(aim) end) end
+        if ok then runtime.lastInstantThrow = now end
+        return ok == true
+    end
+    local function pokeTouch(handle, part)
+        if not handle or not part or not handle.Parent or not part.Parent then return end
+        if type(firetouchinterest) ~= "function" then return end
+        pcall(firetouchinterest, handle, part, 0)
+        pcall(firetouchinterest, handle, part, 1)
+        pcall(firetouchinterest, handle, part, true)
+        pcall(firetouchinterest, handle, part, false)
+    end
+    local function stabAt(player)
+        local tool = equippedKnife()
+        local character = player and player.Character
+        if not tool or not character or not validTarget(player) then return false end
+        local handle = tool:FindFirstChild("Handle", true)
+        if not handle or not handle:IsA("BasePart") then return false end
+        local now = os.clock()
+        if now - (runtime.lastStab[player] or 0) < .08 then return false end
+        runtime.lastStab[player] = now
+        for _, part in ipairs(character:GetChildren()) do
+            if part:IsA("BasePart") then pokeTouch(handle, part) end
+        end
+        local hrp = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+        local touched = tool:FindFirstChild("HandleTouched", true)
+        local stabbed = tool:FindFirstChild("KnifeStabbed", true)
+        if touched and touched:IsA("RemoteEvent") then
+            if hrp then pcall(touched.FireServer, touched, hrp) end
+            pcall(touched.FireServer, touched, character)
+        end
+        if stabbed and stabbed:IsA("RemoteEvent") then
+            pcall(stabbed.FireServer, stabbed)
+            if hrp then pcall(stabbed.FireServer, stabbed, hrp) end
+        end
+        return true
+    end
+    local function attack(player)
+        if not validTarget(player) then return false end
+        return stabAt(player)
+    end
+    local function killSheriff(silent)
+        if not equippedKnife() then
+            if not silent then notify("Equip the Knife first", 3) end
+            return false
+        end
+        local target = sheriffTarget()
+        local success = target and attack(target) or false
+        if not silent then notify(success and ("Stab: " .. target.Name) or "Sheriff not found / knife not ready", 3) end
+        return success
+    end
+    local function killEveryone(silent)
+        if not equippedKnife() then
+            if not silent then notify("Equip the Knife first", 3) end
+            return 0
+        end
+        local count = 0
+        for _, player in ipairs(getPlayers()) do
+            if validTarget(player) and attack(player) then count += 1 end
+        end
+        if not silent then notify(count > 0 and ("Stabbed " .. tostring(count) .. " target(s)") or "Stab: no valid target", 3) end
+        return count
+    end
+    local function killSelected(silent)
+        if not equippedKnife() then
+            if not silent then notify("Equip the Knife first", 3) end
+            return false
+        end
+        local target = killPlayerByName()
+        if not target then
+            if not silent then notify("Select a player in Kill Player", 3) end
+            return false
+        end
+        local success = attack(target)
+        if not silent then notify(success and ("Stab: " .. target.Name) or "Stab: wait / failed", 3) end
+        return success
+    end
+    local function armPartPairs(character)
+        local pairs = {}
+        if character and character:FindFirstChild("Right Arm") then
+            pairs[#pairs + 1] = { character:FindFirstChild("Right Arm"), character:FindFirstChild("Left Arm") }
+        else
+            for _, suffix in ipairs({ "UpperArm", "LowerArm", "Hand" }) do
+                local source, target = character and character:FindFirstChild("Right" .. suffix), character and character:FindFirstChild("Left" .. suffix)
+                if source and target then pairs[#pairs + 1] = { source, target } end
+            end
+        end
+        return pairs
+    end
+    local function cleanVisualClone(part)
+        local clone = part:Clone()
+        for _, child in ipairs(clone:GetDescendants()) do
+            if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then child:Destroy() end
+        end
+        clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = true, false, false, false, true
+        clone.CastShadow = false
+        return clone
+    end
+    local function destroyDualVisual()
+        if runtime.ghostModel and runtime.ghostModel.Parent then runtime.ghostModel:Destroy() end
+        for part, original in pairs(runtime.hiddenParts) do if part and part.Parent then pcall(function() part.LocalTransparencyModifier = original end) end end
+        table.clear(runtime.hiddenParts); table.clear(runtime.ghostParts)
+        runtime.ghostModel, runtime.dualVisual, runtime.dualSource, runtime.dualTorso = nil, nil, nil, nil
+        runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder, runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil, nil, nil, nil
+    end
+    local function refreshDualEffect()
+        -- Disabled: mirrored rig/weapon visuals trigger MM2 character validation on some clients.
+        config.knifeDualEffect = false
+        destroyDualVisual()
+    end
+    local function updateGhostDual()
+        local torso, weapon = runtime.dualTorso, runtime.dualVisual
+        if not torso or not torso.Parent or not weapon or not weapon.Parent then return end
+        local function mirrored(source)
+            local relative = torso.CFrame:ToObjectSpace(source.CFrame)
+            local p = relative.Position
+            local x, y, z = relative:ToOrientation()
+            return torso.CFrame * CFrame.new(-p.X, p.Y, p.Z) * CFrame.Angles(x, -y, -z)
+        end
+        for clone, source in pairs(runtime.ghostParts) do if clone and clone.Parent and source and source.Parent then clone.CFrame = mirrored(source) end end
+        if runtime.dualSource and runtime.dualSource.Parent then weapon.CFrame = mirrored(runtime.dualSource) end
+    end
+    local function disconnectKnifeBind()
+        for _, connection in ipairs(runtime.bindConnections) do pcall(function() connection:Disconnect() end) end
+        table.clear(runtime.bindConnections)
+    end
+    local function destroyBind()
+        disconnectKnifeBind()
+        if runtime.gui then runtime.gui:Destroy() end
+        runtime.gui, runtime.button = nil, nil
+        for _, parent in ipairs({ guiParent, CoreGui, LocalPlayer:FindFirstChildOfClass("PlayerGui") }) do
+            local stale = parent and parent:FindFirstChild("NoirKnifeSheriffBind")
+            if stale then stale:Destroy() end
+        end
+    end
+    local function updateBindShape()
+        local button = runtime.button
+        if not button then return end
+        local cornerObject = button:FindFirstChild("NoirShape")
+        if cornerObject then cornerObject.CornerRadius = config.knifeSheriffBindShape == "Circle" and UDim.new(1, 0) or UDim.new(0, 11) end
+    end
+    local function createBind()
+        if runtime.button then updateBindShape(); return end
+        local parent = guiParent
+        if typeof(parent) ~= "Instance" then parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") end
+        if typeof(parent) ~= "Instance" then return end
+        local gui = New("ScreenGui", { Parent = parent, Name = "NoirKnifeSheriffBind", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 84, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+        local button = New("ImageButton", { Parent = gui, Name = "KillSheriff", AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("knife_sheriff_bind_v1", UDim2.new(.68, 0, .73, 0)), Size = UDim2.fromOffset(48, 48),
+            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0, AutoButtonColor = false, Image = "", ClipsDescendants = false, ZIndex = 8 })
+        local shape = New("UICorner", { Parent = button, Name = "NoirShape", CornerRadius = UDim.new(1, 0) })
+        local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
+        local metal = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)), ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)) })
+        local outer = New("UIStroke", { Parent = button, Color = Color3.fromRGB(255, 255, 255), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+        local outerGradient = New("UIGradient", { Parent = outer, Color = metal })
+        local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+        local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner
+        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76), BackgroundTransparency = 1, Text = "Kill\nSheriff", TextColor3 = C.text, TextSize = 9, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 9 })
+        local pressScale = New("UIScale", { Parent = button, Scale = 1 })
+        runtime.gui, runtime.button = gui, button
+        updateBindShape()
+        local dragging, moved, start, origin, dragInput, lastBind = false, false, nil, nil, nil, 0
+        local function fireBind()
+            if moved then return end
+            local now = os.clock()
+            if now - lastBind < .25 then return end
+            lastBind = now
+            killSheriff(false)
+        end
+        runtime.bindConnections[#runtime.bindConnections + 1] = RunService.RenderStepped:Connect(function() if outerGradient.Parent then outerGradient.Rotation = (outerGradient.Rotation + 1) % 360 end end)
+        runtime.bindConnections[#runtime.bindConnections + 1] = button.InputBegan:Connect(function(input)
+            if not isPrimaryPress(input) then return end
+            dragging, moved, start, origin = true, false, input.Position, button.Position
+            TweenService:Create(pressScale, TweenInfo.new(.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = 1.035 }):Play()
+        end)
+        runtime.bindConnections[#runtime.bindConnections + 1] = button.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+        end)
+        runtime.bindConnections[#runtime.bindConnections + 1] = UIS.InputChanged:Connect(function(input)
+            if not dragging or input ~= dragInput then return end
+            local delta = input.Position - start
+            if delta.Magnitude > 7 then moved = true end
+            button.Position = UDim2.new(origin.X.Scale, origin.X.Offset + delta.X, origin.Y.Scale, origin.Y.Offset + delta.Y)
+        end)
+        runtime.bindConnections[#runtime.bindConnections + 1] = UIS.InputEnded:Connect(function(input)
+            if not dragging or not isPrimaryPress(input) then return end
+            dragging = false
+            TweenService:Create(pressScale, TweenInfo.new(.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+            if moved then NoirPersistence.SetPosition("knife_sheriff_bind_v1", button.Position) return end
+            fireBind()
+        end)
+        runtime.bindConnections[#runtime.bindConnections + 1] = button.Activated:Connect(fireBind)
+        runtime.bindConnections[#runtime.bindConnections + 1] = button.MouseButton1Click:Connect(fireBind)
+    end
+    function runtime:Refresh()
+        refreshDualEffect()
+        if config.knifeSheriffBind then createBind() else destroyBind() end
+        updateBindShape()
+    end
+    function runtime:KillSheriff() return killSheriff(false) end
+    function runtime:KillEveryone() return killEveryone(false) end
+    function runtime:KillSelected() return killSelected(false) end
+    local function nearestTarget()
+        local chosen, distance = nil, math.huge
+        local ownRoot = localRoot()
+        for _, player in ipairs(getPlayers()) do
+            local root = rootFor(player)
+            if validTarget(player) and root then
+                local d = ownRoot and (root.Position - ownRoot.Position).Magnitude or 0
+                if d < distance then chosen, distance = player, d end
+            end
+        end
+        return chosen
+    end
+    local function onKnifeActivated()
+        if not (config.knifeInstantThrow or config.knifeFastThrow) then return end
+        local player = knifeTargetPlayer() or nearestTarget()
+        if player then throwAt(player) end
+    end
+    local boundTools = {}
+    local function bindKnifeTool(tool)
+        if not tool or not tool:IsA("Tool") or boundTools[tool] then return end
+        if tool.Name ~= "Knife" and not tool:FindFirstChild("KnifeThrown", true) then return end
+        boundTools[tool] = true
+        connect(tool.Activated, onKnifeActivated)
+    end
+    local function watchCharacter(character)
+        if not character then return end
+        local knife = findKnifeTool(character)
+        if knife then bindKnifeTool(knife) end
+        connect(character.ChildAdded, function(child)
+            if child:IsA("Tool") then bindKnifeTool(child) end
+        end)
+    end
+    if LocalPlayer.Character then watchCharacter(LocalPlayer.Character) end
+    connect(LocalPlayer.CharacterAdded, watchCharacter)
+    connect(UIS.InputBegan, function(input, processed)
+        if processed then return end
+        if not (config.knifeInstantThrow or config.knifeFastThrow) then return end
+        if not equippedKnife() then return end
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        onKnifeActivated()
+    end)
+    pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
+    RunService:BindToRenderStep(runtime.poseBind, Enum.RenderPriority.Last.Value, function()
+        if runtime.stopped or not config.knifeDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
+        pcall(updateGhostDual)
+    end)
+    runtime.connections[#runtime.connections + 1] = RunService.Heartbeat:Connect(function()
+        if runtime.stopped then return end
+        pcall(refreshDualEffect)
+        if config.knifeAutoKillEveryone then pcall(killEveryone, true)
+        elseif config.knifeAutoKillSheriff then pcall(killSheriff, true) end
+    end)
+    function runtime:Stop()
+        if runtime.stopped then return end
+        runtime.stopped = true
+        pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
+        for _, connection in ipairs(runtime.connections) do pcall(function() connection:Disconnect() end) end
+        destroyBind(); destroyDualVisual()
+    end
+    getgenv().__NoirKnifeUtilityRuntime = runtime
+    runtime:Refresh()
+end)
+
 function findGunRemote()
     local gun=localGunTool()
     if not gun then return nil end
@@ -2019,7 +2448,7 @@ function findGunRemote()
     end
     return best
 end
-function fireGunAt(player)
+function fireGunAt(player, usePrediction)
     if shootBusy then return false end
     shootBusy = true
     local success = false
@@ -2047,7 +2476,7 @@ function fireGunAt(player)
             if autoEquipped and humanoid.Parent then humanoid:UnequipTools() end
             return
         end
-        local aim=calculateAim(part)
+        local aim = usePrediction == false and part.Position or calculateAim(part)
         local origin=handle.Position
         local shotOrigin=piercerShotOrigin(origin,aim,part,config.piercerBullet)
         buttonShotActive = true
@@ -2064,6 +2493,125 @@ function fireGunAt(player)
     shootBusy = false
     return success
 end
+
+-- Native Gun Trigger Bot and local dual-effect layer.  This is self-contained in Noir and
+-- uses the currently equipped Gun; it neither loads nor depends on an Overdrive service.
+task.defer(function()
+    local prior = getgenv().__NoirGunTriggerRuntime
+    if type(prior) == "table" and type(prior.Stop) == "function" then pcall(prior.Stop) end
+
+    local runtime = { stopped = false, connections = {}, dualVisual = nil, dualSource = nil, dualLimb = nil, dualLeftShoulder = nil, dualRightShoulder = nil,
+        dualOriginalC0 = nil, dualOriginalTransform = nil, ghostModel = nil, ghostParts = {}, hiddenParts = {}, dualTorso = nil,
+        poseBind = "NoirGunDualArmPose", lastShot = 0, wasPointing = false, nextVisualCheck = 0 }
+    local function equippedGun()
+        local character = LocalPlayer.Character
+        return character and character:FindFirstChild("Gun") or nil
+    end
+    local function shoulderFor(character, side)
+        local joint = character and (character:FindFirstChild(side .. "Shoulder", true) or character:FindFirstChild(side .. " Shoulder", true))
+        return joint and joint:IsA("Motor6D") and joint or nil
+    end
+    local function armPartPairs(character)
+        local pairs = {}
+        if character and character:FindFirstChild("Right Arm") then
+            pairs[#pairs + 1] = { character:FindFirstChild("Right Arm"), character:FindFirstChild("Left Arm") }
+        else
+            for _, suffix in ipairs({ "UpperArm", "LowerArm", "Hand" }) do
+                local source, target = character and character:FindFirstChild("Right" .. suffix), character and character:FindFirstChild("Left" .. suffix)
+                if source and target then pairs[#pairs + 1] = { source, target } end
+            end
+        end
+        return pairs
+    end
+    local function cleanVisualClone(part)
+        local clone = part:Clone()
+        for _, child in ipairs(clone:GetDescendants()) do
+            if child:IsA("Script") or child:IsA("LocalScript") or child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then child:Destroy() end
+        end
+        clone.Anchored, clone.CanCollide, clone.CanTouch, clone.CanQuery, clone.Massless = true, false, false, false, true
+        clone.CastShadow = false
+        return clone
+    end
+    local function destroyDual()
+        if runtime.ghostModel and runtime.ghostModel.Parent then runtime.ghostModel:Destroy() end
+        for part, original in pairs(runtime.hiddenParts) do if part and part.Parent then pcall(function() part.LocalTransparencyModifier = original end) end end
+        table.clear(runtime.hiddenParts); table.clear(runtime.ghostParts)
+        runtime.ghostModel, runtime.dualVisual, runtime.dualSource, runtime.dualTorso = nil, nil, nil, nil
+        runtime.dualLimb, runtime.dualLeftShoulder, runtime.dualRightShoulder, runtime.dualOriginalC0, runtime.dualOriginalTransform = nil, nil, nil, nil, nil
+    end
+    local function refreshDual()
+        -- Disabled: mirrored rig/weapon visuals trigger MM2 character validation on some clients.
+        config.gunDualEffect = false
+        destroyDual()
+    end
+    local function updateGhostDual()
+        local torso, weapon = runtime.dualTorso, runtime.dualVisual
+        if not torso or not torso.Parent or not weapon or not weapon.Parent then return end
+        local function mirrored(source)
+            local relative = torso.CFrame:ToObjectSpace(source.CFrame)
+            local p = relative.Position
+            local x, y, z = relative:ToOrientation()
+            return torso.CFrame * CFrame.new(-p.X, p.Y, p.Z) * CFrame.Angles(x, -y, -z)
+        end
+        for clone, source in pairs(runtime.ghostParts) do if clone and clone.Parent and source and source.Parent then clone.CFrame = mirrored(source) end end
+        if runtime.dualSource and runtime.dualSource.Parent then weapon.CFrame = mirrored(runtime.dualSource) end
+    end
+    local function murdererTarget()
+        local target = selectTarget("Murderer")
+        if not target then
+            local fallback = findByKnife()
+            if validTarget(fallback) then target = fallback end
+        end
+        return target
+    end
+    local function crosshairOn(player)
+        local camera, part = Workspace.CurrentCamera, getAimPart(player)
+        if not camera or not part then return false end
+        local center = camera.ViewportSize * .5
+        local ray = camera:ViewportPointToRay(center.X, center.Y)
+        local ownCharacter = LocalPlayer.Character
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = ownCharacter and { ownCharacter } or {}
+        params.IgnoreWater = true
+        local hit = Workspace:Raycast(ray.Origin, ray.Direction * 2000, params)
+        if hit and hit.Instance and hit.Instance:IsDescendantOf(player.Character) then return true end
+        -- On a transparent target part/no direct ray hit, retain an intentionally tight screen
+        -- tolerance.  Wall Check decides whether this fallback is allowed through geometry.
+        local projected, visible = camera:WorldToViewportPoint(part.Position)
+        if not visible or (Vector2.new(projected.X, projected.Y) - Vector2.new(center.X, center.Y)).Magnitude > 26 then return false end
+        return not config.gunTriggerBotWallCheck or targetVisible(part, true)
+    end
+    pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
+    RunService:BindToRenderStep(runtime.poseBind, Enum.RenderPriority.Last.Value, function()
+        if runtime.stopped or not config.gunDualEffect or not (runtime.dualVisual and runtime.dualVisual.Parent) then return end
+        pcall(updateGhostDual)
+    end)
+    runtime.connections[#runtime.connections + 1] = RunService.RenderStepped:Connect(function()
+        if runtime.stopped then return end
+        local now = os.clock()
+        if now >= runtime.nextVisualCheck then runtime.nextVisualCheck = now + .25; refreshDual() end
+        if not config.gunTriggerBot then runtime.wasPointing = false; return end
+        local target = murdererTarget()
+        local pointing = target and crosshairOn(target) or false
+        if pointing and not runtime.wasPointing and now - runtime.lastShot >= .28 then
+            runtime.lastShot = now
+            fireGunAt(target, config.gunTriggerBotPrediction)
+        end
+        runtime.wasPointing = pointing
+    end)
+    function runtime:RefreshDual() refreshDual() end
+    function runtime:Stop()
+        if runtime.stopped then return end
+        runtime.stopped = true
+        pcall(function() RunService:UnbindFromRenderStep(runtime.poseBind) end)
+        for _, connection in ipairs(runtime.connections) do pcall(function() connection:Disconnect() end) end
+        destroyDual()
+    end
+    getgenv().__NoirGunTriggerRuntime = runtime
+    refreshDual()
+end)
+
 function shootTarget()
     local player = selectTarget()
     -- Keep the immediate weapon-owner fallback; a remote role refresh is now coalesced asynchronously to avoid a UI freeze.
@@ -2350,9 +2898,15 @@ function exportRevertConfig()
             ignoreFriends = config.ignoreFriends, maxDistance = config.maxDistance,
             adaptive = config.adaptive, fixedLead = config.fixedLead, extraLead = config.extraLead,
             alignDirection = config.alignDirection,
+            gunDualEffect = config.gunDualEffect, gunTriggerBot = config.gunTriggerBot,
+            gunTriggerBotWallCheck = config.gunTriggerBotWallCheck, gunTriggerBotPrediction = config.gunTriggerBotPrediction,
             knifeWallCheck = config.knifeWallCheck,
             knifePrioritizeSheriff = config.knifePrioritizeSheriff, knifeAutoThrow = config.knifeAutoThrow,
-            knifeThrownAura = config.knifeThrownAura,
+            knifeDualEffect = config.knifeDualEffect,
+            knifeInstantThrow = config.knifeInstantThrow, knifeFastThrow = config.knifeFastThrow,
+            knifeAutoKillEveryone = config.knifeAutoKillEveryone, knifeAutoKillSheriff = config.knifeAutoKillSheriff,
+            knifeKillPlayer = config.knifeKillPlayer, knifeSheriffBind = config.knifeSheriffBind,
+            knifeSheriffBindShape = config.knifeSheriffBindShape, knifeThrownAura = config.knifeThrownAura,
             knifeAim = {
                 adaptive = config.knifeAim.adaptive,
                 fixedLead = config.knifeAim.fixedLead,
@@ -2403,9 +2957,18 @@ function applyRevertConfig(data)
             if typeof(noir[key]) == "number" then config[key] = noir[key] end
         end
         for _, key in ipairs({ "autoFire", "wallCheck", "piercerBullet", "ignoreDead", "ignoreFriends", "adaptive", "alignDirection",
-                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow", "knifeThrownAura" }) do
+                               "gunDualEffect", "gunTriggerBot", "gunTriggerBotWallCheck", "gunTriggerBotPrediction",
+                               "knifeWallCheck", "knifePrioritizeSheriff", "knifeAutoThrow", "knifeThrownAura", "knifeDualEffect",
+                               "knifeInstantThrow", "knifeFastThrow", "knifeAutoKillEveryone", "knifeAutoKillSheriff", "knifeSheriffBind" }) do
             if typeof(noir[key]) == "boolean" then config[key] = noir[key] end
         end
+        for _, key in ipairs({ "knifeKillPlayer", "knifeSheriffBindShape" }) do
+            if typeof(noir[key]) == "string" then config[key] = noir[key] end
+        end
+        local knifeRuntime = getgenv().__NoirKnifeUtilityRuntime
+        if type(knifeRuntime) == "table" and type(knifeRuntime.Refresh) == "function" then task.defer(function() pcall(knifeRuntime.Refresh, knifeRuntime) end) end
+        local gunRuntime = getgenv().__NoirGunTriggerRuntime
+        if type(gunRuntime) == "table" and type(gunRuntime.RefreshDual) == "function" then task.defer(function() pcall(gunRuntime.RefreshDual, gunRuntime) end) end
         if config.piercerBullet then task.defer(installHook) end
         local knifeAim = noir.knifeAim
         if typeof(knifeAim) == "table" then
@@ -3377,8 +3940,8 @@ task.defer(function()
         ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)),
     })
     local aimActiveGradient = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(21, 108, 66)), ColorSequenceKeypoint.new(.24, Color3.fromRGB(110, 255, 178)),
-        ColorSequenceKeypoint.new(.5, Color3.fromRGB(42, 178, 105)), ColorSequenceKeypoint.new(.76, Color3.fromRGB(176, 255, 212)), ColorSequenceKeypoint.new(1, Color3.fromRGB(19, 103, 61)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(104, 18, 32)), ColorSequenceKeypoint.new(.24, Color3.fromRGB(255, 126, 145)),
+        ColorSequenceKeypoint.new(.5, Color3.fromRGB(185, 38, 62)), ColorSequenceKeypoint.new(.76, Color3.fromRGB(255, 170, 183)), ColorSequenceKeypoint.new(1, Color3.fromRGB(112, 18, 35)),
     })
     local function bindButtonPixels()
         -- CurrentCamera can be nil for one frame while Roblox rebuilds the mobile UI.
@@ -3387,7 +3950,9 @@ task.defer(function()
         local camera = Workspace.CurrentCamera
         local viewport = camera and camera.ViewportSize
         local shortEdge = viewport and math.min(viewport.X, viewport.Y) or 720
-        return math.clamp(math.floor(shortEdge * aim.bindSize + .5), 34, 148)
+        -- CoreGui Offset pixels are density-scaled on this mobile client.  Half-scale here makes
+        -- the visible 8 setting match the neighbouring Shift/Desync-sized round binds.
+        return math.clamp(math.floor(shortEdge * aim.bindSize * .5 + .5), 24, 96)
     end
     local function updateBindSize()
         local button = aim.bindButton
@@ -3400,7 +3965,7 @@ task.defer(function()
         local button = aim.bindButton
         if not button then return end
         local label = button:FindFirstChild("Text")
-        if label then label.Text = aim.enabled and "Aim\nON" or "Aim\nOFF" end
+        if label then label.Text = "Aimlock" end
         if aim.bindOuterGradient then aim.bindOuterGradient.Color = aim.enabled and aimActiveGradient or aimMetallicGradient end
         if aim.bindInnerGradient then aim.bindInnerGradient.Color = aim.enabled and aimActiveGradient or aimMetallicGradient end
     end
@@ -3444,7 +4009,7 @@ task.defer(function()
         local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
         local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner; table.insert(gradientStrokes, innerGradient)
         local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76),
-            BackgroundTransparency = 1, Text = "Aim\nOFF", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 14, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 9 })
+            BackgroundTransparency = 1, Text = "Aimlock", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 12, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 9 })
         local pressScale = New("UIScale", { Parent = button, Scale = 1 })
         aim.bindOuterGradient, aim.bindInnerGradient, aim.bindPressScale = outerGradient, innerGradient, pressScale
         local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
@@ -3839,7 +4404,7 @@ do
     local antiFlingStep = RunService.PreSimulation or RunService.Stepped
     antiFlingStep:Connect(function()
         if not universalState.antiFling then return end
-        local quota, cursor = 256, universalState.antiFlingNextPart
+        local quota, cursor = 48, universalState.antiFlingNextPart
         if cursor and universalState.antiFlingTracked[cursor] == nil then cursor = nil end
         while quota > 0 do
             cursor = next(universalState.antiFlingTracked, cursor)
@@ -4814,7 +5379,7 @@ if RunService then
     RunService.Heartbeat:Connect(function()
         local now = os.clock()
         if now < nextRefresh then return end
-        nextRefresh = now + .12
+        nextRefresh = now + .45
         local character = LocalPlayer.Character
         if state.korblox then applyKorbloxMesh(character) end
         if state.headless then applyHeadless(character) end
@@ -6143,9 +6708,15 @@ do
         }
     end
 
+    combatAim:AddLabel("GUN UTILITIES • native Noir implementation")
+    combatAim:AddParagraph("GUN TRIGGER BOT", "Shoots once when the centre cursor/crosshair points at the Murderer. Works with mobile Shift Lock; move off target and back to arm the next shot.")
+    combatAim:AddToggle("Gun Trigger Bot", function(v) config.gunTriggerBot = v == true end)
+    combatAim:AddToggle("Gun Trigger Bot Wall Check", function(v) config.gunTriggerBotWallCheck = v == true end)
+    combatAim:AddToggle("Apply Prediction On Gun Trigger Bot", function(v) config.gunTriggerBotPrediction = v == true end)
+
     local combatGun=tab:AddSection("GUN", "Gun targeting controls")
-    combatGun:AddToggle("Piercer Bullet", setPiercerBullet)
-    combatGun:AddLabel("Sends a target-side Gun ray when a wall blocks the selected target.")
+        combatGun:AddToggle("Piercer Bullet", setPiercerBullet)
+    combatGun:AddLabel("If a wall is between you and the target, the shot starts on their side of the wall. Turn this on with Silent Aim.")
 
     local combatKnife=tab:AddSection("KNIFE SILENT AIM", "Nearest player or Sheriff-only targeting")
     combatKnife:AddToggle("Knife Silent Aim", function(v)
@@ -6170,6 +6741,46 @@ do
     combatKnife:AddToggle("Prioritize Sheriff", function(v)
         config.knifePrioritizeSheriff=v==true
     end)
+    combatKnife:AddLabel("NATIVE KNIFE UTILITIES • equipped Knife only")
+    local function refreshKnifeUtilities()
+        local runtime = getgenv().__NoirKnifeUtilityRuntime
+        if type(runtime) == "table" and type(runtime.Refresh) == "function" then pcall(runtime.Refresh, runtime) end
+    end
+    local function knifeRuntimeCall(method)
+        local runtime = getgenv().__NoirKnifeUtilityRuntime
+        if type(runtime) == "table" and type(runtime[method]) == "function" then return runtime[method](runtime) end
+        notify("Knife utilities are starting", 2)
+        return nil
+    end
+    combatKnife:AddToggle("Instant Throw", function(v)
+        config.knifeInstantThrow = v == true
+        if config.knifeInstantThrow then installHook() end
+    end)
+    combatKnife:AddToggle("Fast Throw", function(v)
+        config.knifeFastThrow = v == true
+        if config.knifeFastThrow then installHook() end
+    end)
+    combatKnife:AddToggle("Auto Kill Everyone", function(v) config.knifeAutoKillEveryone = v == true end)
+    combatKnife:AddToggle("Auto Kill Sheriff", function(v) config.knifeAutoKillSheriff = v == true end)
+    combatKnife:AddButton("Kill Everyone", function() knifeRuntimeCall("KillEveryone") end)
+    combatKnife:AddButton("Kill Sheriff", function() knifeRuntimeCall("KillSheriff") end)
+    combatKnife:AddToggle("Enable Kill Sheriff Bindable Button", function(v) config.knifeSheriffBind = v == true; refreshKnifeUtilities() end)
+    local function knifePlayerChoices()
+        local values = { "N/A" }
+        for _, player in ipairs(getPlayers()) do if player ~= LocalPlayer then values[#values + 1] = player.Name end end
+        table.sort(values, function(a, b) if a == "N/A" then return true elseif b == "N/A" then return false end return string.lower(a) < string.lower(b) end)
+        return values
+    end
+    local selectedKnifePlayer = combatKnife:AddDropdown("Kill Player", knifePlayerChoices(), function(v) config.knifeKillPlayer = tostring(v or "N/A") end)
+    combatKnife:AddButton("Kill Player", function() knifeRuntimeCall("KillSelected") end)
+    combatKnife:AddButton("Refresh Kill Player List", function() selectedKnifePlayer:Refresh(knifePlayerChoices(), config.knifeKillPlayer) end)
+    local function refreshKnifePlayerList()
+        if selectedKnifePlayer and selectedKnifePlayer.Refresh then
+            selectedKnifePlayer:Refresh(knifePlayerChoices(), config.knifeKillPlayer)
+        end
+    end
+    Players.PlayerAdded:Connect(function() task.delay(.15, refreshKnifePlayerList) end)
+    Players.PlayerRemoving:Connect(function() task.delay(.15, refreshKnifePlayerList) end)
 
     local function addPrediction(section,profile,prefix)
         local function addToggle(key,label)
@@ -10020,7 +10631,7 @@ end)()
 -- END ODH 2026 ADAPTER
 
 --[[
-    ⚡ ULTIMATE FLING • FLING   —   V1.0
+    ⚡ ULTIMATE FLING • FLING   —   V1.2
     Ultimate Fling GUI · Overdrive Hub plugin
     Author: K1LAS1K (original), adapted to ODH 2026
     =========================================================================
@@ -10049,7 +10660,7 @@ local AUTHOR            = "K1LAS1K"
 local BRAND             = "ULTIMATE FLING"
 local PLUGIN_ID         = "fling"
 local PLUGIN_NAME       = BRAND .. " • FLING"
-local VERSION           = "V1.0"
+local VERSION           = "V1.2"
 local VERSION_TAG       = "fling"
 local MARKER_PREFIX     = "@fling_"
 local CONFIG_PATH       = CONFIGS_FOLDER .. "/ODH_FLING_settings.json"
@@ -10191,6 +10802,9 @@ local persistDisabled = false
 local DEFAULTS = {
     flingDuration     = 2,
     flingPower        = 1,
+    flingMethod       = "Auto", -- Auto = Fling then Sweep; Fling = original; Sweep = vertical
+    predictionStuds   = 8,
+    startStuds        = 5,
     autoReturn        = true,
     loopInterval      = 0.4,
     auraInterval      = 0.4,
@@ -10261,6 +10875,7 @@ end
 local function serializeConfig()
     return {
         flingDuration = config.flingDuration, flingPower = config.flingPower,
+        flingMethod = config.flingMethod, predictionStuds = config.predictionStuds, startStuds = config.startStuds,
         autoReturn = config.autoReturn,
         loopInterval = config.loopInterval, auraInterval = config.auraInterval,
         auraStuds = config.auraStuds, bindButtonSize = config.bindButtonSize,
@@ -10277,7 +10892,7 @@ end
 local function applyLoaded(data)
     if type(data) ~= "table" then return false end
     local scalars = {
-        "flingDuration", "flingPower", "autoReturn",
+        "flingDuration", "flingPower", "flingMethod", "predictionStuds", "startStuds", "autoReturn",
         "loopInterval", "auraInterval", "auraStuds",
         "bindButtonSize", "targetCooldown",
         "autoSheriffDelay", "autoMurdererDelay", "roleCacheTTL",
@@ -10290,6 +10905,10 @@ local function applyLoaded(data)
     -- clamp after load
     if type(config.flingDuration)=="number" then config.flingDuration=math.clamp(math.floor(config.flingDuration+0.5),1,5) end
     if type(config.flingPower)=="number" then config.flingPower=math.clamp(math.floor(config.flingPower+0.5),1,3) end
+    if type(config.predictionStuds)=="number" then config.predictionStuds=math.clamp(config.predictionStuds,0,20) end
+    if type(config.startStuds)=="number" then config.startStuds=math.clamp(config.startStuds,-5,20) end
+    local METHODS = { Auto=true, Fling=true, Sweep=true }
+    if type(config.flingMethod)~="string" or not METHODS[config.flingMethod] then config.flingMethod="Auto" end
     if type(data.keybinds) == "table" then config.keybinds = data.keybinds end
     if type(data.bindPositions) == "table" then config.bindPositions = data.bindPositions end
     if type(data.hudPos) == "table" and type(data.hudPos.x) == "number" and type(data.hudPos.y) == "number" then
@@ -11256,7 +11875,6 @@ local function SkidFling(TargetPlayer)
     if not TargetPlayer or not TargetPlayer.Parent then return false end
     if TargetPlayer == LocalPlayer or state.whitelist[TargetPlayer.UserId] then return false end
 
-    -- кулдаун
     local last = state.lastResetAt[TargetPlayer.UserId]
     if last and (now()-last) < (config.targetCooldown or 0) then return false end
     state.lastResetAt[TargetPlayer.UserId]=now()
@@ -11292,19 +11910,35 @@ local function SkidFling(TargetPlayer)
     local power = config.flingPower or 1
     local velMult = power==1 and 1 or (power==2 and 1.5 or 2)
     local rotMult = velMult
+    local duration = tonumber(config.flingDuration) or 2
+    if duration < 0.5 then duration = 0.5 end
+    local predStuds = tonumber(config.predictionStuds) or 8
+    local startStuds = tonumber(config.startStuds) or 5
+    local downForce = 50000 * velMult
 
+    Humanoid.PlatformStand = true
     local savedDestroy = Workspace.FallenPartsDestroyHeight
-    Workspace.FallenPartsDestroyHeight = 0/0 -- NaN trick
+    if type(savedDestroy) ~= "number" or savedDestroy ~= savedDestroy then savedDestroy = -500 end
+    Workspace.FallenPartsDestroyHeight = 0/0 -- NaN: сами не умираем, пока крутимся
+
     if flingBV and flingBV.Parent then pcall(function() flingBV:Destroy() end) end
     flingBV = new("BodyVelocity")
-    flingBV.Velocity = v3(0,0,0)
-    flingBV.MaxForce = v3(9e9,9e9,9e9)
+    flingBV.Name = "FlingVel"
+    flingBV.Velocity = v3(0, -downForce, 0)
+    flingBV.MaxForce = v3(math.huge, math.huge, math.huge)
     flingBV.Parent = RootPart
+    local flingBG = new("BodyGyro")
+    flingBG.MaxTorque = v3(math.huge, math.huge, math.huge)
+    flingBG.P = 1000000
+    flingBG.D = 500
+    flingBG.CFrame = RootPart.CFrame
+    flingBG.Parent = RootPart
     pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false) end)
 
     local startTime = now()
     local done=false
     local flingObj={ bv=flingBV, conn=nil, watchdog=nil }
+
     local function cleanup(success, manual)
         if done then return end
         done=true
@@ -11312,28 +11946,36 @@ local function SkidFling(TargetPlayer)
         if flingObj.conn then pcall(function() flingObj.conn:Disconnect() end) end
         if flingObj.watchdog then pcall(task.cancel, flingObj.watchdog) end
         if flingBV then pcall(function() flingBV:Destroy() end) flingBV=nil end
+        if flingBG then pcall(function() flingBG:Destroy() end) flingBG=nil end
+        local function snapHome()
+            if not (RootPart and RootPart.Parent and flingOldPos) then return end
+            RootPart.AssemblyLinearVelocity = V3_ZERO
+            RootPart.AssemblyAngularVelocity = V3_ZERO
+            RootPart.Velocity = V3_ZERO
+            RootPart.RotVelocity = V3_ZERO
+            RootPart.CFrame = flingOldPos * cfr(0, 0.5, 0)
+            pcall(function() Character:SetPrimaryPartCFrame(flingOldPos * cfr(0, 0.5, 0)) end)
+            pcall(function() Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+        end
+        snapHome()
+        pcall(function() Humanoid.PlatformStand = false end)
         pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true) end)
         pcall(function() Workspace.CurrentCamera.CameraSubject = Humanoid end)
-        if config.autoReturn and flingOldPos then
-            local tries=0
-            repeat
-                if not RootPart or not RootPart.Parent then break end
-                pcall(function()
-                    RootPart.CFrame = flingOldPos * cfr(0,.5,0)
-                    Character:SetPrimaryPartCFrame(flingOldPos * cfr(0,.5,0))
-                    Humanoid:ChangeState("GettingUp")
-                    for _, part in pairs(Character:GetChildren()) do
-                        if part:IsA("BasePart") then
-                            part.Velocity, part.RotVelocity = V3_ZERO, V3_ZERO
-                        end
-                    end
-                end)
-                task.wait()
-                tries=tries+1
-                if tries>20 then break end
-            until (RootPart.Position - flingOldPos.p).Magnitude < 25
-        end
-        pcall(function() Workspace.FallenPartsDestroyHeight = flingFPDH end)
+        -- домой и обнуление скорости ДО возврата kill-plane, иначе себя кидает в войд
+        local tries=0
+        repeat
+            snapHome()
+            task.wait()
+            tries=tries+1
+            if tries>15 then break end
+            if not RootPart or not RootPart.Parent or not flingOldPos then break end
+        until (RootPart.Position - flingOldPos.Position).Magnitude < 20
+        snapHome()
+        pcall(function()
+            local h = flingFPDH
+            if type(h) ~= "number" or h ~= h then h = -500 end
+            Workspace.FallenPartsDestroyHeight = h
+        end)
         BindableButtons.ResetActive=false
         StatusHUD.Set("idle")
     end
@@ -11341,67 +11983,83 @@ local function SkidFling(TargetPlayer)
     currentFling=flingObj
     BindableButtons.ResetActive=true
     StatusHUD.Set("active", TargetPlayer.Name)
-    flingObj.watchdog = task.delay((config.flingDuration or 2)+2, function() if not done then cleanup(false) end end)
+    flingObj.watchdog = task.delay(duration + 2, function() if not done then cleanup(false) end end)
 
-    local function FPos(BasePart, Pos, Ang)
-        if not RootPart or not RootPart.Parent then return end
+    flingObj.conn = RunService.Heartbeat:Connect(function()
+        if done then return end
+        local elapsed = now() - startTime
+        local liveChar = TargetPlayer.Character
+        if elapsed > duration or not Character.Parent or not RootPart.Parent
+            or not liveChar or liveChar ~= TCharacter then
+            cleanup(true)
+            return
+        end
+        local liveHum = liveChar:FindFirstChildOfClass("Humanoid")
+        local liveRoot = liveChar:FindFirstChild("HumanoidRootPart") or TRootPart
+        local liveHead = liveChar:FindFirstChild("Head")
+        if not (liveRoot and liveRoot.Parent) then cleanup(true) return end
+
+        local vel = liveRoot.AssemblyLinearVelocity
+        local horiz = v3(vel.X, 0, vel.Z)
+        local speed = horiz.Magnitude
+        local ping = 0.08
         pcall(function()
-            RootPart.CFrame = cfr(BasePart.Position) * Pos * Ang
-            Character:SetPrimaryPartCFrame(cfr(BasePart.Position) * Pos * Ang)
-            RootPart.Velocity = v3(9e7*velMult, 9e7*10*velMult, 9e7*velMult)
-            RootPart.RotVelocity = v3(9e8*rotMult, 9e8*rotMult, 9e8*rotMult)
+            local p = LocalPlayer:GetNetworkPing()
+            if type(p)=="number" and p==p then ping = math.max(p, 0.05) end
         end)
-    end
-
-    local function SFBasePart(BasePart)
-        local TimeToWait = config.flingDuration or 2
-        local Time = tick()
-        local Angle = 0
-        repeat
-            if done then break end
-            if RootPart and THumanoid and BasePart and BasePart.Parent then
-                if BasePart.Velocity.Magnitude < 50 then
-                    Angle = Angle + 100
-                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,1.5,0) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0) + THumanoid.MoveDirection, CFrame.Angles(math.rad(Angle),0,0))
-                    task.wait()
-                else
-                    FPos(BasePart, cfr(0,1.5,THumanoid.WalkSpeed), CFrame.Angles(math.rad(90),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,-THumanoid.WalkSpeed), CFrame.Angles(0,0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,1.5,THumanoid.WalkSpeed), CFrame.Angles(math.rad(90),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(math.rad(90),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(0,0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(math.rad(90),0,0))
-                    task.wait()
-                    FPos(BasePart, cfr(0,-1.5,0), CFrame.Angles(0,0,0))
-                    task.wait()
-                end
-            else
-                task.wait()
+        -- центр = тело + короткий lead по пингу (не уезжаем вперёд мимо)
+        local center = liveRoot.Position + horiz * (ping * 2 + 0.08)
+        if liveHum then
+            local md = liveHum.MoveDirection
+            if md.Magnitude > 0.1 then
+                center = center + md * ((liveHum.WalkSpeed or 16) * ping)
             end
-        until Time + TimeToWait < tick()
-    end
+        end
 
-    if TRootPart then SFBasePart(TRootPart)
-    elseif THead then SFBasePart(THead)
-    elseif Handle then SFBasePart(Handle)
-    else Notify("Fling", TargetPlayer.Name.." has no valid parts",2) end
+        local pass = 0.28
+        local passN = math.floor(elapsed / pass)
+        local dir
+        if speed > 2 then
+            dir = horiz.Unit
+        elseif liveHum and liveHum.MoveDirection.Magnitude > 0.1 then
+            dir = liveHum.MoveDirection.Unit
+        else
+            local yaw = passN * 1.047
+            dir = v3(math.cos(yaw), 0, math.sin(yaw))
+        end
+        local t = (elapsed % pass) / pass
+        local headY = (liveHead and liveHead.Parent) and liveHead.Position.Y or (center.Y + 1.5)
+        -- короткий прокол: больше кадров ВНУТРИ хитбокса, шух всё равно через торс
+        local extent = (speed > 6) and 0.9 or 1.35
+        local from = center + dir * extent + v3(0, (headY - center.Y) + startStuds, 0)
+        local to = center - dir * extent + v3(0, -3, 0)
+        local pos = from:Lerp(to, t)
+        -- на бегу прижимаем XZ к центру тела, иначе пролетаем мимо
+        if speed > 4 then
+            local stick = 0.55
+            pos = v3(
+                pos.X * (1 - stick) + center.X * stick,
+                pos.Y,
+                pos.Z * (1 - stick) + center.Z * stick
+            )
+        end
+        local spin = elapsed * 90
+        local cf = cfr(pos) * CFrame.Angles(math.pi / 2, spin, 0)
+        RootPart.CFrame = cf
+        pcall(function() Character:SetPrimaryPartCFrame(cf) end)
+        RootPart.AssemblyLinearVelocity = v3(0, -downForce, 0)
+        RootPart.AssemblyAngularVelocity = v3(7500 * velMult, 7500 * velMult, 7500 * velMult)
+        local toT = center - RootPart.Position
+        if flingBV then
+            if toT.Magnitude > 0.05 then flingBV.Velocity = toT.Unit * downForce
+            else flingBV.Velocity = v3(0, -downForce, 0) end
+        end
+        if flingBG then flingBG.CFrame = cf end
+    end)
 
-    cleanup(true)
+    local timeout = now() + duration + 1
+    while not done and now() < timeout do task.wait() end
+    if not done then cleanup(true) end
     return true
 end
 
@@ -11674,6 +12332,8 @@ listSection:AddButton("🧹 Clear WL", function() clearTable(state.whitelist); N
 local settingsSection = AddSection("⚙️ Tuning")
 settingsSection:AddSlider("Fling Duration", 1, 5, config.flingDuration, function(v) config.flingDuration=v; saveConfig() end)
 settingsSection:AddSlider("Fling Power", 1, 3, config.flingPower, function(v) config.flingPower=v; saveConfig() end)
+settingsSection:AddSlider("Prediction", 0, 20, config.predictionStuds, function(v) config.predictionStuds=v; saveConfig() end)
+settingsSection:AddSlider("Start Height", -5, 20, config.startStuds, function(v) config.startStuds=v; saveConfig() end)
 settingsSection:AddSlider("Aura Radius", 5, 50, config.auraStuds, function(v) config.auraStuds=v; saveConfig() end)
 settingsSection:AddSlider("Loop Interval", 0.1, 1.0, config.loopInterval, function(v) config.loopInterval=v; saveConfig() end)
 settingsSection:AddSlider("Aura Interval", 0.1, 1.0, config.auraInterval, function(v) config.auraInterval=v; saveConfig() end)
@@ -11793,6 +12453,8 @@ ODHX.Bind("⚙️ Tuning", "Notifications", "Toggle", function() return config.n
 ODHX.Bind("🔘 Binds", "SFX 🔇", "Toggle", function() return config.muteSounds end)
 ODHX.Bind("⚙️ Tuning", "Fling Duration", "Slider", function() return config.flingDuration end)
 ODHX.Bind("⚙️ Tuning", "Fling Power", "Slider", function() return config.flingPower end)
+ODHX.Bind("⚙️ Tuning", "Prediction", "Slider", function() return config.predictionStuds end)
+ODHX.Bind("⚙️ Tuning", "Start Height", "Slider", function() return config.startStuds end)
 ODHX.Bind("⚙️ Tuning", "Aura Radius", "Slider", function() return config.auraStuds end)
 ODHX.Bind("⚙️ Tuning", "Loop Interval", "Slider", function() return config.loopInterval end)
 ODHX.Bind("⚙️ Tuning", "Aura Interval", "Slider", function() return config.auraInterval end)
@@ -11810,3 +12472,1989 @@ ODHX.Finish()
         notify("fling_мой.lua.txt failed to load: " .. tostring(__pluginError), 7)
     end
 end
+
+getgenv().__NoirSkinContext = {
+    win = win, template = visualContent, C = C, New = New, corner = corner, stroke = stroke, text = text,
+    notify = notify, persistence = NoirPersistence, localPlayer = LocalPlayer, players = Players,
+    runService = RunService, replicatedStorage = ReplicatedStorage, workspace = Workspace,
+}
+task.defer(function()
+    local compiler = loadstring
+    if type(compiler) ~= "function" then return end
+    local source = [==[
+local CTX = getgenv().__NoirSkinContext
+if type(CTX) ~= "table" or not CTX.win then return end
+
+local Players = CTX.players
+local LocalPlayer = CTX.localPlayer
+local RunService = CTX.runService
+local ReplicatedStorage = CTX.replicatedStorage
+local Workspace = CTX.workspace
+local New = CTX.New
+local C = CTX.C
+local corner = CTX.corner
+local stroke = CTX.stroke
+local text = CTX.text
+local notify = CTX.notify
+local persistence = CTX.persistence
+
+local RARITIES = { "Common", "Uncommon", "Rare", "Legendary", "Godly", "Ancient", "Unique", "Chroma", "Vintage" }
+local RARITY_COLOR = {
+    Common = Color3.fromRGB(175, 178, 186),
+    Uncommon = Color3.fromRGB(72, 210, 118),
+    Rare = Color3.fromRGB(64, 140, 255),
+    Legendary = Color3.fromRGB(176, 86, 255),
+    Godly = Color3.fromRGB(255, 72, 96),
+    Ancient = Color3.fromRGB(255, 186, 64),
+    Unique = Color3.fromRGB(255, 92, 176),
+    Chroma = Color3.fromRGB(72, 255, 230),
+    Vintage = Color3.fromRGB(196, 148, 92),
+}
+
+local state = {
+    enabled = false,
+    keep = true,
+    kind = "Knife",
+    query = "",
+    rarity = nil,
+    selectedKnife = nil,
+    selectedGun = nil,
+    catalog = { Knife = {}, Gun = {} },
+    cards = {},
+    templates = {},
+    meshLib = {},
+    applying = false,
+}
+
+pcall(function()
+    local saved = persistence and persistence.data and persistence.data.skins
+    if type(saved) == "table" then
+        state.enabled = saved.enabled == true
+        state.keep = saved.keep ~= false
+        state.kind = saved.kind == "Gun" and "Gun" or "Knife"
+        state.selectedKnife = saved.knife
+        state.selectedGun = saved.gun
+        if type(saved.meshes) == "table" then state.meshLib = saved.meshes end
+    end
+end)
+
+local function save()
+    if not (persistence and persistence.data) then return end
+    persistence.data.skins = {
+        enabled = state.enabled,
+        keep = state.keep,
+        kind = state.kind,
+        knife = state.selectedKnife,
+        gun = state.selectedGun,
+        meshes = state.meshLib,
+    }
+    if persistence.Save then pcall(persistence.Save) end
+end
+
+local JUNK_NAME = {
+    knifedisplay = true, gundisplay = true, display = true, handle = true, blade = true,
+    template = true, preview = true, camera = true, humanoid = true, part = true,
+    mesh = true, model = true, weapon = true, default = true, classic = true,
+}
+local MARKERS = { "Amerilaser", "Luger", "Seer", "Tides", "Pixel", "BattleAxe", "ChromaLuger", "Harvester", "Batwing" }
+
+local function normalizeRarity(value)
+    local textValue = tostring(value or "Common")
+    local lower = string.lower(textValue)
+    for _, name in ipairs(RARITIES) do
+        if string.lower(name) == lower then return name end
+    end
+    if string.find(lower, "chroma", 1, true) then return "Chroma" end
+    if string.find(lower, "godly", 1, true) then return "Godly" end
+    if string.find(lower, "ancient", 1, true) then return "Ancient" end
+    if string.find(lower, "unique", 1, true) then return "Unique" end
+    if string.find(lower, "legend", 1, true) then return "Legendary" end
+    if string.find(lower, "vintage", 1, true) or string.find(lower, "classic", 1, true) then return "Vintage" end
+    if string.find(lower, "uncommon", 1, true) then return "Uncommon" end
+    if string.find(lower, "rare", 1, true) then return "Rare" end
+    return "Common"
+end
+
+local function toImage(value)
+    if type(value) == "number" and value > 100 then return "rbxassetid://" .. tostring(value) end
+    if type(value) ~= "string" or value == "" then return "" end
+    if string.find(value, "rbxthumb://", 1, true) or string.find(value, "rbxassetid://", 1, true) then return value end
+    local id = string.match(value, "(%d%d%d%d%d+)")
+    if id then return "rbxassetid://" .. id end
+    return ""
+end
+local function raw(t, key)
+    if type(t) ~= "table" then return nil end
+    local ok, value = pcall(rawget, t, key)
+    return ok and value or nil
+end
+
+local function itemImage(data)
+    if type(data) ~= "table" then return "" end
+    for _, key in ipairs({ "Image", "ImageId", "ImageID", "Icon", "Thumbnail", "TextureId", "AssetId", "ItemImage", "Picture", "image", "IconImage", "InventoryImage", "ShopImage" }) do
+        local value = raw(data, key)
+        local img = toImage(value)
+        if img == "" and type(value) == "table" then
+            img = toImage(raw(value, "Image") or raw(value, "Id") or raw(value, "id") or raw(value, "Icon"))
+        end
+        if img ~= "" then return img end
+    end
+    local nested = raw(data, "Images") or raw(data, "Icons")
+    if type(nested) == "table" then
+        local img = toImage(raw(nested, "Shop") or raw(nested, "Inventory") or raw(nested, "Image") or raw(nested, "Icon"))
+        if img ~= "" then return img end
+    end
+    return ""
+end
+
+local function itemKind(data, key)
+    local typ = ""
+    if type(data) == "table" then
+        typ = string.lower(tostring(raw(data, "ItemType") or raw(data, "itemType") or raw(data, "Type") or raw(data, "WeaponType") or raw(data, "Class") or ""))
+    end
+    if typ == "pet" or typ == "box" or typ == "crate" or typ == "effect" or typ == "emote" or typ == "perk" or typ == "misc" or typ == "toy" then
+        return nil
+    end
+    if string.find(typ, "gun", 1, true) or typ == "ranged" then return "Gun" end
+    if string.find(typ, "knife", 1, true) or typ == "melee" then return "Knife" end
+    local n = string.lower(tostring((type(data) == "table" and (raw(data, "ItemName") or raw(data, "Name"))) or key or ""))
+    if n == "" then return nil end
+    if string.find(n, "knife", 1, true) or string.find(n, "blade", 1, true) or string.find(n, "axe", 1, true) or string.find(n, "sword", 1, true) or string.find(n, "scythe", 1, true) then
+        return "Knife"
+    end
+    if string.find(n, "gun", 1, true) or string.find(n, "luger", 1, true) or string.find(n, "revolver", 1, true) or string.find(n, "shot", 1, true) or string.find(n, "cannon", 1, true) or string.find(n, "pistol", 1, true) or string.find(n, "blaster", 1, true) then
+        if n == "amerilaser" or n == "laser" then return "Knife" end
+        return "Gun"
+    end
+    return nil
+end
+
+local function playerData()
+    local pd
+    pcall(function()
+        if type(getrenv) == "function" then
+            local g = getrenv()._G
+            pd = g and g.PlayerData
+        end
+    end)
+    return type(pd) == "table" and pd or nil
+end
+
+local function addItem(name, kind, rarity, image)
+    if type(name) ~= "string" or name == "" or name == "N/A" then return end
+    if JUNK_NAME[string.lower(name)] then return end
+    if #name < 2 or #name > 42 then return end
+    local list = state.catalog[kind]
+    if not list then return end
+    for _, item in ipairs(list) do
+        if item.name == name then
+            if (item.image == "" or item.image == nil) and image and image ~= "" then item.image = image end
+            if item.rarity == "Common" and rarity and rarity ~= "Common" then item.rarity = rarity end
+            return
+        end
+    end
+    if string.sub(string.lower(name), 1, 6) == "chroma" then rarity = "Chroma" end
+    list[#list + 1] = { name = name, kind = kind, rarity = rarity or "Common", image = image or "", meshId = "", textureId = "" }
+end
+
+local function harvestEntry(data, key)
+    if type(data) ~= "table" then return end
+    local name = raw(data, "ItemName") or raw(data, "itemName") or raw(data, "Name") or raw(data, "DisplayName") or (type(key) == "string" and key or nil)
+    local kind = itemKind(data, name)
+    local img = itemImage(data)
+    if not kind then
+        for _, list in pairs(state.catalog) do
+            for _, item in ipairs(list) do
+                if item.name == name then
+                    if img ~= "" and (item.image == "" or item.image == nil) then item.image = img end
+                    return
+                end
+            end
+        end
+        return
+    end
+    local rarity = normalizeRarity(raw(data, "Rarity") or raw(data, "rarity") or raw(data, "Tier"))
+    if string.sub(string.lower(name), 1, 6) == "chroma" then rarity = "Chroma" end
+    addItem(name, kind, rarity, img)
+    local meshId = toImage(raw(data, "MeshId") or raw(data, "MeshID") or raw(data, "meshId"))
+    local texId = toImage(raw(data, "TextureId") or raw(data, "TextureID") or raw(data, "textureId") or raw(data, "Texture"))
+    if meshId ~= "" or texId ~= "" then
+        local list = state.catalog[kind]
+        if list then
+            for _, item in ipairs(list) do
+                if item.name == name then
+                    if meshId ~= "" then item.meshId = meshId end
+                    if texId ~= "" then item.textureId = texId end
+                    break
+                end
+            end
+        end
+    end
+end
+
+local function isItemDictionary(t)
+    if type(t) ~= "table" then return false end
+    local hits = 0
+    for _, key in ipairs(MARKERS) do
+        if raw(t, key) ~= nil then hits += 1 end
+    end
+    return hits >= 2
+end
+
+local function harvestTable(t)
+    if type(t) ~= "table" then return end
+    pcall(function()
+        if isItemDictionary(t) then
+            for key, value in pairs(t) do harvestEntry(value, key) end
+            return
+        end
+        harvestEntry(t, nil)
+        for _, key in ipairs({ "Item", "Items", "Weapons", "Skins", "Database" }) do
+            local bucket = raw(t, key)
+            if type(bucket) == "table" then
+                for name, value in pairs(bucket) do harvestEntry(value, name) end
+            end
+        end
+    end)
+end
+
+local function compactName(value)
+    return string.lower((tostring(value or ""):gsub("[%s%p]", "")))
+end
+
+local function indexTemplates()
+    local function consider(inst)
+        if not inst or inst.Name == "" then return end
+        local n = inst.Name
+        if n == "KnifeDisplay" or n == "GunDisplay" or n == "Handle" or n == "Knife" or n == "Gun" then return end
+        if JUNK_NAME[string.lower(n)] then return end
+        local useful = inst:IsA("Tool") or inst:IsA("Model") or inst:IsA("MeshPart") or inst:FindFirstChildOfClass("SpecialMesh") or inst:FindFirstChild("Handle")
+        if useful and state.templates[n] == nil then state.templates[n] = inst end
+    end
+    for _, root in ipairs({ ReplicatedStorage, game:GetService("Lighting"), Workspace, game:GetService("StarterPack"), game:GetService("ReplicatedFirst") }) do
+        pcall(function()
+            for _, inst in ipairs(root:GetDescendants()) do consider(inst) end
+        end)
+    end
+    pcall(function()
+        if type(getnilinstances) ~= "function" then return end
+        for _, inst in ipairs(getnilinstances()) do consider(inst) end
+    end)
+end
+
+local function getTemplate(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    local direct = state.templates[name]
+    if direct then return direct end
+    local want = compactName(name)
+    for n, inst in pairs(state.templates) do
+        if inst and compactName(n) == want then return inst end
+    end
+end
+
+local function pullEnvTables()
+    pcall(function()
+        if type(getrenv) == "function" then
+            local env = getrenv()
+            harvestTable(env)
+            if type(env) == "table" then harvestTable(env._G) harvestTable(env.shared) end
+        end
+    end)
+    pcall(function() harvestTable(getgenv() and getgenv()._G) end)
+    pcall(function()
+        if type(getsenv) ~= "function" or type(getscripts) ~= "function" then return end
+        for _, script in ipairs(getscripts()) do
+            local ok, env = pcall(getsenv, script)
+            if ok then harvestTable(env) end
+        end
+    end)
+    pcall(function()
+        for _, inst in ipairs(ReplicatedStorage:GetDescendants()) do
+            if inst:IsA("ModuleScript") then
+                local name = string.lower(inst.Name)
+                if name == "database" or name == "itemdata" or name == "items" or name == "weapondata" or name == "skindata" then
+                    local ok, mod = pcall(require, inst)
+                    if ok then harvestTable(mod) end
+                end
+            end
+        end
+    end)
+    pcall(function()
+        local dbFolder = ReplicatedStorage:FindFirstChild("Database")
+        if dbFolder then
+            for _, inst in ipairs(dbFolder:GetDescendants()) do
+                if inst:IsA("ModuleScript") then
+                    local ok, mod = pcall(require, inst)
+                    if ok then harvestTable(mod) end
+                end
+            end
+        end
+    end)
+    pcall(function()
+        local function invokeHarvest(obj, remote)
+            if not obj then return end
+            for _, key in ipairs({ false, "Item", "Items", "Weapons", "Database" }) do
+                pcall(function()
+                    local data
+                    if remote then
+                        data = key == false and obj:InvokeServer() or obj:InvokeServer(key)
+                    else
+                        data = key == false and obj:Invoke() or obj:Invoke(key)
+                    end
+                    harvestTable(data)
+                    if type(data) == "table" then harvestTable(raw(data, "Item") or raw(data, "Items")) end
+                end)
+            end
+        end
+        invokeHarvest(ReplicatedStorage:FindFirstChild("GetSyncData"), true)
+        invokeHarvest(ReplicatedStorage:FindFirstChild("GetSyncDataServer"), false)
+        invokeHarvest(ReplicatedStorage:FindFirstChild("GetDataServer"), false)
+    end)
+end
+
+local function pullGarbage()
+    if type(getgc) ~= "function" then return end
+    local ok, dumped = pcall(getgc, true)
+    if not ok or type(dumped) ~= "table" then return end
+    local scanned = 0
+    for _, object in pairs(dumped) do
+        scanned += 1
+        if scanned > 90000 then break end
+        if type(object) == "table" then
+            pcall(function()
+                if isItemDictionary(object) then
+                    harvestTable(object)
+                elseif type(raw(object, "ItemType")) == "string" or type(raw(object, "itemType")) == "string" then
+                    harvestEntry(object, raw(object, "ItemName") or raw(object, "Name"))
+                end
+            end)
+        end
+        if scanned % 4000 == 0 then task.wait() end
+    end
+end
+
+local function pullHttpFallback()
+    local raw
+    pcall(function()
+        raw = game:HttpGet("https://raw.githubusercontent.com/timez170/mm2-values/main/values.json")
+    end)
+    if type(raw) ~= "string" or raw == "" then return end
+    local HttpService = game:GetService("HttpService")
+    local ok, data = pcall(HttpService.JSONDecode, HttpService, raw)
+    local items = ok and type(data) == "table" and data.items
+    if type(items) ~= "table" then return end
+    for _, row in ipairs(items) do
+        if type(row) == "table" and type(row.name) == "string" then
+            local kind = itemKind({ ItemName = row.name, Rarity = row.category }, row.name) or "Knife"
+            local rarity = normalizeRarity(row.category)
+            if string.sub(string.lower(row.name), 1, 6) == "chroma" then rarity = "Chroma" end
+            addItem(row.name, kind, rarity, "")
+        end
+    end
+end
+
+local function pullGuiIcons()
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return end
+    local names = {}
+    for _, kind in ipairs({ "Knife", "Gun" }) do
+        for _, item in ipairs(state.catalog[kind]) do
+            names[string.lower(item.name)] = item
+            names[compactName(item.name)] = item
+        end
+    end
+    pcall(function()
+        for _, inst in ipairs(gui:GetDescendants()) do
+            if (inst:IsA("ImageLabel") or inst:IsA("ImageButton")) and inst.Image ~= "" then
+                local converted = toImage(inst.Image)
+                if converted ~= "" then
+                    local node = inst
+                    for _ = 1, 6 do
+                        if not node then break end
+                        for _, ch in ipairs(node:GetChildren()) do
+                            if ch:IsA("TextLabel") or ch:IsA("TextButton") then
+                                local item = names[string.lower(ch.Text or "")] or names[compactName(ch.Text)]
+                                if item and (item.image == "" or item.image == nil) then item.image = converted end
+                            end
+                        end
+                        node = node.Parent
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function rebuildCatalog()
+    state.catalog.Knife, state.catalog.Gun = {}, {}
+    state.templates = {}
+    pcall(function()
+        for k, v in pairs(MESH_DB) do
+            if type(v) == "table" then
+                addItem(k, v.kind or "Knife", v.rarity or "Godly", skinIcon(k))
+            end
+        end
+        for k, v in pairs(CATALOG_DB) do
+            if type(v) == "table" then
+                addItem(v.ItemName or k, v.ItemType or "Knife", v.Rarity or "Godly", v.Image or "")
+            end
+        end
+    end)
+    pcall(pullHttpFallback)
+    pcall(pullEnvTables)
+    pcall(pullGarbage)
+    pcall(pullGuiIcons)
+    pcall(indexTemplates)
+    local function sortList(list)
+        table.sort(list, function(a, b)
+            if a.rarity == b.rarity then return string.lower(a.name) < string.lower(b.name) end
+            return string.lower(a.name) < string.lower(b.name)
+        end)
+    end
+    sortList(state.catalog.Knife)
+    sortList(state.catalog.Gun)
+end
+
+local SKIN_TAG = "NoirSkin"
+
+local function getDisplayObj(char, slot)
+    if not char then return nil end
+    local ref = char:FindFirstChild("DisplayRef" .. slot)
+    if ref and ref:IsA("ObjectValue") and ref.Value and ref.Value.Parent then
+        return ref.Value
+    end
+    return char:FindFirstChild(slot .. "Display")
+end
+
+local function getAnchor(container)
+    if not container then return nil end
+    if container:IsA("Tool") then
+        local h = container:FindFirstChild("Handle")
+        if h and h:IsA("BasePart") then return h end
+    end
+    if container:IsA("BasePart") then return container end
+    local h = container:FindFirstChild("Handle", true)
+    if h and h:IsA("BasePart") then return h end
+    if container:IsA("Model") and container.PrimaryPart then return container.PrimaryPart end
+    return container:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function restoreSkin(container)
+    if not container then return end
+    local folder = container:FindFirstChild(SKIN_TAG)
+    if folder then folder:Destroy() end
+    local list = container:GetDescendants()
+    list[#list + 1] = container
+    for _, d in ipairs(list) do
+        local orig = d:GetAttribute("NoirOrigT")
+        if orig ~= nil then
+            pcall(function() d.Transparency = orig end)
+            d:SetAttribute("NoirOrigT", nil)
+        end
+    end
+    container:SetAttribute("NoirSkin", nil)
+end
+
+local function applySkinCore(container, srcObj)
+    local anchor = getAnchor(container)
+    if not (anchor and srcObj) then return false end
+    local ok, clone = pcall(function() return srcObj:Clone() end)
+    if not ok or not clone then return false end
+    for _, d in ipairs(clone:GetDescendants()) do
+        if d:IsA("LuaSourceContainer") or d:IsA("JointInstance") or d:IsA("WeldConstraint") or d:IsA("Humanoid") then
+            d:Destroy()
+        end
+    end
+    local parts = {}
+    if clone:IsA("BasePart") then parts[#parts + 1] = clone end
+    for _, d in ipairs(clone:GetDescendants()) do
+        if d:IsA("BasePart") then parts[#parts + 1] = d end
+    end
+    if #parts == 0 then
+        clone:Destroy()
+        return false
+    end
+    local ref = clone:IsA("Tool") and clone:FindFirstChild("Handle") or nil
+    if (not ref or not ref:IsA("BasePart")) and clone:IsA("Model") then ref = clone.PrimaryPart end
+    if not ref or not ref:IsA("BasePart") then ref = parts[1] end
+    local list = container:GetDescendants()
+    list[#list + 1] = container
+    for _, d in ipairs(list) do
+        if d:IsA("BasePart") or d:IsA("Decal") or d:IsA("Texture") then
+            if d:GetAttribute("NoirOrigT") == nil then d:SetAttribute("NoirOrigT", d.Transparency) end
+            pcall(function() d.Transparency = 1 end)
+        end
+    end
+    local folder = Instance.new("Folder")
+    folder.Name = SKIN_TAG
+    local refInv = ref.CFrame:Inverse()
+    local anchorCF = anchor.CFrame
+    for _, part in ipairs(parts) do
+        local rel = refInv * part.CFrame
+        part.Anchored = false
+        part.CanCollide = false
+        part.CanTouch = false
+        part.Massless = true
+        pcall(function() part.CanQuery = false end)
+        part.CFrame = anchorCF * rel
+        local w = Instance.new("Weld")
+        w.Part0 = anchor
+        w.Part1 = part
+        w.C0 = rel
+        w.Parent = part
+        part.Parent = folder
+    end
+    folder.Parent = container
+    if not clone:IsA("BasePart") then clone:Destroy() end
+    return true
+end
+
+local function equippedName(kind)
+    local pd = playerData()
+    if type(pd) ~= "table" then return nil end
+    local weapons = raw(pd, "Weapons") or raw(pd, "weapons")
+    local equipped = type(weapons) == "table" and (raw(weapons, "Equipped") or raw(weapons, "equipped"))
+    if type(equipped) == "table" then
+        if kind == "Gun" then return equipped.Gun or equipped.gun end
+        return equipped.Knife or equipped.knife
+    end
+    if kind == "Gun" then return pd.Gun or pd.EquippedGun end
+    return pd.Knife or pd.EquippedKnife
+end
+
+local function stashTemplate(name, inst)
+    if type(name) ~= "string" or name == "" or not inst then return end
+    if name == "Knife" or name == "Gun" or name == "KnifeDisplay" or name == "GunDisplay" or JUNK_NAME[string.lower(name)] then return end
+    if state.templates[name] then return end
+    local ok, cl = pcall(function() return inst:Clone() end)
+    if ok and cl then state.templates[name] = cl end
+end
+
+local function capturePlayers()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local char = plr.Character
+        if char then
+            for _, slot in ipairs({ "Knife", "Gun" }) do
+                local fromData = plr == LocalPlayer and equippedName(slot) or nil
+                local tool = char:FindFirstChild(slot)
+                if tool then
+                    local guess = tool:GetAttribute("ItemName") or tool:GetAttribute("SkinName") or fromData
+                    if guess and guess ~= slot then stashTemplate(guess, tool) end
+                end
+                local display = getDisplayObj(char, slot)
+                if display then
+                    local guess = display:GetAttribute("ItemName") or display:GetAttribute("SkinName") or fromData
+                    if guess then stashTemplate(guess, display) end
+                end
+            end
+        end
+    end
+end
+
+local function tryGetObjects(value)
+    local id = tostring(value or ""):match("(%d%d%d%d%d+)")
+    if not id then return nil end
+    local ok, objs = pcall(function()
+        return game:GetObjects("rbxassetid://" .. id)
+    end)
+    if not (ok and type(objs) == "table") then return nil end
+    for _, obj in ipairs(objs) do
+        if obj:IsA("Tool") or obj:IsA("Model") or obj:IsA("Accessory") or obj:IsA("BasePart") then return obj end
+        local inner = obj:FindFirstChildWhichIsA("Tool", true) or obj:FindFirstChildWhichIsA("Model", true) or obj:FindFirstChildWhichIsA("BasePart", true)
+        if inner then return inner end
+    end
+end
+
+local function stealViewport()
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return nil end
+    local best
+    pcall(function()
+        for _, v in ipairs(gui:GetDescendants()) do
+            if v:IsA("ViewportFrame") then
+                for _, d in ipairs(v:GetDescendants()) do
+                    if d:IsA("Model") or d:IsA("MeshPart") or (d:IsA("BasePart") and d:FindFirstChildOfClass("SpecialMesh")) then
+                        if d.Name ~= "WorldModel" and d.Name ~= "Camera" then best = d end
+                    end
+                end
+            end
+        end
+    end)
+    return best
+end
+
+local function clickNamed(name)
+    local gui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not gui then return end
+    local want = string.lower(name)
+    pcall(function()
+        for _, v in ipairs(gui:GetDescendants()) do
+            if (v:IsA("TextLabel") or v:IsA("TextButton")) and string.lower(v.Text or "") == want then
+                local btn = v
+                for _ = 1, 6 do
+                    if not btn then break end
+                    if btn:IsA("GuiButton") then
+                        pcall(function() firesignal(btn.MouseButton1Click) end)
+                        pcall(function() firesignal(btn.Activated) end)
+                        return
+                    end
+                    btn = btn.Parent
+                end
+            end
+        end
+    end)
+end
+
+local MESH_DB = {
+    ["AmericaGun"] = { mesh = "rbxassetid://25298496", tex = "rbxassetid://164669251", sx = 1.5, sy = 1.5, sz = 1.5, kind = "Gun", name = "America", rarity = "Classic", itemid = 196751752, mk = "SpecialMesh", grip = {0,-0.65,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["AmericaSword"] = { mesh = "rbxassetid://262027449", tex = "rbxassetid://445805934", sx = 0.6, sy = 0.6, sz = 0.6, kind = "Knife", name = "Old Glory", rarity = "Godly", itemid = 473570051, mk = "SpecialMesh", grip = {0.054822,0.179559,1.24594,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {0.0177259,0.0807257,-0.124788,0.999176,0.00772075,0.0398573,-0.0403774,0.0867157,0.995415,0.00422909,-0.996203,0.0869559}, snd = "rbxassetid://12222225", spd = 1.25 },
+    ["Amerilaser"] = { mesh = "rbxassetid://116657254", tex = "rbxassetid://445884341", sx = 0.7, sy = 0.7, sz = 0.7, kind = "Gun", name = "Amerilaser", rarity = "Godly", itemid = 446050753, mk = "SpecialMesh", grip = {0.054822,-0.366262,0.815063,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.1,-0.270276,0.243827,1,0,0,0,0.207886,0.978153,0,-0.978153,0.207886}, snd = "rbxassetid://106018135", spd = 0.5 },
+    ["AuroraGun"] = { mesh = "rbxassetid://16070198638", tex = "rbxassetid://107873598804292", sx = 0.0469345, sy = 0.0469345, sz = 0.0469345, kind = "Gun", name = "Borealis", rarity = "Godly", itemid = 108635848059846, mk = "MeshPart", grip = {0,-0.217888,0.660378,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["AuroraKnife"] = { mesh = "rbxassetid://16025287191", tex = "rbxassetid://97521579968070", sx = 0.0753198, sy = 0.0753198, sz = 0.0753198, kind = "Knife", name = "Australis", rarity = "Godly", itemid = 101343256002049, mk = "MeshPart", grip = {0,-1.19981,-0.104736,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BattleAxe"] = { mesh = "rbxassetid://1084767698", tex = "rbxassetid://1084767901", sx = 0.55, sy = 0.55, sz = 0.555, kind = "Knife", name = "BattleAxe", rarity = "Godly", itemid = 1133237368, mk = "SpecialMesh", grip = {0.0177402,-0.713677,0.0700035,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BattleAxe2"] = { mesh = "rbxassetid://2397016406", tex = "rbxassetid://2513526862", sx = 0.735696, sy = 0.735696, sz = 0.735696, kind = "Knife", name = "BattleAxe II", rarity = "Godly", itemid = 2513535503, mk = "MeshPart", grip = {0,-1.0273,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Bauble"] = { mesh = "rbxassetid://107813118898769", tex = "rbxassetid://137012201908941", sx = 0.0472855, sy = 0.0472855, sz = 0.0472855, kind = "Gun", name = "Bauble", rarity = "Godly", itemid = 84481559639371, mk = "MeshPart", grip = {0,-0.355123,0.703253,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BaubleChroma"] = { mesh = "rbxassetid://107813118898769", tex = "rbxassetid://137012201908941", sx = 0.0470986, sy = 0.0470986, sz = 0.0470986, kind = "Gun", name = "Bauble", rarity = "Godly", itemid = 84481559639371, mk = "SpecialMesh", grip = {0,-0.345,0.660999,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.238636,0.107277,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["BaubleKnife"] = { mesh = "rbxassetid://116508096109443", tex = "rbxassetid://135843404105980", sx = 0.0731184, sy = 0.0731184, sz = 0.0731184, kind = "Knife", name = "Ornament", rarity = "Godly", itemid = 111092946728824, mk = "MeshPart", grip = {0,-1.3,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BaubleKnifeChroma"] = { mesh = "rbxassetid://116508096109443", tex = "rbxassetid://135843404105980", sx = 0.073257, sy = 0.073257, sz = 0.073257, kind = "Knife", name = "Ornament", rarity = "Godly", itemid = 111092946728824, mk = "SpecialMesh", grip = {0,-1.3,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Bioblade"] = { mesh = "rbxassetid://4662600017", tex = "rbxassetid://4751538400", sx = 0.0684207, sy = 0.0684207, sz = 0.0684207, kind = "Knife", name = "Bioblade", rarity = "Godly", itemid = 4751539262, mk = "MeshPart", grip = {0,-1.17,0.0699999,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Blaster"] = { mesh = "rbxassetid://92656610", tex = "rbxassetid://386269992", sx = 0.4, sy = 0.45, sz = 0.5, kind = "Gun", name = "Blaster", rarity = "Godly", itemid = 386277381, mk = "SpecialMesh", grip = {0,-0.418468,0.658007,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.15,0.0549043,0.204904,1,0,0,0,0.173624,0.984812,0,-0.984812,0.173624} },
+    ["Blizzard"] = { mesh = "rbxassetid://77235373292363", tex = "rbxassetid://131115493735176", sx = 0.0429874, sy = 0.0429874, sz = 0.0429874, kind = "Gun", name = "Blizzard", rarity = "Godly", itemid = 88928894807422, mk = "MeshPart", grip = {0,-0.180945,0.489342,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["BlizzardChroma"] = { mesh = "rbxassetid://77235373292363", tex = "rbxassetid://97280881789656", sx = 0.0433356, sy = 0.0433356, sz = 0.0433356, kind = "Gun", name = "Blizzard", rarity = "Godly", itemid = 88928894807422, mk = "SpecialMesh", grip = {0,-0.181,0.489,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.192723,0.0866371,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["BloodKnife"] = { mesh = "rbxassetid://51682254", tex = "rbxassetid://51941734", sx = 0.5, sy = 0.5, sz = 0.3, kind = "Knife", name = "Blood", rarity = "Classic", itemid = 473573464, mk = "SpecialMesh", grip = {0,-0.127214,-0.9,1,0,0,0,0,-1,0,1,0}, att = "CustomAttachment", acf = {0.0034399,-0.203739,0.284567,0.997816,0.000875117,-0.0660461,-0.0657253,-0.0861623,-0.994111,-0.00656065,0.996281,-0.0859166} },
+    ["Bloom"] = { mesh = "rbxassetid://73266355643345", tex = "rbxassetid://103489229144925", sx = 0.074, sy = 0.074, sz = 0.074, kind = "Knife", name = "Bloom", rarity = "Godly", itemid = 128553215441980, mk = "MeshPart", grip = {0,-1.19981,-0.023262,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Blossom_G"] = { mesh = "rbxassetid://12322809632", tex = "rbxassetid://12322809917", sx = 0.0437653, sy = 0.0437653, sz = 0.0437653, kind = "Gun", name = "Blossom", rarity = "Godly", itemid = 12339377105, mk = "MeshPart", grip = {4.76837e-07,-0.313024,0.631208,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["BlueCandy"] = { mesh = "rbxassetid://19040337", tex = "rbxassetid://131330386966411", sx = 1.1, sy = 1.4, sz = 1.1, kind = "Knife", name = "Blue Candy", rarity = "Unique", itemid = 1489495701, mk = "SpecialMesh", grip = {0.0770696,0.794289,0,-4.98295e-05,1.04494e-06,1,-0.0418635,-0.999123,-1.04494e-06,0.999123,-0.0418635,4.98891e-05}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BlueHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://8194214938", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Blue Harvester", rarity = "Unique", itemid = 8194219645, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.00392157, bg = 0.352941, bb = 1, bw = 0.2 },
+    ["BlueSeer"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://3184062977", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Blue Seer", rarity = "Godly", itemid = 3184125087, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BlueSugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://126757843697598", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Blue Sugar", rarity = "Unique", itemid = 3215262120, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
+    ["BlueVampiresEdge"] = { mesh = "rbxassetid://5841895234", tex = "rbxassetid://116887066557099", sx = 0.067029, sy = 0.067029, sz = 0.067029, kind = "Knife", name = "Blue Vamp's Edge", rarity = "Unique", itemid = 6084854835, mk = "MeshPart", grip = {0.0177402,-1.31739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Boneblade"] = { mesh = "rbxassetid://1857106669", tex = "rbxassetid://2514936637", sx = 0.721065, sy = 0.721065, sz = 0.721065, kind = "Knife", name = "Boneblade", rarity = "Godly", itemid = 2513505477, mk = "MeshPart", grip = {0,-1.06141,-0.044395,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BonebladeChroma"] = { mesh = "rbxassetid://1857106669", tex = "rbxassetid://2513576265", sx = 0.73, sy = 0.73, sz = 0.73, kind = "Knife", name = "Boneblade", rarity = "Godly", itemid = 2513598419, mk = "SpecialMesh", grip = {0,-1,-0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BronzeCandy"] = { mesh = "rbxassetid://19040337", tex = "rbxassetid://122395366490499", sx = 1.1, sy = 1.4, sz = 1.1, kind = "Knife", name = "Bronze Candy", rarity = "Unique", itemid = 1520189487, mk = "SpecialMesh", grip = {0.0770696,0.794289,0,-4.98295e-05,1.04494e-06,1,-0.0418635,-0.999123,-1.04494e-06,0.999123,-0.0418635,4.98891e-05}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BronzeHallow"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://71680119591069", sx = 0.57, sy = 0.57, sz = 0.57, kind = "Knife", name = "Bronze Hallow", rarity = "Unique", itemid = 2511342846, mk = "SpecialMesh", grip = {0,-0.953644,0.0308308,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BronzeHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://117093283533361", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Bronze Harvester", rarity = "Unique", itemid = 8194221072, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.961959, bg = 0.42591, bb = 0, bw = 0.2 },
+    ["BronzeIceblaster"] = { mesh = "rbxassetid://6125828567", tex = "rbxassetid://6246948951", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Bronze Iceblaster", rarity = "Unique", itemid = 6404167442, mk = "MeshPart", grip = {-0.00846958,-0.700001,-0.546006,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BronzeIcebreaker"] = { mesh = "rbxassetid://6124173614", tex = "rbxassetid://6237991982", sx = 0.968497, sy = 0.968497, sz = 0.968497, kind = "Knife", name = "Bronze Icebreaker", rarity = "Unique", itemid = 6404127119, mk = "MeshPart", grip = {0,-0.95,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["BronzeSugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://134631320762313", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Bronze Sugar", rarity = "Unique", itemid = 3215261913, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
+    ["BronzeVampiresEdge"] = { mesh = "rbxassetid://5841895234", tex = "rbxassetid://124129066234254", sx = 0.067029, sy = 0.067029, sz = 0.067029, kind = "Knife", name = "Bronze Vamp's Edge", rarity = "Unique", itemid = 6084842077, mk = "MeshPart", grip = {0.0177402,-1.31739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Candleflame"] = { mesh = "rbxassetid://7791364860", tex = "rbxassetid://7791364988", sx = 0.0667517, sy = 0.0667517, sz = 0.0667517, kind = "Knife", name = "Candleflame", rarity = "Godly", itemid = 7805833970, mk = "MeshPart", grip = {0,-1.37884,-0.128277,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["CandleflameChroma"] = { mesh = "rbxassetid://7791364860", tex = "rbxassetid://7806078587", sx = 0.065, sy = 0.065, sz = 0.065, kind = "Knife", name = "Candleflame", rarity = "Godly", itemid = 7806121918, mk = "SpecialMesh", grip = {0,-1.37884,-0.128277,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Candy"] = { mesh = "rbxassetid://19040337", tex = "rbxassetid://19040326", sx = 1.1, sy = 1.4, sz = 1.1, kind = "Knife", name = "Candy", rarity = "Godly", itemid = 332021011, mk = "SpecialMesh", grip = {0.0770696,0.794289,0,-4.98295e-05,1.04494e-06,1,-0.0418635,-0.999123,-1.04494e-06,0.999123,-0.0418635,4.98891e-05}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Celestial"] = { mesh = "rbxassetid://109711282082830", tex = "rbxassetid://79010754957272", sx = 0.0532974, sy = 0.0532974, sz = 0.0532974, kind = "Knife", name = "Celestial", rarity = "Ancient", itemid = 136673966529736, mk = "MeshPart", grip = {0,-0.0444214,0.238319,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Celestial_Bronze"] = { mesh = "rbxassetid://109711282082830", tex = "rbxassetid://124232719247901", sx = 0.0532974, sy = 0.0532974, sz = 0.0532974, kind = "Knife", name = "Bronze Celestial", rarity = "Unique", itemid = 119399643874968, mk = "MeshPart", grip = {0,-0.0444214,0.238319,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Celestial_Gold"] = { mesh = "rbxassetid://109711282082830", tex = "rbxassetid://129146338255815", sx = 0.0532974, sy = 0.0532974, sz = 0.0532974, kind = "Knife", name = "Gold Celestial", rarity = "Unique", itemid = 104229967982042, mk = "MeshPart", grip = {0,-0.0444214,0.238319,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Celestial_Red"] = { mesh = "rbxassetid://109711282082830", tex = "rbxassetid://84015112962151", sx = 0.0532974, sy = 0.0532974, sz = 0.0532974, kind = "Knife", name = "Red Celestial", rarity = "Unique", itemid = 119157529694972, mk = "MeshPart", grip = {0,-0.0444214,0.238319,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Celestial_Silver"] = { mesh = "rbxassetid://109711282082830", tex = "rbxassetid://118490445339878", sx = 0.0532974, sy = 0.0532974, sz = 0.0532974, kind = "Knife", name = "Silver Celestial", rarity = "Unique", itemid = 90241292303974, mk = "MeshPart", grip = {0,-0.0444214,0.238319,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Chill"] = { mesh = "rbxassetid://105329941", tex = "rbxassetid://105978218", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Knife", name = "Chill", rarity = "Godly", itemid = 332022166, mk = "SpecialMesh", grip = {0,-0.9,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ChromaDarkbringer"] = { mesh = "rbxassetid://4730813852", tex = "rbxassetid://4728494788", sx = 0.039, sy = 0.039, sz = 0.039, kind = "Gun", name = "Darkbringer", rarity = "Godly", itemid = 4751501078, mk = "SpecialMesh", grip = {-3.58615e-06,-0.606,0.7,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {5.49779e-15,-0.186602,0.123206,1,0,0,0,0.173624,0.984812,0,-0.984812,0.173624} },
+    ["ChromaLightbringer"] = { mesh = "rbxassetid://4730813852", tex = "rbxassetid://4728487789", sx = 0.039, sy = 0.039, sz = 0.039, kind = "Gun", name = "Lightbringer", rarity = "Godly", itemid = 4751500761, mk = "SpecialMesh", grip = {-3.58615e-06,-0.606,0.7,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {5.49779e-15,-0.186602,0.123206,1,0,0,0,0.173624,0.984812,0,-0.984812,0.173624} },
+    ["Clockwork"] = { mesh = "rbxassetid://352571495", tex = "rbxassetid://352570357", sx = 1.1, sy = 1.6, sz = 1.2, kind = "Knife", name = "Clockwork", rarity = "Godly", itemid = 473570519, mk = "SpecialMesh", grip = {8.74227e-09,-0.0120606,1.13687,-1,0,0,0,0,-1,0,-1,0}, att = "CustomAttachment", acf = {0.00150982,-0.126983,-0.154513,-0.998668,0.037272,0.035678,-0.0409772,-0.152762,-0.987413,-0.0313526,-0.98756,0.154086}, snd = "rbxassetid://12222225" },
+    ["Constellation"] = { mesh = "rbxassetid://124598402927958", tex = "rbxassetid://79010754957272", sx = 0.100662, sy = 0.100662, sz = 0.100662, kind = "Gun", name = "Constellation", rarity = "Godly", itemid = 114197436469014, mk = "MeshPart", grip = {0,-0.355123,0.703253,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Constellation_Bronze"] = { mesh = "rbxassetid://124598402927958", tex = "rbxassetid://85789126329446", sx = 0.100662, sy = 0.100662, sz = 0.100662, kind = "Gun", name = "Bronze Constellation", rarity = "Unique", itemid = 112811587103866, mk = "MeshPart", grip = {0,0,0.8,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Constellation_Gold"] = { mesh = "rbxassetid://124598402927958", tex = "rbxassetid://108397462027809", sx = 0.100662, sy = 0.100662, sz = 0.100662, kind = "Gun", name = "Gold Constellation", rarity = "Unique", itemid = 132975248521820, mk = "MeshPart", grip = {0,0,0.8,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Constellation_Red"] = { mesh = "rbxassetid://124598402927958", tex = "rbxassetid://140180602253767", sx = 0.100662, sy = 0.100662, sz = 0.100662, kind = "Gun", name = "Red Constellation", rarity = "Unique", itemid = 85766514163212, mk = "MeshPart", grip = {0,0,0.8,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Constellation_Silver"] = { mesh = "rbxassetid://124598402927958", tex = "rbxassetid://112129076164350", sx = 0.100662, sy = 0.100662, sz = 0.100662, kind = "Gun", name = "Silver Constellation", rarity = "Unique", itemid = 100747436297625, mk = "MeshPart", grip = {0,0,0.8,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["ConstellationChroma"] = { mesh = "rbxassetid://124598402927958", tex = "rbxassetid://123603327635244", sx = 0.101232, sy = 0.101232, sz = 0.101232, kind = "Gun", name = "Constellation", rarity = "Godly", itemid = 114197436469014, mk = "SpecialMesh", grip = {0,-0.345,0.660999,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.512915,0.230577,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Cookieblade"] = { mesh = "rbxassetid://6123168377", tex = "rbxassetid://6123168583", sx = 1.27854, sy = 1.27854, sz = 1.27854, kind = "Knife", name = "Cookieblade", rarity = "Godly", itemid = 6125733703, mk = "MeshPart", grip = {0,-1.35,-9.53674e-07,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Darkbringer"] = { mesh = "rbxassetid://4730813852", tex = "rbxassetid://4728494788", sx = 0.0392784, sy = 0.0392784, sz = 0.0392784, kind = "Gun", name = "Darkbringer", rarity = "Godly", itemid = 4749071819, mk = "MeshPart", grip = {-3.58615e-06,-0.606,0.7,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {5.49779e-15,-0.186602,0.123206,1,0,0,0,0.173624,0.984812,0,-0.984812,0.173624} },
+    ["Darkshot"] = { mesh = "rbxassetid://15027451531", tex = "rbxassetid://15027451643", sx = 0.047408, sy = 0.047408, sz = 0.047408, kind = "Gun", name = "Darkshot", rarity = "Godly", itemid = 15080280688, mk = "MeshPart", grip = {0,-0.289256,0.491812,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Darksword"] = { mesh = "rbxassetid://15020899066", tex = "rbxassetid://15020899218", sx = 0.0696, sy = 0.0696, sz = 0.0696, kind = "Knife", name = "Darksword", rarity = "Godly", itemid = 15080267070, mk = "MeshPart", grip = {0,-1.18229,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Dartbringer"] = { mesh = "rbxassetid://8624544930", tex = "rbxassetid://83484652111915", sx = 0.467648, sy = 0.467648, sz = 0.467648, kind = "Gun", name = "Dartbringer", rarity = "Unique", itemid = 8626617523, mk = "MeshPart", grip = {0.0350037,-0.22834,0.534668,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {-2.05636e-06,-0.139718,0.0899086,1,0,0,0,0.173624,0.984812,0,-0.984812,0.173624} },
+    ["Deathshard"] = { mesh = "rbxassetid://62275962", tex = "rbxassetid://192567360", sx = 0.75, sy = 0.75, sz = 0.75, kind = "Knife", name = "Deathshard", rarity = "Godly", itemid = 196750305, mk = "SpecialMesh", grip = {0,-1,0,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-2.38419e-07,9.53675e-07,1.90735e-06,-0.0446012,-0.000306059,-0.999005,0.0354857,0.999368,-0.00189045,0.998374,-0.0355347,-0.0445622} },
+    ["DeathshardChroma"] = { mesh = "rbxassetid://62275962", tex = "rbxassetid://3167029738", sx = 0.8, sy = 0.8, sz = 0.8, kind = "Knife", name = "Deathshard", rarity = "Godly", itemid = 3187390667, mk = "SpecialMesh", grip = {0,-1,0,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-2.38419e-07,9.53675e-07,1.90735e-06,-0.0446012,-0.000306059,-0.999005,0.0354857,0.999368,-0.00189045,0.998374,-0.0355347,-0.0445622} },
+    ["DefaultGun"] = { mesh = "rbxassetid://79401392", tex = "rbxassetid://91723031", sx = 1.6, sy = 1.6, sz = 1.6, kind = "Gun", name = "Default Gun", rarity = "Common", itemid = 196751820, mk = "SpecialMesh", grip = {0,-0.7,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["DefaultKnife"] = { mesh = "rbxassetid://121944778", tex = "rbxassetid://121944805", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Default Knife", rarity = "Common", itemid = 196750384, mk = "SpecialMesh", grip = {0,-1,-0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Disint"] = { mesh = "rbxassetid://18265627", tex = "rbxassetid://18265614", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Laser", rarity = "Classic", itemid = 196751943, mk = "SpecialMesh", grip = {0,-0.65,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Eggblade"] = { mesh = "rbxassetid://6596834762", tex = "rbxassetid://6596824396", sx = 0.0686377, sy = 0.0686377, sz = 0.0686377, kind = "Knife", name = "Eggblade", rarity = "Godly", itemid = 6607277825, mk = "MeshPart", grip = {2.38419e-07,-1.45,-0.0500002,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ElderwoodGun"] = { mesh = "rbxassetid://4210029922", tex = "rbxassetid://4210038158", sx = 0.0298, sy = 0.0298, sz = 0.0298, kind = "Gun", name = "Elderwood Revolver", rarity = "Godly", itemid = 4211142894, mk = "MeshPart", grip = {-0.632908,-0.235519,-1.74846e-08,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-0.229904,0.098208,0.099999,6.25849e-06,0.984814,-0.173615,-5.48363e-06,0.173615,0.984814,1,-5.2114e-06,6.48692e-06} },
+    ["ElderwoodGunBlue"] = { mesh = "rbxassetid://4210029922", tex = "rbxassetid://111273533561439", sx = 0.0298, sy = 0.0298, sz = 0.0298, kind = "Gun", name = "Blue Elderwood", rarity = "Unique", itemid = 4468574885, mk = "MeshPart", grip = {-0.55,-0.18,0,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-0.229904,0.098208,0.099999,6.25849e-06,0.984814,-0.173615,-5.48363e-06,0.173615,0.984814,1,-5.2114e-06,6.48692e-06} },
+    ["ElderwoodGunBronze"] = { mesh = "rbxassetid://4210029922", tex = "rbxassetid://89898811925886", sx = 0.0298, sy = 0.0298, sz = 0.0298, kind = "Gun", name = "Bronze Elderwood", rarity = "Unique", itemid = 4468585407, mk = "MeshPart", grip = {-0.55,-0.18,0,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-0.229904,0.098208,0.099999,6.25849e-06,0.984814,-0.173615,-5.48363e-06,0.173615,0.984814,1,-5.2114e-06,6.48692e-06} },
+    ["ElderwoodGunGold"] = { mesh = "rbxassetid://4210029922", tex = "rbxassetid://98250213602721", sx = 0.0298, sy = 0.0298, sz = 0.0298, kind = "Gun", name = "Gold Elderwood", rarity = "Unique", itemid = 4468584345, mk = "MeshPart", grip = {-0.55,-0.18,0,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-0.229904,0.098208,0.099999,6.25849e-06,0.984814,-0.173615,-5.48363e-06,0.173615,0.984814,1,-5.2114e-06,6.48692e-06} },
+    ["ElderwoodGunSilver"] = { mesh = "rbxassetid://4210029922", tex = "rbxassetid://77403541034696", sx = 0.0298, sy = 0.0298, sz = 0.0298, kind = "Gun", name = "Silver Elderwood", rarity = "Unique", itemid = 4468583758, mk = "MeshPart", grip = {-0.55,-0.18,0,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-0.229904,0.098208,0.099999,6.25849e-06,0.984814,-0.173615,-5.48363e-06,0.173615,0.984814,1,-5.2114e-06,6.48692e-06} },
+    ["ElderwoodKnife"] = { mesh = "rbxassetid://11238166013", tex = "rbxassetid://11238176757", sx = 0.0706252, sy = 0.0706252, sz = 0.0706252, kind = "Knife", name = "Elderwood Blade", rarity = "Godly", itemid = 11262771067, mk = "MeshPart", grip = {0,-1.4,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ElderwoodKnifeBlue"] = { mesh = "rbxassetid://11238166013", tex = "rbxassetid://137018711799502", sx = 0.07, sy = 0.07, sz = 0.07, kind = "Knife", name = "Blue Elderwood", rarity = "Unique", itemid = 11505913287, mk = "SpecialMesh", grip = {0,-1,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ElderwoodKnifeBronze"] = { mesh = "rbxassetid://11238166013", tex = "rbxassetid://120623125132110", sx = 0.07, sy = 0.07, sz = 0.07, kind = "Knife", name = "Bronze Elderwood", rarity = "Unique", itemid = 11505914752, mk = "SpecialMesh", grip = {0,-1,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ElderwoodKnifeChroma"] = { mesh = "rbxassetid://11238166013", tex = "rbxassetid://11254938322", sx = 0.07, sy = 0.07, sz = 0.07, kind = "Knife", name = "Elderwood Blade", rarity = "Godly", itemid = 11254975176, mk = "SpecialMesh", grip = {0,-1.4,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ElderwoodKnifeGold"] = { mesh = "rbxassetid://11238166013", tex = "rbxassetid://113214638430721", sx = 0.07, sy = 0.07, sz = 0.07, kind = "Knife", name = "Gold Elderwood", rarity = "Unique", itemid = 11505917850, mk = "SpecialMesh", grip = {0,-1,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ElderwoodKnifeSilver"] = { mesh = "rbxassetid://11238166013", tex = "rbxassetid://87458348923705", sx = 0.07, sy = 0.07, sz = 0.07, kind = "Knife", name = "Silver Elderwood", rarity = "Unique", itemid = 11505916486, mk = "SpecialMesh", grip = {0,-1,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ElderwoodScythe"] = { mesh = "rbxassetid://4217523241", tex = "rbxassetid://4210044808", sx = 0.0764365, sy = 0.0764365, sz = 0.0764365, kind = "Knife", name = "Elderwood Scythe", rarity = "Ancient", itemid = 4211148191, mk = "MeshPart", grip = {0.0797924,-0.918995,0.577861,1,0,0,0,0.994759,0.102244,0,-0.102244,0.994759}, att = "CustomAttachment", acf = {0.101576,0.159643,0.156115,0.998996,-0.0298194,-0.0334473,0.0400339,0.929256,0.367262,0.0201295,-0.368232,0.929516} },
+    ["Eternal"] = { mesh = "rbxassetid://532155954", tex = "rbxassetid://532156041", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Knife", name = "Eternal", rarity = "Godly", itemid = 619605312, mk = "SpecialMesh", grip = {0.0500774,-1.27523,0.05,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Eternal2"] = { mesh = "rbxassetid://532155954", tex = "rbxassetid://2545251852", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Knife", name = "Eternal II", rarity = "Godly", itemid = 2545253030, mk = "SpecialMesh", grip = {0.0500774,-1.27523,0.05,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Eternal3"] = { mesh = "rbxassetid://3132923779", tex = "rbxassetid://3279683257", sx = 0.95, sy = 0.95, sz = 0.95, kind = "Knife", name = "Eternal III", rarity = "Godly", itemid = 3279011390, mk = "SpecialMesh", grip = {0.0177402,-1.21739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Eternal4"] = { mesh = "rbxassetid://3132923779", tex = "rbxassetid://4999951444", sx = 0.95, sy = 0.95, sz = 0.95, kind = "Knife", name = "Eternal IV", rarity = "Godly", itemid = 4999958740, mk = "SpecialMesh", grip = {0.0177402,-1.21739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["EternalCane"] = { mesh = "rbxassetid://3132923779", tex = "rbxassetid://4488374804", sx = 0.95, sy = 0.95, sz = 0.95, kind = "Knife", name = "Eternalcane", rarity = "Godly", itemid = 4488391411, mk = "SpecialMesh", grip = {0.0177402,-1.21739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Fang"] = { mesh = "rbxassetid://117500241", tex = "rbxassetid://117500388", sx = 0.4, sy = 0.37, sz = 0.37, kind = "Knife", name = "Fang", rarity = "Godly", itemid = 198442811, mk = "SpecialMesh", grip = {0,-0.75,0,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-9.53678e-07,-9.53677e-07,-9.53679e-07,-0.0395697,-0.00050411,-0.999217,0.0176802,0.999843,-0.00120458,0.99906,-0.017714,-0.0395546} },
+    ["FangChroma"] = { mesh = "rbxassetid://117500241", tex = "", sx = 0.4, sy = 0.37, sz = 0.37, kind = "Knife", name = "Fang", rarity = "Godly", itemid = 3187392501, mk = "SpecialMesh", grip = {0,-0.75,0,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-9.53678e-07,-9.53677e-07,-9.53679e-07,-0.0395697,-0.00050411,-0.999217,0.0176802,0.999843,-0.00120458,0.99906,-0.017714,-0.0395546} },
+    ["Flames"] = { mesh = "rbxassetid://238314098", tex = "rbxassetid://238314124", sx = 0.6, sy = 0.8, sz = 0.73, kind = "Knife", name = "Flames", rarity = "Godly", itemid = 585873746, mk = "SpecialMesh", grip = {0.0249702,0.139695,1.33923,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {0.00653267,0.0892989,-0.120347,0.999995,0.00227194,-0.00213599,0.00188706,0.104428,0.994531,0.00248257,-0.99453,0.104423} },
+    ["Flora"] = { mesh = "rbxassetid://108253816085047", tex = "rbxassetid://116621225933096", sx = 0.0457048, sy = 0.0457048, sz = 0.0457048, kind = "Gun", name = "Flora", rarity = "Godly", itemid = 138204709945147, mk = "MeshPart", grip = {0,-0.217888,0.660378,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["FlowerwoodGun"] = { mesh = "rbxassetid://16895099893", tex = "rbxassetid://16895448237", sx = 0.0518675, sy = 0.0518675, sz = 0.0518675, kind = "Gun", name = "Flowerwood Gun", rarity = "Godly", itemid = 16963894455, mk = "MeshPart", grip = {0,-0.299998,0.700001,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["FlowerwoodKnife"] = { mesh = "rbxassetid://16883629972", tex = "rbxassetid://16895441338", sx = 0.0791632, sy = 0.0791632, sz = 0.0791632, kind = "Knife", name = "Flowerwood", rarity = "Godly", itemid = 16963860501, mk = "MeshPart", grip = {0,-1.30001,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Frostbite"] = { mesh = "rbxassetid://4528435571", tex = "rbxassetid://4528435630", sx = 1.14388, sy = 1.14388, sz = 1.14388, kind = "Knife", name = "Frostbite", rarity = "Godly", itemid = 4528484880, mk = "MeshPart", grip = {0.00589678,-1.12466,0.2,0.999957,-0.0065604,-0.0065604,0.0065604,0.999978,-2.15199e-05,0.0065604,-2.15199e-05,0.999978}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Frostsaber"] = { mesh = "rbxassetid://1192795322", tex = "rbxassetid://1192795941", sx = 0.55, sy = 0.55, sz = 0.6, kind = "Knife", name = "Frostsaber", rarity = "Godly", itemid = 1269580035, mk = "SpecialMesh", grip = {-0.0485067,-0.140247,1.32605,-0.998248,-6.51926e-07,-0.0591818,0.0591818,-2.21729e-05,-0.998247,-6.51926e-07,-1,2.18749e-05}, att = "CustomAttachment", acf = {0.00213432,0.0183688,-0.0464553,1,0,0,0,-0.156446,0.987687,0,-0.987687,-0.156446} },
+    ["Gemstone"] = { mesh = "rbxassetid://1626714161", tex = "rbxassetid://3183579677", sx = 25, sy = 25, sz = 25, kind = "Knife", name = "Gemstone", rarity = "Godly", itemid = 3183598040, mk = "SpecialMesh", grip = {0.0177402,-1.21739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GemstoneChroma"] = { mesh = "rbxassetid://1626714161", tex = "rbxassetid://3183577898", sx = 25, sy = 25, sz = 25, kind = "Knife", name = "Gemstone", rarity = "Godly", itemid = 3183597816, mk = "SpecialMesh", grip = {0.0177402,-1.21739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Ghostblade"] = { mesh = "rbxassetid://4217554208", tex = "rbxassetid://4210531490", sx = 0.053454, sy = 0.053454, sz = 0.053454, kind = "Knife", name = "Ghostblade", rarity = "Godly", itemid = 4221789003, mk = "MeshPart", grip = {0.0146688,-1.02177,0.210029,0.982585,0,0.185814,0,1,0,-0.185814,0,0.982585}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GhostK2018"] = { mesh = "rbxassetid://121944778", tex = "rbxassetid://2514800940", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Ghost", rarity = "Legendary", itemid = 2513732969, mk = "SpecialMesh", grip = {0,-1,-0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Gingerblade"] = { mesh = "rbxassetid://2248389833", tex = "rbxassetid://2248390749", sx = 0.61, sy = 0.61, sz = 0.609524, kind = "Knife", name = "Gingerblade", rarity = "Godly", itemid = 2669336659, mk = "SpecialMesh", grip = {0,-1,0.0695633,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GingerbladeChroma"] = { mesh = "rbxassetid://2248389833", tex = "rbxassetid://2672327402", sx = 0.61, sy = 0.61, sz = 0.609524, kind = "Knife", name = "Gingerblade", rarity = "Godly", itemid = 2672349340, mk = "SpecialMesh", grip = {0,-1,0.0695633,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GingerLuger"] = { mesh = "rbxassetid://95356090", tex = "rbxassetid://2674981863", sx = 1.8, sy = 1.8, sz = 1.8, kind = "Gun", name = "Ginger Luger", rarity = "Godly", itemid = 2674983099, mk = "SpecialMesh", grip = {0,-0.206,0.5,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.150001,0.0383508,0.333212,1,0,0,0,0,1,0,-1,0} },
+    ["Gingermint_G"] = { mesh = "rbxassetid://11866444071", tex = "rbxassetid://11866444253", sx = 0.0475529, sy = 0.0475529, sz = 0.0475529, kind = "Gun", name = "Gingermint", rarity = "Godly", itemid = 11872179646, mk = "MeshPart", grip = {5.19329e-07,-0.250001,0.700008,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0946884,-0.0992584,0.236683,0.991792,0.113654,0.0585769,-0.115783,0.60394,0.788575,0.0542479,-0.788884,0.612142} },
+    ["Gingermint_K"] = { mesh = "rbxassetid://11837984324", tex = "rbxassetid://11837984504", sx = 0.0664162, sy = 0.0664162, sz = 0.0664162, kind = "Knife", name = "Cookiecane", rarity = "Godly", itemid = 11855306927, mk = "MeshPart", grip = {0.00698853,-1.25001,-0.0497513,0.997562,0,-0.0697919,0,1,0,0.0697919,0,0.997562}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Gingermint_KChroma"] = { mesh = "rbxassetid://11837984324", tex = "rbxassetid://11837984504", sx = 0.0686548, sy = 0.0686548, sz = 0.0686548, kind = "Knife", name = "Cookiecane", rarity = "Godly", itemid = 11873640255, mk = "SpecialMesh", grip = {0,-1.4,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Gingerscope"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://15409041564", sx = 0.0841985, sy = 0.0841985, sz = 0.0841985, kind = "Gun", name = "Gingerscope", rarity = "Ancient", itemid = 15666469505, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 1, bg = 1, bb = 1, btex = "rbxassetid://15374653796", bw = 1 },
+    ["Gingerscope_Blue"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://100142423147247", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Blue Gingerscope", rarity = "Unique", itemid = 16964462231, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0, bg = 0.235294, bb = 1, btex = "rbxassetid://16221396385", bw = 1 },
+    ["Gingerscope_Bronze"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://93684911189915", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Bronze Gingerscope", rarity = "Unique", itemid = 16964465320, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.952407, bg = 0.398367, bb = 0, btex = "rbxassetid://16221396385", bw = 1 },
+    ["Gingerscope_Gold"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://75888854860786", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Gold Gingerscope", rarity = "Unique", itemid = 16964471890, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.96434, bg = 0.814771, bb = 0.0339513, btex = "rbxassetid://16221396385", bw = 1 },
+    ["Gingerscope_Silver"] = { mesh = "rbxassetid://15374602183", tex = "rbxassetid://129527194826480", sx = 0.0841984, sy = 0.0841984, sz = 0.0841984, kind = "Gun", name = "Silver Gingerscope", rarity = "Unique", itemid = 16964468980, mk = "MeshPart", anim = "rbxassetid://134818020160275", shoot = "rbxassetid://124281955370937", reload = "rbxassetid://127786188145385",  grip = {0,-0.399999,0.9,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2e-06,0.075002,1,0,0,0,0.707134,0.707079,0,-0.707079,0.707134}, snd = "rbxassetid://90731824782499", br = 0.807843, bg = 0.984314, bb = 1, btex = "rbxassetid://106972878353658", bw = 0.5 },
+    ["Gingerscythe_Ancient"] = { mesh = "rbxassetid://15395668244", tex = "rbxassetid://15409195246", sx = 0.0637743, sy = 0.0637743, sz = 0.0637743, kind = "Knife", name = "Gingerscythe", rarity = "Ancient", itemid = 15683188776, mk = "MeshPart", grip = {7.62939e-06,-0.187927,1.0434,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Gingerscythe_Blue"] = { mesh = "rbxassetid://15397282571", tex = "rbxassetid://103762316034631", sx = 0.0696348, sy = 0.0696348, sz = 0.0696348, kind = "Knife", name = "Blue Gingerscythe", rarity = "Unique", itemid = 16964448042, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Gingerscythe_Bronze"] = { mesh = "rbxassetid://15397282571", tex = "rbxassetid://94302913285936", sx = 0.0696348, sy = 0.0696348, sz = 0.0696348, kind = "Knife", name = "Bronze Gingerscythe", rarity = "Unique", itemid = 16964449392, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Gingerscythe_Gold"] = { mesh = "rbxassetid://15397282571", tex = "rbxassetid://82340099638846", sx = 0.0696348, sy = 0.0696348, sz = 0.0696348, kind = "Knife", name = "Gold Gingerscythe", rarity = "Unique", itemid = 16964452491, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Gingerscythe_Silver"] = { mesh = "rbxassetid://15397282571", tex = "rbxassetid://73196038702629", sx = 0.0696348, sy = 0.0696348, sz = 0.0696348, kind = "Knife", name = "Silver Gingerscythe", rarity = "Unique", itemid = 16964450895, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GoldCandy"] = { mesh = "rbxassetid://19040337", tex = "rbxassetid://124067045659964", sx = 1.1, sy = 1.4, sz = 1.1, kind = "Knife", name = "Gold Candy", rarity = "Unique", itemid = 1520188792, mk = "SpecialMesh", grip = {0.0770696,0.794289,0,-4.98295e-05,1.04494e-06,1,-0.0418635,-0.999123,-1.04494e-06,0.999123,-0.0418635,4.98891e-05}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GoldenGun"] = { mesh = "rbxassetid://25298496", tex = "rbxassetid://134632723", sx = 1.5, sy = 1.5, sz = 1.5, kind = "Gun", name = "Golden", rarity = "Classic", itemid = 196751989, mk = "SpecialMesh", grip = {0,-0.65,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GoldHallow"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://94638424624420", sx = 0.57, sy = 0.57, sz = 0.57, kind = "Knife", name = "Gold Hallow", rarity = "Unique", itemid = 2511340308, mk = "SpecialMesh", grip = {0,-0.953644,0.0308308,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GoldHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://130531096424715", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Gold Harvester", rarity = "Unique", itemid = 8194222523, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.961959, bg = 0.818204, bb = 0, bw = 0.2 },
+    ["GoldIceblaster"] = { mesh = "rbxassetid://6125828567", tex = "rbxassetid://6246949956", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Gold Iceblaster", rarity = "Unique", itemid = 6404165933, mk = "MeshPart", grip = {-0.00846958,-0.700001,-0.546006,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GoldIcebreaker"] = { mesh = "rbxassetid://6124173614", tex = "rbxassetid://6237993632", sx = 0.968497, sy = 0.968497, sz = 0.968497, kind = "Knife", name = "Gold Icebreaker", rarity = "Unique", itemid = 6404115112, mk = "MeshPart", grip = {0,-0.95,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GoldSugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://132002664307056", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Gold Sugar", rarity = "Unique", itemid = 3215260149, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
+    ["GoldVampiresEdge"] = { mesh = "rbxassetid://5841895234", tex = "rbxassetid://89466623295527", sx = 0.067029, sy = 0.067029, sz = 0.067029, kind = "Knife", name = "Gold Vamp's Edge", rarity = "Unique", itemid = 6084838617, mk = "MeshPart", grip = {0.0177402,-1.31739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["GreenLuger"] = { mesh = "rbxassetid://95356090", tex = "rbxassetid://126534866", sx = 1.8, sy = 1.8, sz = 1.8, kind = "Gun", name = "Green Luger", rarity = "Godly", itemid = 332044679, mk = "SpecialMesh", grip = {0,-0.206,0.5,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.150001,0.0383508,0.333212,1,0,0,0,0,1,0,-1,0} },
+    ["Gun1"] = { mesh = "rbxassetid://79401392", tex = "rbxassetid://79401500", sx = 1.5, sy = 1.5, sz = 1.5, kind = "Gun", name = "Cowboy", rarity = "Classic", itemid = 196752052, mk = "SpecialMesh", grip = {0,-0.65,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Hallow"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://179155105", sx = 0.55, sy = 0.55, sz = 0.555, kind = "Knife", name = "Hallow's Edge", rarity = "Godly", itemid = 531878205, mk = "SpecialMesh", grip = {0.0177402,-1.21739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Hallowgun"] = { mesh = "rbxassetid://5841866437", tex = "rbxassetid://5841868338", sx = 0.0408, sy = 0.0408, sz = 0.0408, kind = "Gun", name = "Hallowgun", rarity = "Godly", itemid = 5878721461, mk = "MeshPart", grip = {-0.75,-0.450001,-0.0499973,0,0,-1,0,1,0,1,0,0}, att = "CustomAttachment", acf = {-0.224863,0.0446573,-1.97889e-06,5.96046e-07,0.996192,-0.0871878,-5.66244e-07,0.0871878,0.996192,1,-5.44407e-07,6.16056e-07} },
+    ["HallowsBlade"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://1132750758", sx = 0.55, sy = 0.55, sz = 0.555, kind = "Knife", name = "Hallow's Blade", rarity = "Godly", itemid = 1132775323, mk = "SpecialMesh", grip = {0.0177402,-1.21739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Hallowscythe"] = { mesh = "rbxassetid://5841877975", tex = "rbxassetid://5841879647", sx = 0.070831, sy = 0.070831, sz = 0.070831, kind = "Knife", name = "Hallowscythe", rarity = "Ancient", itemid = 5877016863, mk = "MeshPart", grip = {0.079792,-0.895706,0.676565,1,0,0,0,0.999885,0.0151922,0,-0.0151922,0.999885}, att = "CustomAttachment", acf = {0.00824374,0.05459,0.624058,-0.998682,0.0469117,0.0208489,0.0457347,0.997507,-0.0537364,-0.0233178,-0.052712,-0.998338} },
+    ["Handsaw"] = { mesh = "rbxassetid://54430772", tex = "rbxassetid://54430066", sx = 0.4, sy = 0.6, sz = 0.53, kind = "Knife", name = "Handsaw", rarity = "Godly", itemid = 473572138, mk = "SpecialMesh", grip = {0,0.104716,-0.727579,-1,0,0,0,0,1,0,1,0}, att = "CustomAttachment", acf = {0.00497055,0.0763541,0.129017,-0.996987,0.0736893,0.0242452,0.0243051,-8.42811e-05,0.999705,0.0736695,0.997281,-0.001707} },
+    ["Harvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://7775245551", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Harvester", rarity = "Ancient", itemid = 7800847534, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0, bg = 1, bb = 0, bw = 0.2 },
+    ["Heartblade"] = { mesh = "rbxassetid://6404140078", tex = "rbxassetid://6413074818", sx = 1.10033, sy = 1.10033, sz = 1.10033, kind = "Knife", name = "Heartblade", rarity = "Godly", itemid = 6413145922, mk = "MeshPart", grip = {0.0177402,-1.41739,0.0200024,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["HeartWand"] = { mesh = "rbxassetid://77738838473091", tex = "rbxassetid://76246633927299", sx = 0.0781557, sy = 0.0781557, sz = 0.0781557, kind = "Knife", name = "Heart Wand", rarity = "Godly", itemid = 118334707962654, mk = "MeshPart", grip = {0,-0.839715,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["HeartWandChroma"] = { mesh = "rbxassetid://77738838473091", tex = "rbxassetid://78842905206144", sx = 0.0782133, sy = 0.0782133, sz = 0.0782133, kind = "Knife", name = "Heart Wand", rarity = "Godly", itemid = 78479059410850, mk = "SpecialMesh", grip = {0,-0.84,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Heat"] = { mesh = "rbxassetid://105333894", tex = "rbxassetid://105334003", sx = 0.3, sy = 0.3, sz = 0.3, kind = "Knife", name = "Heat", rarity = "Godly", itemid = 201238541, mk = "SpecialMesh", grip = {0,-1.2,0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["HeatChroma"] = { mesh = "rbxassetid://105333894", tex = "rbxassetid://3171194706", sx = 0.3, sy = 0.3, sz = 0.3, kind = "Knife", name = "Heat", rarity = "Godly", itemid = 3187395238, mk = "SpecialMesh", grip = {0,-1.2,0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Icebeam"] = { mesh = "rbxassetid://8310908064", tex = "rbxassetid://8231066536", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Icebeam", rarity = "Godly", itemid = 8311005531, mk = "MeshPart", grip = {0.029747,-0.599978,-0.342647,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Iceblaster"] = { mesh = "rbxassetid://6125828567", tex = "rbxassetid://6120563948", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Iceblaster", rarity = "Godly", itemid = 6125814417, mk = "MeshPart", grip = {-0.00846958,-0.700001,-0.546006,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Icebreaker"] = { mesh = "rbxassetid://6124173614", tex = "rbxassetid://6124173821", sx = 0.968497, sy = 0.968497, sz = 0.968497, kind = "Knife", name = "Icebreaker", rarity = "Ancient", itemid = 6125729383, mk = "MeshPart", grip = {0,-0.95,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["IceDragon"] = { mesh = "rbxassetid://165708869", tex = "rbxassetid://165708903", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Knife", name = "Ice Dragon", rarity = "Godly", itemid = 585872642, mk = "SpecialMesh", grip = {0.0463572,0.0795177,1.34601,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.00895599,-0.126844,-0.154374,-0.999928,-0.00780805,0.0091104,-0.00780806,-0.153079,-0.988183,0.0091104,-0.988183,0.153007} },
+    ["Iceflake"] = { mesh = "rbxassetid://8231045240", tex = "rbxassetid://8231046270", sx = 0.0675376, sy = 0.0675376, sz = 0.0675376, kind = "Knife", name = "Iceflake", rarity = "Godly", itemid = 8304818186, mk = "MeshPart", grip = {0,-1.37884,-0.128277,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["IceHammer_Ancient"] = { mesh = "rbxassetid://11848711686", tex = "rbxassetid://11850483027", sx = 0.073617, sy = 0.073617, sz = 0.073617, kind = "Knife", name = "Icecrusher", rarity = "Ancient", itemid = 11855274019, mk = "MeshPart", grip = {0,-0.446154,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["IceHammerBronze"] = { mesh = "rbxassetid://11848711686", tex = "rbxassetid://88591542566831", sx = 0.073617, sy = 0.073617, sz = 0.073617, kind = "Knife", name = "Bronze Icecrusher", rarity = "Unique", itemid = 12227148356, mk = "MeshPart", grip = {0,-0.446154,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["IceHammerGold"] = { mesh = "rbxassetid://11848711686", tex = "rbxassetid://132842079563749", sx = 0.073617, sy = 0.073617, sz = 0.073617, kind = "Knife", name = "Gold Icecrusher", rarity = "Unique", itemid = 12227137860, mk = "MeshPart", grip = {0,-0.446154,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["IceHammerRed"] = { mesh = "rbxassetid://11848711686", tex = "rbxassetid://71714696554176", sx = 0.073617, sy = 0.073617, sz = 0.073617, kind = "Knife", name = "Red Icecrusher", rarity = "Unique", itemid = 12227186408, mk = "MeshPart", grip = {0,-0.446154,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["IceHammerSilver"] = { mesh = "rbxassetid://11848711686", tex = "rbxassetid://108890976731643", sx = 0.073617, sy = 0.073617, sz = 0.073617, kind = "Knife", name = "Silver Icecrusher", rarity = "Unique", itemid = 12227142478, mk = "MeshPart", grip = {0,-0.446154,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Icepiercer"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://11869075814", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Icepiercer", rarity = "Ancient", itemid = 11874071041, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0, bg = 0.898039, bb = 1, bw = 0.2 },
+    ["IcepiercerBronze"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://136041212037383", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Bronze Icepiercer", rarity = "Unique", itemid = 12226920195, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.844236, bg = 0.366995, bb = 0.0916762, bw = 0.2 },
+    ["IcepiercerGold"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://89221956008018", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Gold Icepiercer", rarity = "Unique", itemid = 12226688172, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 1, bg = 0.846952, bb = 0.292454, bw = 0.2 },
+    ["IcepiercerRed"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://12196203001", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Red Icepiercer", rarity = "Unique", itemid = 12227133450, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 1, bg = 0, bb = 0, bw = 0.2 },
+    ["IcepiercerSilver"] = { mesh = "rbxassetid://11868991644", tex = "rbxassetid://122077395445706", sx = 0.0547671, sy = 0.0547671, sz = 0.0547671, kind = "Gun", name = "Silver Icepiercer", rarity = "Unique", itemid = 12226843957, mk = "MeshPart", grip = {0,-0.533587,0.30557,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.827451, bg = 0.835294, bb = 0.835294, bw = 0.2 },
+    ["IceShard"] = { mesh = "rbxassetid://188539751", tex = "rbxassetid://188539820", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Ice Shard", rarity = "Godly", itemid = 1268710824, mk = "SpecialMesh", grip = {0.0407002,0.133125,1.12955,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.00999929,-0.137043,-0.176407,0.997816,-0.0657253,-0.00656065,0.000875115,-0.0861623,0.996281,-0.0660461,-0.994111,-0.0859166} },
+    ["Icewing"] = { mesh = "rbxassetid://3183449780", tex = "rbxassetid://2279588369", sx = 0.085, sy = 0.085, sz = 0.085, kind = "Knife", name = "Icewing", rarity = "Ancient", itemid = 3183085102, mk = "SpecialMesh", grip = {0.0962919,-0.656312,0.180963,0.999517,-0.00434376,-0.0307792,-0.0060457,0.944113,-0.329567,0.0304906,0.329593,0.943631}, att = "CustomAttachment", acf = {0.00309754,-0.00952182,0.205912,-0.999764,0.0167396,0.013862,0.0203675,0.944196,0.328755,-0.00758521,0.328959,-0.944314} },
+    ["Jinglegun"] = { mesh = "rbxassetid://6125843704", tex = "rbxassetid://6125843755", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Jinglegun", rarity = "Godly", itemid = 6125742758, mk = "MeshPart", grip = {1.90735e-06,-0.55,-0.600001,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Knife1"] = { mesh = "rbxassetid://22771612", tex = "rbxassetid://22771560", sx = 0.15, sy = 0.15, sz = 0.15, kind = "Knife", name = "Splitter", rarity = "Classic", itemid = 473574001, mk = "SpecialMesh", grip = {0,0,-0.9,0,0,1,1,0,0,0,1,0}, att = "CustomAttachment", acf = {0.0173359,0.0196896,0.319081,-0.00758743,-0.0867671,-0.9962,-0.996192,0.0871843,-6.20866e-06,0.0868535,0.992406,-0.0870982} },
+    ["Laser"] = { mesh = "rbxassetid://130099641", tex = "rbxassetid://209727730", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Laser", rarity = "Godly", itemid = 238546983, mk = "SpecialMesh", grip = {0,-0.1,0.75,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["LaserChroma"] = { mesh = "rbxassetid://130099641", tex = "", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Laser", rarity = "Godly", itemid = 3187395952, mk = "SpecialMesh", grip = {0,-0.1,0.75,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Lightbringer"] = { mesh = "rbxassetid://4730813852", tex = "rbxassetid://4728487789", sx = 0.0392784, sy = 0.0392784, sz = 0.0392784, kind = "Gun", name = "Lightbringer", rarity = "Godly", itemid = 4749070432, mk = "MeshPart", grip = {-3.58615e-06,-0.606,0.7,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {5.49779e-15,-0.186602,0.123206,1,0,0,0,0.173624,0.984812,0,-0.984812,0.173624} },
+    ["Logchopper"] = { mesh = "rbxassetid://4535643726", tex = "rbxassetid://4535641077", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Logchopper", rarity = "Ancient", itemid = 4535644282, mk = "MeshPart", grip = {0.00589465,-0.824661,0.35,0.999957,-0.0065604,0.0065604,0.0065604,0.999978,2.15199e-05,-0.0065604,2.15199e-05,0.999978}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["LogchopperBlue"] = { mesh = "rbxassetid://4535643726", tex = "rbxassetid://90990239556011", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Blue Logchopper", rarity = "Unique", itemid = 4753353471, mk = "MeshPart", grip = {0.00589465,-0.824661,0.35,0.999957,-0.0065604,0.0065604,0.0065604,0.999978,2.15199e-05,-0.0065604,2.15199e-05,0.999978}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["LogchopperBronze"] = { mesh = "rbxassetid://4535643726", tex = "rbxassetid://127121771510597", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Bronze Logchopper", rarity = "Unique", itemid = 4753354123, mk = "MeshPart", grip = {0.00589465,-0.824661,0.35,0.999957,-0.0065604,0.0065604,0.0065604,0.999978,2.15199e-05,-0.0065604,2.15199e-05,0.999978}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["LogchopperGold"] = { mesh = "rbxassetid://4535643726", tex = "rbxassetid://112033796594911", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Gold Logchopper", rarity = "Unique", itemid = 4753354638, mk = "MeshPart", grip = {0.00589465,-0.824661,0.35,0.999957,-0.0065604,0.0065604,0.0065604,0.999978,2.15199e-05,-0.0065604,2.15199e-05,0.999978}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["LogchopperSilver"] = { mesh = "rbxassetid://4535643726", tex = "rbxassetid://89600238306839", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Silver Logchopper", rarity = "Unique", itemid = 4753352581, mk = "MeshPart", grip = {0.00589465,-0.824661,0.35,0.999957,-0.0065604,0.0065604,0.0065604,0.999978,2.15199e-05,-0.0065604,2.15199e-05,0.999978}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Luger"] = { mesh = "rbxassetid://95356090", tex = "rbxassetid://126534866", sx = 1.8, sy = 1.8, sz = 1.8, kind = "Gun", name = "Luger", rarity = "Godly", itemid = 198042673, mk = "SpecialMesh", grip = {0,-0.206,0.5,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.150001,0.0383508,0.333212,1,0,0,0,0,1,0,-1,0} },
+    ["Lugercane"] = { mesh = "rbxassetid://95356090", tex = "rbxassetid://4535479829", sx = 1.8, sy = 1.8, sz = 1.8, kind = "Gun", name = "Lugercane", rarity = "Godly", itemid = 4535482609, mk = "SpecialMesh", grip = {0,-0.206,0.5,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.150001,0.0383508,0.333212,1,0,0,0,0,1,0,-1,0} },
+    ["LugerChroma"] = { mesh = "rbxassetid://95356090", tex = "", sx = 1.8, sy = 1.8, sz = 1.8, kind = "Gun", name = "Luger", rarity = "Godly", itemid = 3187395551, mk = "SpecialMesh", grip = {0,-0.206,0.5,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.150001,0.0383508,0.333212,1,0,0,0,0,1,0,-1,0} },
+    ["Makeshift"] = { mesh = "rbxassetid://11158364935", tex = "rbxassetid://11274360089", sx = 0.0546193, sy = 0.0546193, sz = 0.0546193, kind = "Gun", name = "Makeshift", rarity = "Godly", itemid = 11229837140, mk = "MeshPart", grip = {7.62939e-06,-0.127979,0.994688,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Minty"] = { mesh = "rbxassetid://4528424409", tex = "rbxassetid://4528424475", sx = 1.11905, sy = 1.11905, sz = 1.11905, kind = "Gun", name = "Minty", rarity = "Godly", itemid = 4535408229, mk = "MeshPart", grip = {0.0177417,0.282615,0.770003,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0500001,-0.0725527,0.239245,-1,0,0,0,0,-1,0,-1,0} },
+    ["MintyBlue"] = { mesh = "rbxassetid://4528424409", tex = "rbxassetid://83313292518621", sx = 1.11905, sy = 1.11905, sz = 1.11905, kind = "Gun", name = "Blue Minty", rarity = "Unique", itemid = 4753347062, mk = "MeshPart", grip = {0.0177417,0.282615,0.770003,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0500001,-0.0725527,0.239245,-1,0,0,0,0,-1,0,-1,0} },
+    ["MintyBronze"] = { mesh = "rbxassetid://4528424409", tex = "rbxassetid://108884241261095", sx = 1.11905, sy = 1.11905, sz = 1.11905, kind = "Gun", name = "Bronze Minty", rarity = "Unique", itemid = 4753348263, mk = "MeshPart", grip = {0.0177417,0.282615,0.770003,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0500001,-0.0725527,0.239245,-1,0,0,0,0,-1,0,-1,0} },
+    ["MintyGold"] = { mesh = "rbxassetid://4528424409", tex = "rbxassetid://133580134365239", sx = 1.11905, sy = 1.11905, sz = 1.11905, kind = "Gun", name = "Gold Minty", rarity = "Unique", itemid = 4753347636, mk = "MeshPart", grip = {0.0177417,0.282615,0.770003,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0500001,-0.0725527,0.239245,-1,0,0,0,0,-1,0,-1,0} },
+    ["MintySilver"] = { mesh = "rbxassetid://4528424409", tex = "rbxassetid://90324993702879", sx = 1.11905, sy = 1.11905, sz = 1.11905, kind = "Gun", name = "Silver Minty", rarity = "Unique", itemid = 4753346087, mk = "MeshPart", grip = {0.0177417,0.282615,0.770003,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0500001,-0.0725527,0.239245,-1,0,0,0,0,-1,0,-1,0} },
+    ["Nebula"] = { mesh = "rbxassetid://6596839942", tex = "rbxassetid://6256756879", sx = 1.15222, sy = 1.15222, sz = 1.15222, kind = "Knife", name = "Nebula", rarity = "Godly", itemid = 6598123521, mk = "MeshPart", grip = {9.53674e-07,-1.55,0,-1,0,0,0,1,0,0,0,-1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Nightblade"] = { mesh = "rbxassetid://103838505", tex = "rbxassetid://103838996", sx = 0.7, sy = 0.45, sz = 0.5, kind = "Knife", name = "Nightblade", rarity = "Godly", itemid = 475478854, mk = "SpecialMesh", grip = {0.0234361,-1.24887,0.06,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.00606721,0.15099,0.0465335,0.999992,0.00281926,-0.00271514,-0.00304504,0.996195,-0.0870984,0.00245925,0.087106,0.996196} },
+    ["NikKnife"] = { mesh = "rbxassetid://305826272", tex = "rbxassetid://2533345412", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Nik's Scythe", rarity = "Ancient", itemid = 2533351841, mk = "SpecialMesh", grip = {0,-0.482422,0.319824,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Ocean_G"] = { mesh = "rbxassetid://13928587755", tex = "rbxassetid://13928590054", sx = 0.0489149, sy = 0.0489149, sz = 0.0489149, kind = "Gun", name = "Ocean", rarity = "Godly", itemid = 13945898892, mk = "MeshPart", grip = {4.76837e-07,-0.313025,0.724285,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["OrangeSeer"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://3184063179", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Orange Seer", rarity = "Godly", itemid = 3184124504, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Pearl_G"] = { mesh = "rbxassetid://18280804203", tex = "rbxassetid://18280805635", sx = 0.0430963, sy = 0.0430963, sz = 0.0430963, kind = "Gun", name = "Pearlshine", rarity = "Godly", itemid = 18322646152, mk = "MeshPart", grip = {0,-0.245422,0.622181,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Pearl_K"] = { mesh = "rbxassetid://18276861801", tex = "rbxassetid://18276866373", sx = 0.0697198, sy = 0.0697198, sz = 0.0697198, kind = "Knife", name = "Pearl", rarity = "Godly", itemid = 18322621319, mk = "MeshPart", grip = {0,-1.08937,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Peppermint"] = { mesh = "rbxassetid://6085025295", tex = "rbxassetid://6074789360", sx = 0.05928, sy = 0.05928, sz = 0.05928, kind = "Knife", name = "Peppermint", rarity = "Godly", itemid = 6085035357, mk = "MeshPart", grip = {2.38419e-07,-1.25,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Phantom2022"] = { mesh = "rbxassetid://11158775938", tex = "rbxassetid://11158776140", sx = 0.0689691, sy = 0.0689691, sz = 0.0689691, kind = "Knife", name = "Phantom", rarity = "Godly", itemid = 11229732037, mk = "MeshPart", grip = {0,-1,-0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Phaser"] = { mesh = "rbxassetid://69486593", tex = "rbxassetid://69486519", sx = 0.8, sy = 0.8, sz = 0.8, kind = "Gun", name = "Phaser", rarity = "Classic", itemid = 196752144, mk = "SpecialMesh", grip = {0,-0.65,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Pixel"] = { mesh = "rbxassetid://361629844", tex = "rbxassetid://361630114", sx = 2, sy = 3, sz = 3, kind = "Knife", name = "Pixel", rarity = "Godly", itemid = 473573054, mk = "SpecialMesh", grip = {0.0409632,0.0228622,1.10536,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.00634003,0.0351667,-0.220734,0.998168,-0.0604927,-0.000748175,0.0060784,0.0879775,0.996104,-0.0601912,-0.994284,0.0881841}, snd = "rbxassetid://12222208" },
+    ["Plasmabeam"] = { mesh = "rbxassetid://9702755186", tex = "rbxassetid://10015208201", sx = 0.0435385, sy = 0.0435385, sz = 0.0435385, kind = "Gun", name = "Plasmabeam", rarity = "Godly", itemid = 10014717343, mk = "MeshPart", grip = {4.76837e-07,-0.366637,0.688645,1,0,0,0,0.999392,0.0348688,0,-0.0348688,0.999392}, att = "CustomAttachment", acf = {0.0642943,0.056468,0.191866,1,0,0,0,0.292319,0.956321,0,-0.956321,0.292319} },
+    ["Plasmablade"] = { mesh = "rbxassetid://9702732853", tex = "rbxassetid://10015130416", sx = 0.00161661, sy = 0.00161661, sz = 0.00161661, kind = "Knife", name = "Plasmablade", rarity = "Godly", itemid = 10014680882, mk = "MeshPart", grip = {0.00261497,-1.25,0.0499308,0.998632,0,0.0522932,0,1,0,-0.0522932,0,0.998632}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Prismatic"] = { mesh = "rbxassetid://5355753728", tex = "rbxassetid://5355747943", sx = 0.0654659, sy = 0.0654659, sz = 0.0654659, kind = "Knife", name = "Prismatic", rarity = "Godly", itemid = 5360359935, mk = "MeshPart", grip = {-1.4117e-06,-1.2,-1.49012e-08,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Pumpking"] = { mesh = "rbxassetid://94840342", tex = "rbxassetid://1133078553", sx = 0.45, sy = 0.45, sz = 0.45, kind = "Knife", name = "Pumpking", rarity = "Godly", itemid = 1138143590, mk = "SpecialMesh", grip = {0,-1.48171,0.0448484,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["PurpleSeer"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://3184063317", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Purple Seer", rarity = "Godly", itemid = 3184125244, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Rainbow_G"] = { mesh = "rbxassetid://12921221200", tex = "rbxassetid://12921231088", sx = 0.0518927, sy = 0.0518927, sz = 0.0518927, kind = "Gun", name = "Rainbow Gun", rarity = "Godly", itemid = 12966354606, mk = "MeshPart", grip = {4.76837e-07,-0.313025,0.724285,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Rainbow_K"] = { mesh = "rbxassetid://12921240966", tex = "rbxassetid://12921241867", sx = 0.065222, sy = 0.065222, sz = 0.065222, kind = "Knife", name = "Rainbow", rarity = "Godly", itemid = 12966184630, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Raygun"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://127881437685243", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Raygun", rarity = "Godly", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 0, bg = 1, bb = 0, bw = 0.2 },
+    ["RaygunBronze"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://95710988105793", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Bronze Raygun", rarity = "Unique", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 1, bg = 0.392157, bb = 0, bw = 0.2 },
+    ["RaygunChroma"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://127881437685243", sx = 0.047203, sy = 0.047203, sz = 0.047203, kind = "Gun", name = "Raygun", rarity = "Godly", itemid = 139431943195380, mk = "SpecialMesh", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.6, br = 1, bg = 0, bb = 0.0156863, bw = 0.2 },
+    ["RaygunGold"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://77180826972361", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Gold Raygun", rarity = "Unique", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 1, bg = 0.823529, bb = 0.156863, bw = 0.2 },
+    ["RaygunRed"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://140527708015963", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Red Raygun", rarity = "Unique", itemid = 132354489228618, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 1, bg = 0, bb = 0, bw = 0.2 },
+    ["RaygunSilver"] = { mesh = "rbxassetid://115447220952926", tex = "rbxassetid://138772116957894", sx = 0.0471077, sy = 0.0471077, sz = 0.0471077, kind = "Gun", name = "Silver Raygun", rarity = "Unique", itemid = 139431943195380, mk = "MeshPart", grip = {2.86102e-06,-0.324906,0.504986,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://76985543647435", spd = 1.4, br = 0.784314, bg = 0.784314, bb = 1, bw = 0.2 },
+    ["Reaver_Ancient"] = { mesh = "rbxassetid://7774148738", tex = "rbxassetid://93300711960239", sx = 0.272558, sy = 0.272558, sz = 0.272558, kind = "Knife", name = "Reaver", rarity = "Ancient", itemid = 7791640819, mk = "MeshPart", grip = {0,0,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["RedHallow"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://127350385960219", sx = 0.57, sy = 0.57, sz = 0.57, kind = "Knife", name = "Red Hallow", rarity = "Unique", itemid = 2511343130, mk = "SpecialMesh", grip = {0,-0.953644,0.0308308,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["RedIceblaster"] = { mesh = "rbxassetid://6125828567", tex = "rbxassetid://6246951385", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Red Iceblaster", rarity = "Unique", itemid = 6404168049, mk = "MeshPart", grip = {-0.00846958,-0.700001,-0.546006,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["RedIcebreaker"] = { mesh = "rbxassetid://6124173614", tex = "rbxassetid://6237994207", sx = 0.968497, sy = 0.968497, sz = 0.968497, kind = "Knife", name = "Red Icebreaker", rarity = "Unique", itemid = 6404129111, mk = "MeshPart", grip = {0,-0.95,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["RedLuger"] = { mesh = "rbxassetid://95356090", tex = "rbxassetid://126534866", sx = 1.8, sy = 1.8, sz = 1.8, kind = "Gun", name = "Red Luger", rarity = "Godly", itemid = 332044583, mk = "SpecialMesh", grip = {0,-0.206,0.5,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.150001,0.0383508,0.333212,1,0,0,0,0,1,0,-1,0} },
+    ["RedSeer"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://3184063443", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Red Seer", rarity = "Godly", itemid = 3184122829, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Sakura_K"] = { mesh = "rbxassetid://12307707430", tex = "rbxassetid://12307707797", sx = 0.0741183, sy = 0.0741183, sz = 0.0741183, kind = "Knife", name = "Sakura", rarity = "Godly", itemid = 12339366064, mk = "MeshPart", grip = {0.00698853,-1.25001,-0.0497513,0.997562,0,-0.0697919,0,1,0,0.0697919,0,0.997562}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Saw"] = { mesh = "rbxassetid://168119698", tex = "rbxassetid://168119736", sx = 0.5, sy = 0.5, sz = 0.55, kind = "Knife", name = "Saw", rarity = "Godly", itemid = 235381341, mk = "SpecialMesh", grip = {-0.1,-1.1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SawChroma"] = { mesh = "rbxassetid://168119698", tex = "rbxassetid://3171086347", sx = 0.5, sy = 0.5, sz = 0.55, kind = "Knife", name = "Saw", rarity = "Godly", itemid = 3187392992, mk = "SpecialMesh", grip = {-0.1,-1.1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Scythe"] = { mesh = "rbxassetid://305826272", tex = "rbxassetid://2511673515", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Batwing", rarity = "Ancient", itemid = 2511791893, mk = "SpecialMesh", grip = {0,-0.851566,0.310403,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SeerChroma"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://3184059718", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Seer", rarity = "Godly", itemid = 3184125538, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ShadowKnife"] = { mesh = "rbxassetid://86297695", tex = "rbxassetid://86290910", sx = 0.4, sy = 0.2, sz = 0.25, kind = "Knife", name = "Shadow", rarity = "Classic", itemid = 474030882, mk = "SpecialMesh", grip = {0,0,-0.9,0,0,1,1,0,0,0,1,0}, att = "CustomAttachment", acf = {0.0174751,0.00359154,0.110369,-5.96046e-07,0.0871879,0.996192,1,6.16056e-07,5.44407e-07,-5.66244e-07,0.996192,-0.0871879} },
+    ["Shark"] = { mesh = "rbxassetid://118269783", tex = "rbxassetid://203858007", sx = 0.3, sy = 0.43, sz = 0.4, kind = "Gun", name = "Shark", rarity = "Godly", itemid = 203858533, mk = "SpecialMesh", grip = {0,-0.5,0.33,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.150001,-0.243558,0.230608,1,0,0,0,0,1,0,-1,0} },
+    ["SharkChroma"] = { mesh = "rbxassetid://118269783", tex = "rbxassetid://3171214838", sx = 0.3, sy = 0.43, sz = 0.4, kind = "Gun", name = "Shark", rarity = "Godly", itemid = 3187395738, mk = "SpecialMesh", grip = {0,-0.5,0.33,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.150001,-0.243558,0.230608,1,0,0,0,0,1,0,-1,0} },
+    ["SharkSeeker"] = { mesh = "rbxassetid://6967743598", tex = "rbxassetid://116456411083958", sx = 0.747508, sy = 0.747508, sz = 0.747508, kind = "Gun", name = "SharkSeeker", rarity = "Unique", itemid = 6967771328, mk = "MeshPart", grip = {0.100067,-0.460144,-0.500244,1,0,0,0,0,-1,0,1,0}, att = "CustomAttachment", acf = {0.150013,-0.132543,-0.259675,1,-9.02003e-06,-8.58495e-05,-9.02003e-06,0.978163,-0.207842,8.58495e-05,0.207842,0.978163} },
+    ["SilverCandy"] = { mesh = "rbxassetid://19040337", tex = "rbxassetid://121270219768463", sx = 1.1, sy = 1.4, sz = 1.1, kind = "Knife", name = "Silver Candy", rarity = "Unique", itemid = 1520190188, mk = "SpecialMesh", grip = {0.0770696,0.794289,0,-4.98295e-05,1.04494e-06,1,-0.0418635,-0.999123,-1.04494e-06,0.999123,-0.0418635,4.98891e-05}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SilverHallow"] = { mesh = "rbxassetid://179155055", tex = "rbxassetid://89776718839618", sx = 0.57, sy = 0.57, sz = 0.57, kind = "Knife", name = "Silver Hallow", rarity = "Unique", itemid = 2511341094, mk = "SpecialMesh", grip = {0,-0.953644,0.0308308,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SilverHarvester"] = { mesh = "rbxassetid://7775027413", tex = "rbxassetid://135754701701228", sx = 0.0507252, sy = 0.0507252, sz = 0.0507252, kind = "Gun", name = "Silver Harvester", rarity = "Unique", itemid = 8194217388, mk = "MeshPart", grip = {0,-0.510937,0.34054,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0.129903,2.22922e-06,0.075002,2.05636e-05,-0.5,-0.866025,1,-4.04856e-05,4.71192e-05,-5.86212e-05,-0.866025,0.5}, snd = "rbxassetid://7808472682", spd = 1.4, br = 0.754406, bg = 0.756634, bb = 0.717739, bw = 0.2 },
+    ["SilverIceblaster"] = { mesh = "rbxassetid://6125828567", tex = "rbxassetid://6246950589", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Silver Iceblaster", rarity = "Unique", itemid = 6404166698, mk = "MeshPart", grip = {-0.00846958,-0.700001,-0.546006,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SilverIcebreaker"] = { mesh = "rbxassetid://6124173614", tex = "rbxassetid://6237992602", sx = 0.968497, sy = 0.968497, sz = 0.968497, kind = "Knife", name = "Silver Icebreaker", rarity = "Unique", itemid = 6404126280, mk = "MeshPart", grip = {0,-0.95,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SilverSugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://94596753362122", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Silver Sugar", rarity = "Unique", itemid = 3215261680, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
+    ["SilverVampiresEdge"] = { mesh = "rbxassetid://5841895234", tex = "rbxassetid://93427229045342", sx = 0.067029, sy = 0.067029, sz = 0.067029, kind = "Knife", name = "Silver Vamp's Edge", rarity = "Unique", itemid = 6084840560, mk = "MeshPart", grip = {0.0177402,-1.31739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Slasher"] = { mesh = "rbxassetid://283709822", tex = "rbxassetid://313894904", sx = 0.45, sy = 0.45, sz = 0.45, kind = "Knife", name = "Slasher", rarity = "Godly", itemid = 315506122, mk = "SpecialMesh", grip = {0,-1.1,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SlasherChroma"] = { mesh = "rbxassetid://283709822", tex = "rbxassetid://3171107559", sx = 0.45, sy = 0.45, sz = 0.45, kind = "Knife", name = "Slasher", rarity = "Godly", itemid = 3187393285, mk = "SpecialMesh", grip = {0,-1.1,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Snowcannon"] = { mesh = "rbxassetid://99836890880541", tex = "rbxassetid://122392330922281", sx = 0.0499913, sy = 0.0499913, sz = 0.0499913, kind = "Gun", name = "Snowcannon", rarity = "Godly", itemid = 129186939023729, mk = "MeshPart", grip = {0,-0.0631877,0.533081,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,0,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://138706272607549", spd = 1.4, br = 1, bg = 1, bb = 1, bw = 0.5 },
+    ["SnowcannonChroma"] = { mesh = "rbxassetid://99836890880541", tex = "rbxassetid://122392330922281", sx = 0.0496382, sy = 0.0496382, sz = 0.0496382, kind = "Gun", name = "Snowcannon", rarity = "Godly", itemid = 129186939023729, mk = "SpecialMesh", grip = {0,-0.0631877,0.533081,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.251504,0.113062,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763}, snd = "rbxassetid://138706272607549", spd = 1.4, br = 1, bg = 0, bb = 0.0156863, bw = 0.5 },
+    ["SnowDagger"] = { mesh = "rbxassetid://140633396635861", tex = "rbxassetid://77812964601215", sx = 0.0598018, sy = 0.0598018, sz = 0.0598018, kind = "Knife", name = "Snow Dagger", rarity = "Godly", itemid = 95328449981238, mk = "MeshPart", grip = {0,-0.811623,-0.0925598,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SnowDaggerChroma"] = { mesh = "rbxassetid://140633396635861", tex = "rbxassetid://77812964601215", sx = 0.0597824, sy = 0.0597823, sz = 0.0597824, kind = "Knife", name = "Snow Dagger", rarity = "Godly", itemid = 95328449981238, mk = "SpecialMesh", grip = {0,-0.812,-0.093,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Snowflake"] = { mesh = "rbxassetid://582120569", tex = "rbxassetid://582120836", sx = 0.3, sy = 0.5, sz = 0.5, kind = "Knife", name = "Snowflake", rarity = "Godly", itemid = 1268932977, mk = "SpecialMesh", grip = {-0.0485067,-1.32605,-0.140247,-0.998247,0,-0.059191,0,1,0,0.059191,0,-0.998247}, att = "CustomAttachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1}, snd = "rbxassetid://12222208" },
+    ["Snowstorm"] = { mesh = "rbxassetid://86944837615327", tex = "rbxassetid://84853425379784", sx = 0.07704, sy = 0.07704, sz = 0.07704, kind = "Knife", name = "Snowstorm", rarity = "Godly", itemid = 70973050894155, mk = "MeshPart", grip = {0,-1.24664,-0.20897,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SnowstormChroma"] = { mesh = "rbxassetid://86944837615327", tex = "rbxassetid://86253759560362", sx = 0.0770485, sy = 0.0770485, sz = 0.0770485, kind = "Knife", name = "Snowstorm", rarity = "Godly", itemid = 70973050894155, mk = "SpecialMesh", grip = {0,-1.247,-0.209,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Sorry"] = { mesh = "rbxassetid://121944778", tex = "rbxassetid://162016526", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Corrupt", rarity = "Unique", itemid = 197879343, mk = "SpecialMesh", grip = {0,-1,-0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Spectre2022"] = { mesh = "rbxassetid://11165536294", tex = "rbxassetid://11165715120", sx = 0.0519647, sy = 0.0519647, sz = 0.0519647, kind = "Gun", name = "Spectre", rarity = "Godly", itemid = 11229779932, mk = "MeshPart", grip = {-9.53674e-07,-0.400002,0.85001,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Spider"] = { mesh = "rbxassetid://302165984", tex = "rbxassetid://315122091", sx = 0.55, sy = 0.57, sz = 0.52, kind = "Knife", name = "Spider", rarity = "Godly", itemid = 473571549, mk = "SpecialMesh", grip = {0.025,0,1.23,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.00147438,0.0873165,-0.121957,0.998168,-0.0604927,-0.000748175,0.0060784,0.0879775,0.996104,-0.0601912,-0.994284,0.0881841} },
+    ["Sugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://101086650", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Sugar", rarity = "Godly", itemid = 332848695, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
+    ["SunsetGun"] = { mesh = "rbxassetid://109742397574153", tex = "rbxassetid://71731808219690", sx = 0.045846, sy = 0.045846, sz = 0.045846, kind = "Gun", name = "Sunrise", rarity = "Godly", itemid = 129480661108374, mk = "SpecialMesh", grip = {0,-0.312398,0.598953,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SunsetGunChroma"] = { mesh = "rbxassetid://109742397574153", tex = "rbxassetid://71731808219690", sx = 0.045846, sy = 0.045846, sz = 0.045846, kind = "Gun", name = "Sunrise", rarity = "Godly", itemid = 129480661108374, mk = "SpecialMesh", grip = {0,-0.312398,0.598953,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SunsetKnife"] = { mesh = "rbxassetid://137082284051764", tex = "rbxassetid://93782017269677", sx = 0.0739118, sy = 0.0739118, sz = 0.0739118, kind = "Knife", name = "Sunset", rarity = "Godly", itemid = 103526268515240, mk = "SpecialMesh", grip = {0,-1.19981,-0.0379448,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SunsetKnifeChroma"] = { mesh = "rbxassetid://137082284051764", tex = "rbxassetid://93782017269677", sx = 0.074, sy = 0.074, sz = 0.074, kind = "Knife", name = "Sunset", rarity = "Godly", itemid = 103526268515240, mk = "SpecialMesh", grip = {0,-1.19981,-0.0379448,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Sweet"] = { mesh = "rbxassetid://88250692342609", tex = "rbxassetid://75844398224824", sx = 0.0690688, sy = 0.0690688, sz = 0.0690688, kind = "Knife", name = "Sweet", rarity = "Godly", itemid = 126937716954396, mk = "MeshPart", grip = {0,-1,-0.0851784,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SweetChroma"] = { mesh = "rbxassetid://88250692342609", tex = "rbxassetid://120707737118924", sx = 0.0691317, sy = 0.0691317, sz = 0.0691317, kind = "Knife", name = "Sweet", rarity = "Godly", itemid = 126937716954396, mk = "SpecialMesh", grip = {0,-1,-0.0851784,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyAxe"] = { mesh = "rbxassetid://8293463844", tex = "rbxassetid://8293464070", sx = 0.0579297, sy = 0.0579297, sz = 0.0579297, kind = "Knife", name = "Swirly Axe", rarity = "Ancient", itemid = 8304801000, mk = "MeshPart", grip = {0,-1.37884,-0.128277,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyAxeBlue"] = { mesh = "rbxassetid://8293463844", tex = "rbxassetid://104936887740570", sx = 0.0579297, sy = 0.0579297, sz = 0.0579297, kind = "Knife", name = "Blue Swirly", rarity = "Unique", itemid = 9552048857, mk = "MeshPart", grip = {0,-1.37884,-0.128277,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyAxeBronze"] = { mesh = "rbxassetid://8293463844", tex = "rbxassetid://72640876732961", sx = 0.0579297, sy = 0.0579297, sz = 0.0579297, kind = "Knife", name = "Bronze Swirly", rarity = "Unique", itemid = 9552050165, mk = "MeshPart", grip = {0,-1.37884,-0.128277,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyAxeGold"] = { mesh = "rbxassetid://8293463844", tex = "rbxassetid://114259248231480", sx = 0.0579297, sy = 0.0579297, sz = 0.0579297, kind = "Knife", name = "Gold Swirly", rarity = "Unique", itemid = 9552054920, mk = "MeshPart", grip = {0,-1.37884,-0.128277,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyAxeSilver"] = { mesh = "rbxassetid://8293463844", tex = "rbxassetid://130265773868655", sx = 0.0579297, sy = 0.0579297, sz = 0.0579297, kind = "Knife", name = "Silver Swirly", rarity = "Unique", itemid = 9552051805, mk = "MeshPart", grip = {0,-1.37884,-0.128277,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyBlade"] = { mesh = "rbxassetid://8302964090", tex = "rbxassetid://8302965681", sx = 0.0669408, sy = 0.0669408, sz = 0.0669408, kind = "Knife", name = "Swirly Blade", rarity = "Godly", itemid = 8304805693, mk = "MeshPart", grip = {0,-1.37884,-0.128277,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyGun"] = { mesh = "rbxassetid://8310911339", tex = "rbxassetid://8293539377", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Swirly Gun", rarity = "Godly", itemid = 8305264097, mk = "MeshPart", grip = {0,-0.7,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyGunBlue"] = { mesh = "rbxassetid://8310911339", tex = "rbxassetid://128080442870136", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Blue Swirly", rarity = "Unique", itemid = 9552060741, mk = "MeshPart", grip = {0,-1.0327,-0.184568,1,0,0,0,0.00986373,-0.999951,0,0.999951,0.00986373}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyGunBronze"] = { mesh = "rbxassetid://8310911339", tex = "rbxassetid://131739931967450", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Bronze Swirly", rarity = "Unique", itemid = 9552063524, mk = "MeshPart", grip = {0,-1.0327,-0.184568,1,0,0,0,0.00986373,-0.999951,0,0.999951,0.00986373}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyGunChroma"] = { mesh = "rbxassetid://8310911339", tex = "rbxassetid://8320249073", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Swirly Gun", rarity = "Godly", itemid = 8311393414, mk = "SpecialMesh", grip = {0,-0.7,-0.3,1,0,0,0,0,-1,0,1,0}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyGunGold"] = { mesh = "rbxassetid://8310911339", tex = "rbxassetid://86525853241824", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Gold Swirly", rarity = "Unique", itemid = 9552065167, mk = "MeshPart", grip = {0,-1.0327,-0.184568,1,0,0,0,0.00986373,-0.999951,0,0.999951,0.00986373}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["SwirlyGunSilver"] = { mesh = "rbxassetid://8310911339", tex = "rbxassetid://136221464386403", sx = 1, sy = 1, sz = 1, kind = "Gun", name = "Silver Swirly", rarity = "Unique", itemid = 9552064240, mk = "MeshPart", grip = {0,-1.0327,-0.184568,1,0,0,0,0.00986373,-0.999951,0,0.999951,0.00986373}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Synthwave_Ancient"] = { mesh = "rbxassetid://108638551470204", tex = "rbxassetid://84281380230931", sx = 0.0853938, sy = 0.0853938, sz = 0.0853938, kind = "Knife", name = "Synthwave", rarity = "Ancient", itemid = 133828016595037, mk = "SpecialMesh", grip = {0,-0.900002,0.400002,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Synthwave_Blue"] = { mesh = "rbxassetid://108638551470204", tex = "rbxassetid://73646848153331", sx = 0.0853938, sy = 0.0853938, sz = 0.0853938, kind = "Knife", name = "Blue Synthwave", rarity = "Unique", itemid = 122762984016505, mk = "SpecialMesh", grip = {0,-0.900002,0.400002,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Synthwave_Bronze"] = { mesh = "rbxassetid://108638551470204", tex = "rbxassetid://127127222066235", sx = 0.0853938, sy = 0.0853938, sz = 0.0853938, kind = "Knife", name = "Bronze Synthwave", rarity = "Unique", itemid = 72230744607038, mk = "SpecialMesh", grip = {0,-0.900002,0.400002,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Synthwave_Gold"] = { mesh = "rbxassetid://108638551470204", tex = "rbxassetid://138590993593024", sx = 0.0853938, sy = 0.0853938, sz = 0.0853938, kind = "Knife", name = "Gold Synthwave", rarity = "Unique", itemid = 138834911796124, mk = "SpecialMesh", grip = {0,-0.900002,0.400002,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Synthwave_Silver"] = { mesh = "rbxassetid://108638551470204", tex = "rbxassetid://123410713974388", sx = 0.0853938, sy = 0.0853938, sz = 0.0853938, kind = "Knife", name = "Silver Synthwave", rarity = "Unique", itemid = 103455022994358, mk = "SpecialMesh", grip = {0,-0.900002,0.400002,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["TheSeer"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://156092253", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Seer", rarity = "Godly", itemid = 198441783, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Tides"] = { mesh = "rbxassetid://238314382", tex = "rbxassetid://238314431", sx = 0.7, sy = 0.9, sz = 0.7, kind = "Knife", name = "Tides", rarity = "Godly", itemid = 473569625, mk = "SpecialMesh", grip = {-0.00129008,-0.0207807,1.27181,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.0034008,0.12727,-0.215154,0.99799,-0.0632672,-0.00356949,0.00362949,0.000833333,0.999993,-0.0632638,-0.997996,0.00106129}, snd = "rbxassetid://96667910" },
+    ["TidesChroma"] = { mesh = "rbxassetid://238314382", tex = "rbxassetid://3171168641", sx = 0.7, sy = 0.9, sz = 0.7, kind = "Knife", name = "Tides", rarity = "Godly", itemid = 3187394934, mk = "SpecialMesh", grip = {-0.00129008,-0.0207807,1.27181,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.0034008,0.12727,-0.215154,0.99799,-0.0632672,-0.00356949,0.00362949,0.000833333,0.999993,-0.0632638,-0.997996,0.00106129}, snd = "rbxassetid://96667910" },
+    ["TimeKnife"] = { mesh = "rbxassetid://70990583", tex = "rbxassetid://70990591", sx = 0.5, sy = 0.8, sz = 0.6, kind = "Knife", name = "Prince", rarity = "Classic", itemid = 473575049, mk = "SpecialMesh", grip = {0,0,-0.9,0,0,1,1,0,0,0,1,0}, att = "CustomAttachment", acf = {0.0869875,-0.00751591,0.121968,0.0420246,0.0839162,0.995586,0.995594,-0.0871232,-0.0346815,0.0838284,0.992657,-0.0872077} },
+    ["TravelerAxe"] = { mesh = "rbxassetid://15057341638", tex = "rbxassetid://15057460725", sx = 0.06812, sy = 0.06812, sz = 0.06812, kind = "Knife", name = "Traveler's Axe", rarity = "Ancient", itemid = 15070870271, mk = "MeshPart", grip = {0,-1.06253,0.209976,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["TravelerAxeBronze"] = { mesh = "rbxassetid://15057341638", tex = "rbxassetid://132387132630890", sx = 0.06812, sy = 0.06812, sz = 0.06812, kind = "Knife", name = "Bronze Traveler's", rarity = "Unique", itemid = 15695407020, mk = "MeshPart", grip = {0,-1.06253,0.209976,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["TravelerAxeGold"] = { mesh = "rbxassetid://15057341638", tex = "rbxassetid://130867860442100", sx = 0.06812, sy = 0.06812, sz = 0.06812, kind = "Knife", name = "Gold Traveler's", rarity = "Unique", itemid = 15695408631, mk = "MeshPart", grip = {0,-1.06253,0.209976,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["TravelerAxeRed"] = { mesh = "rbxassetid://15057341638", tex = "rbxassetid://80712779531954", sx = 0.06812, sy = 0.06812, sz = 0.06812, kind = "Knife", name = "Red Traveler's", rarity = "Unique", itemid = 15695405379, mk = "MeshPart", grip = {0,-1.06253,0.209976,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["TravelerAxeSilver"] = { mesh = "rbxassetid://15057341638", tex = "rbxassetid://96319320406960", sx = 0.06812, sy = 0.06812, sz = 0.06812, kind = "Knife", name = "Silver Traveler's", rarity = "Unique", itemid = 15695407742, mk = "MeshPart", grip = {0,-1.06253,0.209976,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["TravelerGun"] = { mesh = "rbxassetid://15090814396", tex = "rbxassetid://15090814672", sx = 0.049101, sy = 0.049101, sz = 0.049101, kind = "Gun", name = "Traveler's Gun", rarity = "Godly", itemid = 15091442039, mk = "MeshPart", grip = {0,-0.327408,0.66172,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["TravelerGunChroma"] = { mesh = "rbxassetid://15090814396", tex = "rbxassetid://15090814672", sx = 0.0499, sy = 0.0499, sz = 0.0499, kind = "Gun", name = "Traveler's Gun", rarity = "Godly", itemid = 15097897227, mk = "SpecialMesh", grip = {0,-0.327408,0.66172,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Treat"] = { mesh = "rbxassetid://135790480817772", tex = "rbxassetid://108067764674565", sx = 0.0538993, sy = 0.0538993, sz = 0.0538993, kind = "Gun", name = "Treat", rarity = "Godly", itemid = 131626924640663, mk = "MeshPart", grip = {0,-0.217681,0.510811,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["TreatChroma"] = { mesh = "rbxassetid://135790480817772", tex = "rbxassetid://86649236464456", sx = 0.0538449, sy = 0.0538449, sz = 0.0538449, kind = "Gun", name = "Treat", rarity = "Godly", itemid = 131626924640663, mk = "SpecialMesh", grip = {0,-0.217681,0.510811,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["TreeGun2023"] = { mesh = "rbxassetid://15408863676", tex = "rbxassetid://15408849730", sx = 0.0204573, sy = 0.0204573, sz = 0.0204573, kind = "Gun", name = "Evergun", rarity = "Godly", itemid = 15682703596, mk = "MeshPart", grip = {0,-0.399999,0.700001,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["TreeGun2023Chroma"] = { mesh = "rbxassetid://15408863676", tex = "", sx = 0.021, sy = 0.021, sz = 0.0205, kind = "Gun", name = "Evergun", rarity = "Godly", itemid = 15682703596, mk = "SpecialMesh", grip = {0,-0.399999,0.700001,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["TreeKnife2023"] = { mesh = "rbxassetid://15408280573", tex = "rbxassetid://15408244684", sx = 0.00460388, sy = 0.00460388, sz = 0.00460388, kind = "Knife", name = "Evergreen", rarity = "Godly", itemid = 15667157715, mk = "SpecialMesh", grip = {0,-1.78239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["TreeKnife2023Chroma"] = { mesh = "rbxassetid://15408280573", tex = "", sx = 0.00460388, sy = 0.00460388, sz = 0.00460388, kind = "Knife", name = "Evergreen", rarity = "Godly", itemid = 15694110573, mk = "SpecialMesh", grip = {0,-1.78239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Turkey2023"] = { mesh = "rbxassetid://15320557481", tex = "rbxassetid://15320558272", sx = 0.056, sy = 0.056, sz = 0.056, kind = "Knife", name = "Turkey", rarity = "Godly", itemid = 15413149176, mk = "SpecialMesh", grip = {0,-0.869298,-0.00832939,0.29273,0,-0.956195,0,1,0,0.956195,0,0.29273}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1}, snd = "rbxassetid://22593942", spd = 2 },
+    ["UFOKnife"] = { mesh = "rbxassetid://86649405964534", tex = "rbxassetid://94763497877100", sx = 0.0758249, sy = 0.0758249, sz = 0.0758249, kind = "Knife", name = "Alienbeam", rarity = "Godly", itemid = 77607127867154, mk = "MeshPart", grip = {0,-1.33999,-0.0485134,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["UFOKnifeChroma"] = { mesh = "rbxassetid://86649405964534", tex = "rbxassetid://94763497877100", sx = 0.0769716, sy = 0.0769716, sz = 0.0769716, kind = "Knife", name = "Alienbeam", rarity = "Godly", itemid = 77607127867154, mk = "SpecialMesh", grip = {0,-1.33999,-0.0485134,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["VampireAxe"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://73008954478338", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Vampire's Axe", rarity = "Ancient", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["VampireAxe_Bronze"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://111596346843508", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Bronze Vampire's Axe", rarity = "Unique", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["VampireAxe_Gold"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://74854973007045", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Gold Vampire's Axe", rarity = "Unique", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["VampireAxe_Purple"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://105697888796687", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Purple Vampire's Axe", rarity = "Unique", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["VampireAxe_Silver"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://134673784441932", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Silver Vampire's Axe", rarity = "Unique", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["VampireGun"] = { mesh = "rbxassetid://126591885289479", tex = "rbxassetid://104946799389637", sx = 0.0482543, sy = 0.0482543, sz = 0.0482543, kind = "Gun", name = "Vampire's Gun", rarity = "Godly", itemid = 90274872705656, mk = "MeshPart", grip = {0,-0.355123,0.703253,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["VampireGunChroma"] = { mesh = "rbxassetid://126591885289479", tex = "rbxassetid://104946799389637", sx = 0.05, sy = 0.05, sz = 0.05, kind = "Gun", name = "Vampire's Gun", rarity = "Godly", itemid = 90274872705656, mk = "SpecialMesh", grip = {0,-0.355123,0.703253,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["VampiresEdge"] = { mesh = "rbxassetid://5841895234", tex = "rbxassetid://5842343736", sx = 0.067029, sy = 0.067029, sz = 0.067029, kind = "Knife", name = "Vampire's Edge", rarity = "Godly", itemid = 5873256998, mk = "MeshPart", grip = {0.0177402,-1.31739,0.0700035,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Virtual"] = { mesh = "rbxassetid://130101214", tex = "rbxassetid://386250868", sx = 0.6, sy = 0.6, sz = 0.7, kind = "Knife", name = "Virtual", rarity = "Godly", itemid = 386276987, mk = "SpecialMesh", grip = {0,-1.35075,0.05,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Watergun"] = { mesh = "rbxassetid://18280999342", tex = "rbxassetid://18281003313", sx = 0.0399999, sy = 0.0399999, sz = 0.0399999, kind = "Gun", name = "Watergun", rarity = "Godly", itemid = 18351388416, mk = "MeshPart", grip = {0,-0.144856,0.660992,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["WatergunChroma"] = { mesh = "rbxassetid://18280999342", tex = "rbxassetid://18281003313", sx = 0.0394732, sy = 0.0394732, sz = 0.0394732, kind = "Gun", name = "Watergun", rarity = "Godly", itemid = 18351401528, mk = "SpecialMesh", grip = {0,-0.145,0.661,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["Waves_K"] = { mesh = "rbxassetid://13916938702", tex = "rbxassetid://13916939964", sx = 0.0792409, sy = 0.0792409, sz = 0.0792409, kind = "Knife", name = "Waves", rarity = "Godly", itemid = 13945892398, mk = "MeshPart", grip = {0,-1.18239,-0.0377426,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["WintersEdge"] = { mesh = "rbxassetid://93108071", tex = "rbxassetid://93112631", sx = 0.45, sy = 0.45, sz = 0.45, kind = "Knife", name = "Winter's Edge", rarity = "Godly", itemid = 1268708987, mk = "SpecialMesh", grip = {0.130483,-1.22531,-0.0485067,-0.0591605,0,0.998249,0,1,0,-0.998249,0,-0.0591605}, att = "CustomAttachment", acf = {-0.0510927,0.0859613,-0.000505446,-0.0348276,-0.00183551,-0.999392,0.0347391,0.999392,-0.00304612,0.998789,-0.0348241,-0.0347426} },
+    ["WraithGun"] = { mesh = "rbxassetid://79527507796407", tex = "rbxassetid://80102752403085", sx = 0.0443862, sy = 0.0443862, sz = 0.0443862, kind = "Gun", name = "Soul", rarity = "Godly", itemid = 75233248021696, mk = "MeshPart", grip = {0,-0.255122,0.603252,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["WraithKnife"] = { mesh = "rbxassetid://112444333460928", tex = "rbxassetid://131787177447081", sx = 0.104685, sy = 0.104685, sz = 0.104685, kind = "Knife", name = "Spirit", rarity = "Godly", itemid = 107190526940939, mk = "MeshPart", grip = {0,-1.09678,0.0128136,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["XenoGun"] = { mesh = "rbxassetid://96867436912658", tex = "rbxassetid://103568875118220", sx = 0.0533505, sy = 0.0533505, sz = 0.0533505, kind = "Gun", name = "Xenoshot", rarity = "Godly", itemid = 79722325448464, mk = "MeshPart", grip = {2.38419e-06,-0.0123981,0.76688,1,0,0,0,1,0,0,0,1}, att = "CustomAttachment", acf = {0,-0.2,0.0899086,1,0,0,0,0.642763,0.766065,0,-0.766065,0.642763} },
+    ["XenoKnife"] = { mesh = "rbxassetid://136619680236977", tex = "rbxassetid://113651973865393", sx = 0.0783815, sy = 0.0783815, sz = 0.0783815, kind = "Knife", name = "Xenoknife", rarity = "Godly", itemid = 100576599313371, mk = "MeshPart", grip = {0,-1.1,0,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Xmas"] = { mesh = "rbxassetid://187852667", tex = "rbxassetid://187852629", sx = 0.6, sy = 0.6, sz = 0.6, kind = "Knife", name = "Xmas", rarity = "Godly", itemid = 473572568, mk = "SpecialMesh", grip = {0,0,1.37163,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {0,0,0,0.99799,-0.0632672,-0.00356949,0.00362949,0.000833333,0.999993,-0.0632638,-0.997996,0.00106129} },
+    ["YellowSeer"] = { mesh = "rbxassetid://156092238", tex = "rbxassetid://3184063623", sx = 0.7, sy = 0.91, sz = 1, kind = "Knife", name = "Yellow Seer", rarity = "Godly", itemid = 3184124768, mk = "SpecialMesh", grip = {0.061,-1,0.2,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["ZombieBat"] = { mesh = "rbxassetid://11182796403", tex = "rbxassetid://11192090515", sx = 0.0740612, sy = 0.0740612, sz = 0.0740612, kind = "Knife", name = "Bat", rarity = "Godly", itemid = 11229814357, mk = "MeshPart", grip = {0,-1.35,-0.0499954,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+}
+do local alias = {}
+    for k, v in pairs(MESH_DB) do
+        if type(v.name) == 'string' and v.name ~= '' and MESH_DB[v.name] == nil then alias[v.name] = v end
+    end
+    for k, v in pairs(alias) do MESH_DB[k] = v end
+end
+
+local CATALOG_DB = {
+    ["AmericaSword"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=446047742", ItemID = 473570051, ItemName = "Old Glory", ItemType = "Knife", Rarity = "Godly" },
+    ["Amerilaser"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=446050753", ItemID = 446050753, ItemName = "Amerilaser", ItemType = "Gun", Rarity = "Godly" },
+    ["AuroraGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=108635848059846", ItemID = 108635848059846, ItemName = "Borealis", ItemType = "Gun", Rarity = "Godly" },
+    ["AuroraKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=101343256002049", ItemID = 101343256002049, ItemName = "Australis", ItemType = "Knife", Rarity = "Godly" },
+    ["BattleAxe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1133237368", ItemID = 1133237368, ItemName = "BattleAxe", ItemType = "Knife", Rarity = "Godly" },
+    ["BattleAxe2"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2513535503", ItemID = 2513535503, ItemName = "BattleAxe II", ItemType = "Knife", Rarity = "Godly" },
+    ["Bauble"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=84481559639371", ItemID = 84481559639371, ItemName = "Bauble", ItemType = "Gun", Rarity = "Godly" },
+    ["BaubleChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=137938731902685", ItemID = 84481559639371, ItemName = "Bauble", ItemType = "Gun", Rarity = "Godly" },
+    ["BaubleKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=111092946728824", ItemID = 111092946728824, ItemName = "Ornament", ItemType = "Knife", Rarity = "Godly" },
+    ["BaubleKnifeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=74528014775455", ItemID = 111092946728824, ItemName = "Ornament", ItemType = "Knife", Rarity = "Godly" },
+    ["Bioblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751540097", ItemID = 4751539262, ItemName = "Bioblade", ItemType = "Knife", Rarity = "Godly" },
+    ["Blaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=386277381", ItemID = 386277381, ItemName = "Blaster", ItemType = "Gun", Rarity = "Godly" },
+    ["Blizzard"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=88928894807422", ItemID = 88928894807422, ItemName = "Blizzard", ItemType = "Gun", Rarity = "Godly" },
+    ["BlizzardChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=139495852635932", ItemID = 88928894807422, ItemName = "Blizzard", ItemType = "Gun", Rarity = "Godly" },
+    ["Bloom"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=132419834610569", ItemID = 128553215441980, ItemName = "Bloom", ItemType = "Knife", Rarity = "Godly" },
+    ["Blossom_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12339377105", ItemID = 12339377105, ItemName = "Blossom", ItemType = "Gun", Rarity = "Godly" },
+    ["BlueCandy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1489495701", ItemID = 1489495701, ItemName = "Blue Candy", ItemType = "Knife", Rarity = "Unique" },
+    ["BlueHarvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8194219645", ItemID = 8194219645, ItemName = "Blue Harvester", ItemType = "Gun", Rarity = "Unique" },
+    ["BlueSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139996", ItemID = 3184125087, ItemName = "Blue Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["BlueSugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215355152", ItemID = 3215262120, ItemName = "Blue Sugar", ItemType = "Gun", Rarity = "Unique" },
+    ["BlueVampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12253491988", ItemID = 6084854835, ItemName = "Blue Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
+    ["Boneblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2513505477", ItemID = 2513505477, ItemName = "Boneblade", ItemType = "Knife", Rarity = "Godly" },
+    ["BonebladeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2513597845", ItemID = 2513598419, ItemName = "Boneblade", ItemType = "Knife", Rarity = "Godly" },
+    ["BronzeCandy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1520189487", ItemID = 1520189487, ItemName = "Bronze Candy", ItemType = "Knife", Rarity = "Unique" },
+    ["BronzeHallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2511342846", ItemID = 2511342846, ItemName = "Bronze Hallow", ItemType = "Knife", Rarity = "Unique" },
+    ["BronzeHarvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8194221072", ItemID = 8194221072, ItemName = "Bronze Harvester", ItemType = "Gun", Rarity = "Unique" },
+    ["BronzeIceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404167442", ItemID = 6404167442, ItemName = "Bronze Iceblaster", ItemType = "Gun", Rarity = "Unique" },
+    ["BronzeIcebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404127119", ItemID = 6404127119, ItemName = "Bronze Icebreaker", ItemType = "Knife", Rarity = "Unique" },
+    ["BronzeSugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215355397", ItemID = 3215261913, ItemName = "Bronze Sugar", ItemType = "Gun", Rarity = "Unique" },
+    ["BronzeVampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12253493272", ItemID = 6084842077, ItemName = "Bronze Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
+    ["Candleflame"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7805833970", ItemID = 7805833970, ItemName = "Candleflame", ItemType = "Knife", Rarity = "Godly" },
+    ["CandleflameChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7806149582", ItemID = 7806121918, ItemName = "Candleflame", ItemType = "Knife", Rarity = "Godly" },
+    ["Candy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332021011", ItemID = 332021011, ItemName = "Candy", ItemType = "Knife", Rarity = "Godly" },
+    ["Celestial"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=136673966529736", ItemID = 136673966529736, ItemName = "Celestial", ItemType = "Knife", Rarity = "Ancient" },
+    ["Celestial_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=119399643874968", ItemID = 119399643874968, ItemName = "Bronze Celestial", ItemType = "Knife", Rarity = "Unique" },
+    ["Celestial_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=104229967982042", ItemID = 104229967982042, ItemName = "Gold Celestial", ItemType = "Knife", Rarity = "Unique" },
+    ["Celestial_Red"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=119157529694972", ItemID = 119157529694972, ItemName = "Red Celestial", ItemType = "Knife", Rarity = "Unique" },
+    ["Celestial_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=90241292303974", ItemID = 90241292303974, ItemName = "Silver Celestial", ItemType = "Knife", Rarity = "Unique" },
+    ["Chill"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332022166", ItemID = 332022166, ItemName = "Chill", ItemType = "Knife", Rarity = "Godly" },
+    ["ChromaDarkbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751507011", ItemID = 4751501078, ItemName = "Darkbringer", ItemType = "Gun", Rarity = "Godly" },
+    ["ChromaLightbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751507078", ItemID = 4751500761, ItemName = "Lightbringer", ItemType = "Gun", Rarity = "Godly" },
+    ["Clockwork"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=360609441", ItemID = 473570519, ItemName = "Clockwork", ItemType = "Knife", Rarity = "Godly" },
+    ["Constellation"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=114197436469014", ItemID = 114197436469014, ItemName = "Constellation", ItemType = "Gun", Rarity = "Godly" },
+    ["Constellation_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=112811587103866", ItemID = 112811587103866, ItemName = "Bronze Constellation", ItemType = "Gun", Rarity = "Unique" },
+    ["Constellation_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=132975248521820", ItemID = 132975248521820, ItemName = "Gold Constellation", ItemType = "Gun", Rarity = "Unique" },
+    ["Constellation_Red"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=85766514163212", ItemID = 85766514163212, ItemName = "Red Constellation", ItemType = "Gun", Rarity = "Unique" },
+    ["Constellation_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=100747436297625", ItemID = 100747436297625, ItemName = "Silver Constellation", ItemType = "Gun", Rarity = "Unique" },
+    ["ConstellationChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=98517109155878", ItemID = 114197436469014, ItemName = "Constellation", ItemType = "Gun", Rarity = "Godly" },
+    ["Cookieblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6121574620", ItemID = 6125733703, ItemName = "Cookieblade", ItemType = "Knife", Rarity = "Godly" },
+    ["Darkbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751387674", ItemID = 4749071819, ItemName = "Darkbringer", ItemType = "Gun", Rarity = "Godly" },
+    ["Darkshot"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15080280688", ItemID = 15080280688, ItemName = "Darkshot", ItemType = "Gun", Rarity = "Godly" },
+    ["Darksword"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15080267070", ItemID = 15080267070, ItemName = "Darksword", ItemType = "Knife", Rarity = "Godly" },
+    ["Dartbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8626617523", ItemID = 8626617523, ItemName = "Dartbringer", ItemType = "Gun", Rarity = "Unique" },
+    ["Deathshard"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3175017717", ItemID = 196750305, ItemName = "Deathshard", ItemType = "Knife", Rarity = "Godly" },
+    ["DeathshardChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187397317", ItemID = 3187390667, ItemName = "Deathshard", ItemType = "Knife", Rarity = "Godly" },
+    ["Eggblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6607512359", ItemID = 6607277825, ItemName = "Eggblade", ItemType = "Knife", Rarity = "Godly" },
+    ["ElderwoodGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468571736", ItemID = 4211142894, ItemName = "Elderwood Revolver", ItemType = "Gun", Rarity = "Godly" },
+    ["ElderwoodGunBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468574885", ItemID = 4468574885, ItemName = "Blue Elderwood", ItemType = "Gun", Rarity = "Unique" },
+    ["ElderwoodGunBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468585407", ItemID = 4468585407, ItemName = "Bronze Elderwood", ItemType = "Gun", Rarity = "Unique" },
+    ["ElderwoodGunGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468584345", ItemID = 4468584345, ItemName = "Gold Elderwood", ItemType = "Gun", Rarity = "Unique" },
+    ["ElderwoodGunSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468583758", ItemID = 4468583758, ItemName = "Silver Elderwood", ItemType = "Gun", Rarity = "Unique" },
+    ["ElderwoodKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11254879631", ItemID = 11262771067, ItemName = "Elderwood Blade", ItemType = "Knife", Rarity = "Godly" },
+    ["ElderwoodKnifeBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11505913287", ItemID = 11505913287, ItemName = "Blue Elderwood", ItemType = "Knife", Rarity = "Unique" },
+    ["ElderwoodKnifeBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11505914752", ItemID = 11505914752, ItemName = "Bronze Elderwood", ItemType = "Knife", Rarity = "Unique" },
+    ["ElderwoodKnifeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11255021976", ItemID = 11254975176, ItemName = "Elderwood Blade", ItemType = "Knife", Rarity = "Godly" },
+    ["ElderwoodKnifeGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11505917850", ItemID = 11505917850, ItemName = "Gold Elderwood", ItemType = "Knife", Rarity = "Unique" },
+    ["ElderwoodKnifeSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11505916486", ItemID = 11505916486, ItemName = "Silver Elderwood", ItemType = "Knife", Rarity = "Unique" },
+    ["ElderwoodScythe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4468593654", ItemID = 4211148191, ItemName = "Elderwood Scythe", ItemType = "Knife", Rarity = "Ancient" },
+    ["Emptybringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751388150", ItemID = 4749071819, ItemName = "???", ItemType = "Gun", Rarity = "Godly" },
+    ["EmptybringerChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751388150", ItemID = 4749071819, ItemName = "???", ItemType = "Gun", Rarity = "Godly" },
+    ["Eternal"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=538706317", ItemID = 619605312, ItemName = "Eternal", ItemType = "Knife", Rarity = "Godly" },
+    ["Eternal2"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2545253030", ItemID = 2545253030, ItemName = "Eternal II", ItemType = "Knife", Rarity = "Godly" },
+    ["Eternal3"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3281170430", ItemID = 3279011390, ItemName = "Eternal III", ItemType = "Knife", Rarity = "Godly" },
+    ["Eternal4"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4999958740", ItemID = 4999958740, ItemName = "Eternal IV", ItemType = "Knife", Rarity = "Godly" },
+    ["EternalCane"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4488391411", ItemID = 4488391411, ItemName = "Eternalcane", ItemType = "Knife", Rarity = "Godly" },
+    ["Fang"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187397768", ItemID = 198442811, ItemName = "Fang", ItemType = "Knife", Rarity = "Godly" },
+    ["FangChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187397850", ItemID = 3187392501, ItemName = "Fang", ItemType = "Knife", Rarity = "Godly" },
+    ["Flames"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=585873746", ItemID = 585873746, ItemName = "Flames", ItemType = "Knife", Rarity = "Godly" },
+    ["Flora"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=139276091458016", ItemID = 138204709945147, ItemName = "Flora", ItemType = "Gun", Rarity = "Godly" },
+    ["FlowerwoodGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16963894455", ItemID = 16963894455, ItemName = "Flowerwood Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["FlowerwoodKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16963860501", ItemID = 16963860501, ItemName = "Flowerwood", ItemType = "Knife", Rarity = "Godly" },
+    ["Frostbite"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4528373246", ItemID = 4528484880, ItemName = "Frostbite", ItemType = "Knife", Rarity = "Godly" },
+    ["Frostsaber"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1268934541", ItemID = 1269580035, ItemName = "Frostsaber", ItemType = "Knife", Rarity = "Godly" },
+    ["Gemstone"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3183657748", ItemID = 3183598040, ItemName = "Gemstone", ItemType = "Knife", Rarity = "Godly" },
+    ["GemstoneChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3183657875", ItemID = 3183597816, ItemName = "Gemstone", ItemType = "Knife", Rarity = "Godly" },
+    ["Ghostblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4217586790", ItemID = 4221789003, ItemName = "Ghostblade", ItemType = "Knife", Rarity = "Godly" },
+    ["Gingerblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2669336659", ItemID = 2669336659, ItemName = "Gingerblade", ItemType = "Knife", Rarity = "Godly" },
+    ["GingerbladeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2672351679", ItemID = 2672349340, ItemName = "Gingerblade", ItemType = "Knife", Rarity = "Godly" },
+    ["GingerLuger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2674983099", ItemID = 2674983099, ItemName = "Ginger Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["Gingermint_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11872179646", ItemID = 11872179646, ItemName = "Gingermint", ItemType = "Gun", Rarity = "Godly" },
+    ["Gingermint_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11855306927", ItemID = 11855306927, ItemName = "Cookiecane", ItemType = "Knife", Rarity = "Godly" },
+    ["Gingermint_KChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11979596437", ItemID = 11873640255, ItemName = "Cookiecane", ItemType = "Knife", Rarity = "Godly" },
+    ["Gingerscope"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15666596216", ItemID = 15666469505, ItemName = "Gingerscope", ItemType = "Gun", Rarity = "Ancient" },
+    ["Gingerscope_Blue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964462231", ItemID = 16964462231, ItemName = "Blue Gingerscope", ItemType = "Gun", Rarity = "Unique" },
+    ["Gingerscope_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964465320", ItemID = 16964465320, ItemName = "Bronze Gingerscope", ItemType = "Gun", Rarity = "Unique" },
+    ["Gingerscope_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964471890", ItemID = 16964471890, ItemName = "Gold Gingerscope", ItemType = "Gun", Rarity = "Unique" },
+    ["Gingerscope_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964468980", ItemID = 16964468980, ItemName = "Silver Gingerscope", ItemType = "Gun", Rarity = "Unique" },
+    ["Gingerscythe_Ancient"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15683188776", ItemID = 15683188776, ItemName = "Gingerscythe", ItemType = "Knife", Rarity = "Ancient" },
+    ["Gingerscythe_Blue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964448042", ItemID = 16964448042, ItemName = "Blue Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
+    ["Gingerscythe_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964449392", ItemID = 16964449392, ItemName = "Bronze Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
+    ["Gingerscythe_Godly"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15683175970", ItemID = 15683175970, ItemName = "Gingerscythe", ItemType = "Knife", Rarity = "Godly" },
+    ["Gingerscythe_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964452491", ItemID = 16964452491, ItemName = "Gold Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
+    ["Gingerscythe_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=16964450895", ItemID = 16964450895, ItemName = "Silver Gingerscythe", ItemType = "Knife", Rarity = "Unique" },
+    ["GoldCandy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1520188792", ItemID = 1520188792, ItemName = "Gold Candy", ItemType = "Knife", Rarity = "Unique" },
+    ["GoldHallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2511340308", ItemID = 2511340308, ItemName = "Gold Hallow", ItemType = "Knife", Rarity = "Unique" },
+    ["GoldHarvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8194222523", ItemID = 8194222523, ItemName = "Gold Harvester", ItemType = "Gun", Rarity = "Unique" },
+    ["GoldIceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404165933", ItemID = 6404165933, ItemName = "Gold Iceblaster", ItemType = "Gun", Rarity = "Unique" },
+    ["GoldIcebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404115112", ItemID = 6404115112, ItemName = "Gold Icebreaker", ItemType = "Knife", Rarity = "Unique" },
+    ["GoldSugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215355797", ItemID = 3215260149, ItemName = "Gold Sugar", ItemType = "Gun", Rarity = "Unique" },
+    ["GoldVampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12253496571", ItemID = 6084838617, ItemName = "Gold Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
+    ["GreenLuger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332044679", ItemID = 332044679, ItemName = "Green Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["Hallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=531878205", ItemID = 531878205, ItemName = "Hallow's Edge", ItemType = "Knife", Rarity = "Godly" },
+    ["Hallowgun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=5877089721", ItemID = 5878721461, ItemName = "Hallowgun", ItemType = "Gun", Rarity = "Godly" },
+    ["HallowsBlade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1132775323", ItemID = 1132775323, ItemName = "Hallow's Blade", ItemType = "Knife", Rarity = "Godly" },
+    ["Hallowscythe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=5877016863", ItemID = 5877016863, ItemName = "Hallowscythe", ItemType = "Knife", Rarity = "Ancient" },
+    ["Handsaw"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332042435", ItemID = 473572138, ItemName = "Handsaw", ItemType = "Knife", Rarity = "Godly" },
+    ["Harvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7800847534", ItemID = 7800847534, ItemName = "Harvester", ItemType = "Gun", Rarity = "Ancient" },
+    ["Heartblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6413214382", ItemID = 6413145922, ItemName = "Heartblade", ItemType = "Knife", Rarity = "Godly" },
+    ["HeartWand"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=118334707962654", ItemID = 118334707962654, ItemName = "Heart Wand", ItemType = "Knife", Rarity = "Godly" },
+    ["HeartWandChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=99154743764163", ItemID = 78479059410850, ItemName = "Heart Wand", ItemType = "Knife", Rarity = "Godly" },
+    ["Heat"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187444758", ItemID = 201238541, ItemName = "Heat", ItemType = "Knife", Rarity = "Godly" },
+    ["HeatChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187444849", ItemID = 3187395238, ItemName = "Heat", ItemType = "Knife", Rarity = "Godly" },
+    ["Icebeam"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8305000161", ItemID = 8311005531, ItemName = "Icebeam", ItemType = "Gun", Rarity = "Godly" },
+    ["Iceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6121579464", ItemID = 6125814417, ItemName = "Iceblaster", ItemType = "Gun", Rarity = "Godly" },
+    ["Icebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6121572723", ItemID = 6125729383, ItemName = "Icebreaker", ItemType = "Knife", Rarity = "Ancient" },
+    ["IceDragon"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=585846454", ItemID = 585872642, ItemName = "Ice Dragon", ItemType = "Knife", Rarity = "Godly" },
+    ["Iceflake"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8304818186", ItemID = 8304818186, ItemName = "Iceflake", ItemType = "Knife", Rarity = "Godly" },
+    ["IceHammer_Ancient"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11855274019", ItemID = 11855274019, ItemName = "Icecrusher", ItemType = "Knife", Rarity = "Ancient" },
+    ["IceHammer_Godly"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11855282546", ItemID = 11855282546, ItemName = "Icecrusher", ItemType = "Knife", Rarity = "Godly" },
+    ["IceHammerBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227148356", ItemID = 12227148356, ItemName = "Bronze Icecrusher", ItemType = "Knife", Rarity = "Unique" },
+    ["IceHammerGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227137860", ItemID = 12227137860, ItemName = "Gold Icecrusher", ItemType = "Knife", Rarity = "Unique" },
+    ["IceHammerRed"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227186408", ItemID = 12227186408, ItemName = "Red Icecrusher", ItemType = "Knife", Rarity = "Unique" },
+    ["IceHammerSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227142478", ItemID = 12227142478, ItemName = "Silver Icecrusher", ItemType = "Knife", Rarity = "Unique" },
+    ["Icepiercer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11874071041", ItemID = 11874071041, ItemName = "Icepiercer", ItemType = "Gun", Rarity = "Ancient" },
+    ["IcepiercerBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12226920195", ItemID = 12226920195, ItemName = "Bronze Icepiercer", ItemType = "Gun", Rarity = "Unique" },
+    ["IcepiercerGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12226688172", ItemID = 12226688172, ItemName = "Gold Icepiercer", ItemType = "Gun", Rarity = "Unique" },
+    ["IcepiercerRed"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12227133450", ItemID = 12227133450, ItemName = "Red Icepiercer", ItemType = "Gun", Rarity = "Unique" },
+    ["IcepiercerSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12226843957", ItemID = 12226843957, ItemName = "Silver Icepiercer", ItemType = "Gun", Rarity = "Unique" },
+    ["IceShard"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1268710824", ItemID = 1268710824, ItemName = "Ice Shard", ItemType = "Knife", Rarity = "Godly" },
+    ["Icewing"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2669997196", ItemID = 3183085102, ItemName = "Icewing", ItemType = "Knife", Rarity = "Ancient" },
+    ["Jinglegun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6121678262", ItemID = 6125742758, ItemName = "Jinglegun", ItemType = "Gun", Rarity = "Godly" },
+    ["Laser"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187422496", ItemID = 238546983, ItemName = "Laser", ItemType = "Gun", Rarity = "Godly" },
+    ["LaserChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187422628", ItemID = 3187395952, ItemName = "Laser", ItemType = "Gun", Rarity = "Godly" },
+    ["Lightbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751387063", ItemID = 4749070432, ItemName = "Lightbringer", ItemType = "Gun", Rarity = "Godly" },
+    ["Logchopper"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4528268775", ItemID = 4535644282, ItemName = "Logchopper", ItemType = "Knife", Rarity = "Ancient" },
+    ["LogchopperBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753353471", ItemID = 4753353471, ItemName = "Blue Logchopper", ItemType = "Knife", Rarity = "Unique" },
+    ["LogchopperBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753354123", ItemID = 4753354123, ItemName = "Bronze Logchopper", ItemType = "Knife", Rarity = "Unique" },
+    ["LogchopperGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753354638", ItemID = 4753354638, ItemName = "Gold Logchopper", ItemType = "Knife", Rarity = "Unique" },
+    ["LogchopperSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753352581", ItemID = 4753352581, ItemName = "Silver Logchopper", ItemType = "Knife", Rarity = "Unique" },
+    ["Luger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187399148", ItemID = 198042673, ItemName = "Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["Lugercane"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4535482609", ItemID = 4535482609, ItemName = "Lugercane", ItemType = "Gun", Rarity = "Godly" },
+    ["LugerChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187399258", ItemID = 3187395551, ItemName = "Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["Makeshift"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11229837140", ItemID = 11229837140, ItemName = "Makeshift", ItemType = "Gun", Rarity = "Godly" },
+    ["Minty"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4528291487", ItemID = 4535408229, ItemName = "Minty", ItemType = "Gun", Rarity = "Godly" },
+    ["MintyBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753347062", ItemID = 4753347062, ItemName = "Blue Minty", ItemType = "Gun", Rarity = "Unique" },
+    ["MintyBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753348263", ItemID = 4753348263, ItemName = "Bronze Minty", ItemType = "Gun", Rarity = "Unique" },
+    ["MintyGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753347636", ItemID = 4753347636, ItemName = "Gold Minty", ItemType = "Gun", Rarity = "Unique" },
+    ["MintySilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4753346087", ItemID = 4753346087, ItemName = "Silver Minty", ItemType = "Gun", Rarity = "Unique" },
+    ["Nebula"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6598123521", ItemID = 6598123521, ItemName = "Nebula", ItemType = "Knife", Rarity = "Godly" },
+    ["Nightblade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=475478854", ItemID = 475478854, ItemName = "Nightblade", ItemType = "Knife", Rarity = "Godly" },
+    ["NikKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2533350813", ItemID = 2533351841, ItemName = "Nik's Scythe", ItemType = "Knife", Rarity = "Ancient" },
+    ["Ocean_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=13933165014", ItemID = 13945898892, ItemName = "Ocean", ItemType = "Gun", Rarity = "Godly" },
+    ["OrangeSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139504", ItemID = 3184124504, ItemName = "Orange Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Pearl_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=18322646152", ItemID = 18322646152, ItemName = "Pearlshine", ItemType = "Gun", Rarity = "Godly" },
+    ["Pearl_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=18322621319", ItemID = 18322621319, ItemName = "Pearl", ItemType = "Knife", Rarity = "Godly" },
+    ["Peppermint"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6076067750", ItemID = 6085035357, ItemName = "Peppermint", ItemType = "Knife", Rarity = "Godly" },
+    ["Phantom2022"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11229732037", ItemID = 11229732037, ItemName = "Phantom", ItemType = "Knife", Rarity = "Godly" },
+    ["Pixel"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=365347166", ItemID = 473573054, ItemName = "Pixel", ItemType = "Knife", Rarity = "Godly" },
+    ["Plasmabeam"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=10014717343", ItemID = 10014717343, ItemName = "Plasmabeam", ItemType = "Gun", Rarity = "Godly" },
+    ["Plasmablade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=10014680882", ItemID = 10014680882, ItemName = "Plasmablade", ItemType = "Knife", Rarity = "Godly" },
+    ["Prismatic"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=5360359935", ItemID = 5360359935, ItemName = "Prismatic", ItemType = "Knife", Rarity = "Godly" },
+    ["Pumpking"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1133082421", ItemID = 1138143590, ItemName = "Pumpking", ItemType = "Knife", Rarity = "Godly" },
+    ["PurpleSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184140119", ItemID = 3184125244, ItemName = "Purple Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Rainbow_G"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12966354606", ItemID = 12966354606, ItemName = "Rainbow Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["Rainbow_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12966184630", ItemID = 12966184630, ItemName = "Rainbow", ItemType = "Knife", Rarity = "Godly" },
+    ["Raygun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=139431943195380", ItemID = 139431943195380, ItemName = "Raygun", ItemType = "Gun", Rarity = "Godly" },
+    ["RaygunBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=138881346504998", ItemID = 139431943195380, ItemName = "Bronze Raygun", ItemType = "Gun", Rarity = "Unique" },
+    ["RaygunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=83259634072260", ItemID = 139431943195380, ItemName = "Raygun", ItemType = "Gun", Rarity = "Godly" },
+    ["RaygunGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=76250851065456", ItemID = 139431943195380, ItemName = "Gold Raygun", ItemType = "Gun", Rarity = "Unique" },
+    ["RaygunRed"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=132354489228618", ItemID = 132354489228618, ItemName = "Red Raygun", ItemType = "Gun", Rarity = "Unique" },
+    ["RaygunSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=71511736314707", ItemID = 139431943195380, ItemName = "Silver Raygun", ItemType = "Gun", Rarity = "Unique" },
+    ["Reaver_Ancient"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7791640819", ItemID = 7791640819, ItemName = "Reaver", ItemType = "Knife", Rarity = "Ancient" },
+    ["Reaver_Godly"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=7791511648", ItemID = 7791511648, ItemName = "Reaver", ItemType = "Knife", Rarity = "Godly" },
+    ["RedHallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2511343130", ItemID = 2511343130, ItemName = "Red Hallow", ItemType = "Knife", Rarity = "Unique" },
+    ["RedIceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404168049", ItemID = 6404168049, ItemName = "Red Iceblaster", ItemType = "Gun", Rarity = "Unique" },
+    ["RedIcebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404129111", ItemID = 6404129111, ItemName = "Red Icebreaker", ItemType = "Knife", Rarity = "Unique" },
+    ["RedLuger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332044583", ItemID = 332044583, ItemName = "Red Luger", ItemType = "Gun", Rarity = "Godly" },
+    ["RedSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139367", ItemID = 3184122829, ItemName = "Red Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Sakura_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12339366064", ItemID = 12339366064, ItemName = "Sakura", ItemType = "Knife", Rarity = "Godly" },
+    ["Saw"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187397991", ItemID = 235381341, ItemName = "Saw", ItemType = "Knife", Rarity = "Godly" },
+    ["SawChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398132", ItemID = 3187392992, ItemName = "Saw", ItemType = "Knife", Rarity = "Godly" },
+    ["Scythe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=375690925", ItemID = 2511791893, ItemName = "Batwing", ItemType = "Knife", Rarity = "Ancient" },
+    ["SeerChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184140321", ItemID = 3184125538, ItemName = "Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Shark"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187421705", ItemID = 203858533, ItemName = "Shark", ItemType = "Gun", Rarity = "Godly" },
+    ["SharkChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187421856", ItemID = 3187395738, ItemName = "Shark", ItemType = "Gun", Rarity = "Godly" },
+    ["SharkSeeker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6967771328", ItemID = 6967771328, ItemName = "SharkSeeker", ItemType = "Gun", Rarity = "Unique" },
+    ["SilverCandy"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1520190188", ItemID = 1520190188, ItemName = "Silver Candy", ItemType = "Knife", Rarity = "Unique" },
+    ["SilverHallow"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=2511341094", ItemID = 2511341094, ItemName = "Silver Hallow", ItemType = "Knife", Rarity = "Unique" },
+    ["SilverHarvester"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8194217388", ItemID = 8194217388, ItemName = "Silver Harvester", ItemType = "Gun", Rarity = "Unique" },
+    ["SilverIceblaster"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404166698", ItemID = 6404166698, ItemName = "Silver Iceblaster", ItemType = "Gun", Rarity = "Unique" },
+    ["SilverIcebreaker"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=6404126280", ItemID = 6404126280, ItemName = "Silver Icebreaker", ItemType = "Knife", Rarity = "Unique" },
+    ["SilverSugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215355602", ItemID = 3215261680, ItemName = "Silver Sugar", ItemType = "Gun", Rarity = "Unique" },
+    ["SilverVampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=12253494893", ItemID = 6084840560, ItemName = "Silver Vamp's Edge", ItemType = "Knife", Rarity = "Unique" },
+    ["Slasher"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398274", ItemID = 315506122, ItemName = "Slasher", ItemType = "Knife", Rarity = "Godly" },
+    ["SlasherChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398385", ItemID = 3187393285, ItemName = "Slasher", ItemType = "Knife", Rarity = "Godly" },
+    ["SlouseClown"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=315501118", ItemID = 315501118, ItemName = "Clown", ItemType = "Knife", Rarity = "Unique" },
+    ["SlouseClownGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4659627976", ItemID = 4659627976, ItemName = "Clown", ItemType = "Gun", Rarity = "Unique" },
+    ["Snowcannon"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=129186939023729", ItemID = 129186939023729, ItemName = "Snowcannon", ItemType = "Gun", Rarity = "Godly" },
+    ["SnowcannonChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=110767110638211", ItemID = 129186939023729, ItemName = "Snowcannon", ItemType = "Gun", Rarity = "Godly" },
+    ["SnowDagger"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=95328449981238", ItemID = 95328449981238, ItemName = "Snow Dagger", ItemType = "Knife", Rarity = "Godly" },
+    ["SnowDaggerChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=128749805685925", ItemID = 95328449981238, ItemName = "Snow Dagger", ItemType = "Knife", Rarity = "Godly" },
+    ["Snowflake"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1268932977", ItemID = 1268932977, ItemName = "Snowflake", ItemType = "Knife", Rarity = "Godly" },
+    ["Snowstorm"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=70973050894155", ItemID = 70973050894155, ItemName = "Snowstorm", ItemType = "Knife", Rarity = "Godly" },
+    ["SnowstormChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=94202294092932", ItemID = 70973050894155, ItemName = "Snowstorm", ItemType = "Knife", Rarity = "Godly" },
+    ["Sorry"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=197879343", ItemID = 197879343, ItemName = "Corrupt", ItemType = "Knife", Rarity = "Unique" },
+    ["Spectre2022"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11229779932", ItemID = 11229779932, ItemName = "Spectre", ItemType = "Gun", Rarity = "Godly" },
+    ["Spider"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=315120760", ItemID = 473571549, ItemName = "Spider", ItemType = "Knife", Rarity = "Godly" },
+    ["Sugar"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3215356000", ItemID = 332848695, ItemName = "Sugar", ItemType = "Gun", Rarity = "Godly" },
+    ["SunsetGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=129480661108374", ItemID = 129480661108374, ItemName = "Sunrise", ItemType = "Gun", Rarity = "Godly" },
+    ["SunsetGunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=124766755976937", ItemID = 129480661108374, ItemName = "Sunrise", ItemType = "Gun", Rarity = "Godly" },
+    ["SunsetKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=103526268515240", ItemID = 103526268515240, ItemName = "Sunset", ItemType = "Knife", Rarity = "Godly" },
+    ["SunsetKnifeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=118232478609755", ItemID = 103526268515240, ItemName = "Sunset", ItemType = "Knife", Rarity = "Godly" },
+    ["Sweet"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=126937716954396", ItemID = 126937716954396, ItemName = "Sweet", ItemType = "Knife", Rarity = "Godly" },
+    ["SweetChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=90923771881248", ItemID = 126937716954396, ItemName = "Sweet", ItemType = "Knife", Rarity = "Godly" },
+    ["SwirlyAxe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8304801000", ItemID = 8304801000, ItemName = "Swirly Axe", ItemType = "Knife", Rarity = "Ancient" },
+    ["SwirlyAxeBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552048857", ItemID = 9552048857, ItemName = "Blue Swirly", ItemType = "Knife", Rarity = "Unique" },
+    ["SwirlyAxeBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552050165", ItemID = 9552050165, ItemName = "Bronze Swirly", ItemType = "Knife", Rarity = "Unique" },
+    ["SwirlyAxeGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552054920", ItemID = 9552054920, ItemName = "Gold Swirly", ItemType = "Knife", Rarity = "Unique" },
+    ["SwirlyAxeSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552051805", ItemID = 9552051805, ItemName = "Silver Swirly", ItemType = "Knife", Rarity = "Unique" },
+    ["SwirlyBlade"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8304805693", ItemID = 8304805693, ItemName = "Swirly Blade", ItemType = "Knife", Rarity = "Godly" },
+    ["SwirlyGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8305002569", ItemID = 8305264097, ItemName = "Swirly Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["SwirlyGunBlue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552060741", ItemID = 9552060741, ItemName = "Blue Swirly", ItemType = "Gun", Rarity = "Unique" },
+    ["SwirlyGunBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552063524", ItemID = 9552063524, ItemName = "Bronze Swirly", ItemType = "Gun", Rarity = "Unique" },
+    ["SwirlyGunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8311453396", ItemID = 8311393414, ItemName = "Swirly Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["SwirlyGunGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552065167", ItemID = 9552065167, ItemName = "Gold Swirly", ItemType = "Gun", Rarity = "Unique" },
+    ["SwirlyGunSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=9552064240", ItemID = 9552064240, ItemName = "Silver Swirly", ItemType = "Gun", Rarity = "Unique" },
+    ["Synthwave_Ancient"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=133828016595037", ItemID = 133828016595037, ItemName = "Synthwave", ItemType = "Knife", Rarity = "Ancient" },
+    ["Synthwave_Blue"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=122762984016505", ItemID = 122762984016505, ItemName = "Blue Synthwave", ItemType = "Knife", Rarity = "Unique" },
+    ["Synthwave_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=72230744607038", ItemID = 72230744607038, ItemName = "Bronze Synthwave", ItemType = "Knife", Rarity = "Unique" },
+    ["Synthwave_Godly"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=116075729415230", ItemID = 15683175970, ItemName = "Synthwave", ItemType = "Knife", Rarity = "Godly" },
+    ["Synthwave_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=138834911796124", ItemID = 138834911796124, ItemName = "Gold Synthwave", ItemType = "Knife", Rarity = "Unique" },
+    ["Synthwave_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=103455022994358", ItemID = 103455022994358, ItemName = "Silver Synthwave", ItemType = "Knife", Rarity = "Unique" },
+    ["TheSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139765", ItemID = 198441783, ItemName = "Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["Tides"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398809", ItemID = 473569625, ItemName = "Tides", ItemType = "Knife", Rarity = "Godly" },
+    ["TidesChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187398906", ItemID = 3187394934, ItemName = "Tides", ItemType = "Knife", Rarity = "Godly" },
+    ["TravelerAxe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15070870271", ItemID = 15070870271, ItemName = "Traveler's Axe", ItemType = "Knife", Rarity = "Ancient" },
+    ["TravelerAxeBronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15695407020", ItemID = 15695407020, ItemName = "Bronze Traveler's", ItemType = "Knife", Rarity = "Unique" },
+    ["TravelerAxeGold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15695408631", ItemID = 15695408631, ItemName = "Gold Traveler's", ItemType = "Knife", Rarity = "Unique" },
+    ["TravelerAxeRed"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15695405379", ItemID = 15695405379, ItemName = "Red Traveler's", ItemType = "Knife", Rarity = "Unique" },
+    ["TravelerAxeSilver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15695407742", ItemID = 15695407742, ItemName = "Silver Traveler's", ItemType = "Knife", Rarity = "Unique" },
+    ["TravelerGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15091442039", ItemID = 15091442039, ItemName = "Traveler's Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["TravelerGunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15097920149", ItemID = 15097897227, ItemName = "Traveler's Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["Treat"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=131626924640663", ItemID = 131626924640663, ItemName = "Treat", ItemType = "Gun", Rarity = "Godly" },
+    ["TreatChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=98449489175264", ItemID = 131626924640663, ItemName = "Treat", ItemType = "Gun", Rarity = "Godly" },
+    ["TreeGun2023"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15694357721", ItemID = 15682703596, ItemName = "Evergun", ItemType = "Gun", Rarity = "Godly" },
+    ["TreeGun2023Chroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15694208971", ItemID = 15682703596, ItemName = "Evergun", ItemType = "Gun", Rarity = "Godly" },
+    ["TreeKnife2023"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15694357137", ItemID = 15667157715, ItemName = "Evergreen", ItemType = "Knife", Rarity = "Godly" },
+    ["TreeKnife2023Chroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15694192241", ItemID = 15694110573, ItemName = "Evergreen", ItemType = "Knife", Rarity = "Godly" },
+    ["Turkey2023"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15413162319", ItemID = 15413149176, ItemName = "Turkey", ItemType = "Knife", Rarity = "Godly" },
+    ["UFOKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=77607127867154", ItemID = 77607127867154, ItemName = "Alienbeam", ItemType = "Knife", Rarity = "Godly" },
+    ["UFOKnifeChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=104256106059730", ItemID = 77607127867154, ItemName = "Alienbeam", ItemType = "Knife", Rarity = "Godly" },
+    ["VampireAxe"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=130837676383567", ItemID = 130837676383567, ItemName = "Vampire's Axe", ItemType = "Knife", Rarity = "Ancient" },
+    ["VampireAxe_Bronze"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=124355442556907", ItemID = 130837676383567, ItemName = "Bronze Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
+    ["VampireAxe_Gold"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=78223003853564", ItemID = 130837676383567, ItemName = "Gold Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
+    ["VampireAxe_Purple"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=131000108157235", ItemID = 130837676383567, ItemName = "Purple Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
+    ["VampireAxe_Silver"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=112808340410054", ItemID = 130837676383567, ItemName = "Silver Vampire's Axe", ItemType = "Knife", Rarity = "Unique" },
+    ["VampireGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=90274872705656", ItemID = 90274872705656, ItemName = "Vampire's Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["VampireGunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=85107391551890", ItemID = 90274872705656, ItemName = "Vampire's Gun", ItemType = "Gun", Rarity = "Godly" },
+    ["VampiresEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=5873256998", ItemID = 5873256998, ItemName = "Vampire's Edge", ItemType = "Knife", Rarity = "Godly" },
+    ["Virtual"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=386276987", ItemID = 386276987, ItemName = "Virtual", ItemType = "Knife", Rarity = "Godly" },
+    ["Watergun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=18351388416", ItemID = 18351388416, ItemName = "Watergun", ItemType = "Gun", Rarity = "Godly" },
+    ["WatergunChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=18351465514", ItemID = 18351401528, ItemName = "Watergun", ItemType = "Gun", Rarity = "Godly" },
+    ["Waves_K"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=13933066522", ItemID = 13945892398, ItemName = "Waves", ItemType = "Knife", Rarity = "Godly" },
+    ["WintersEdge"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=1268708987", ItemID = 1268708987, ItemName = "Winter's Edge", ItemType = "Knife", Rarity = "Godly" },
+    ["WraithGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=75233248021696", ItemID = 75233248021696, ItemName = "Soul", ItemType = "Gun", Rarity = "Godly" },
+    ["WraithKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=107190526940939", ItemID = 107190526940939, ItemName = "Spirit", ItemType = "Knife", Rarity = "Godly" },
+    ["XenoGun"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=96859273002742", ItemID = 79722325448464, ItemName = "Xenoshot", ItemType = "Gun", Rarity = "Godly" },
+    ["XenoKnife"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=115021756767182", ItemID = 100576599313371, ItemName = "Xenoknife", ItemType = "Knife", Rarity = "Godly" },
+    ["Xmas"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=332077449", ItemID = 473572568, ItemName = "Xmas", ItemType = "Knife", Rarity = "Godly" },
+    ["YellowSeer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3184139648", ItemID = 3184124768, ItemName = "Yellow Seer", ItemType = "Knife", Rarity = "Godly" },
+    ["ZombieBat"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=11229814357", ItemID = 11229814357, ItemName = "Bat", ItemType = "Knife", Rarity = "Godly" },
+}
+
+local function makeMeshPart(name)
+    local d = MESH_DB[name]
+    if not d then return nil end
+    if state.templates[name] then return state.templates[name] end
+    local part = Instance.new("Part")
+    part.Name = name
+    part.Size = Vector3.new(1, 1, 1)
+    part.CanCollide = false
+    local mesh = Instance.new("SpecialMesh")
+    mesh.MeshType = Enum.MeshType.FileMesh
+    mesh.MeshId = d.mesh or d[1]
+    mesh.TextureId = d.tex or d[2] or ""
+    mesh.Scale = Vector3.new(d.sx or d[3] or 1, d.sy or d[4] or 1, d.sz or d[5] or 1)
+    mesh.Parent = part
+    state.templates[name] = part
+    return part
+end
+
+local visualTargets
+
+local function applyMeshDirect(kind, meshId, texId, scale)
+    if type(meshId) ~= "string" or meshId == "" then return false end
+    local ok = false
+    for _, target in ipairs(visualTargets(kind)) do
+        local part = getAnchor(target)
+        if part then
+            if part:GetAttribute("NoirMesh") == meshId then
+                ok = true
+            else
+            pcall(function()
+                if part:IsA("MeshPart") then
+                    part.MeshId = meshId
+                    if type(texId) == "string" and texId ~= "" then part.TextureID = texId end
+                    return
+                end
+                local mesh = part:FindFirstChildOfClass("SpecialMesh")
+                if not mesh then
+                    mesh = Instance.new("SpecialMesh")
+                    mesh.MeshType = Enum.MeshType.FileMesh
+                    mesh.Name = "Mesh"
+                    mesh.Parent = part
+                end
+                mesh.MeshId = meshId
+                if type(texId) == "string" and texId ~= "" then mesh.TextureId = texId end
+                if typeof(scale) == "Vector3" then mesh.Scale = scale end
+            end)
+            part:SetAttribute("NoirMesh", meshId)
+            ok = true
+            end
+        end
+    end
+    return ok
+end
+
+local function extractMesh(inst)
+    local meshId, texId, scale
+    local function take(obj)
+        if not obj then return false end
+        if obj:IsA("SpecialMesh") and obj.MeshId ~= "" then
+            meshId, texId, scale = obj.MeshId, obj.TextureId, obj.Scale
+            return true
+        end
+        if obj:IsA("MeshPart") and obj.MeshId ~= "" then
+            meshId, texId = obj.MeshId, obj.TextureID
+            return true
+        end
+        return false
+    end
+    if take(inst) then return meshId, texId, scale end
+    local sm = inst:FindFirstChildOfClass("SpecialMesh")
+    if take(sm) then return meshId, texId, scale end
+    local handle = inst:FindFirstChild("Handle")
+    if handle then
+        if take(handle) then return meshId, texId, scale end
+        if take(handle:FindFirstChildOfClass("SpecialMesh")) then return meshId, texId, scale end
+    end
+    pcall(function()
+        for _, d in ipairs(inst:GetDescendants()) do
+            if take(d) then return end
+        end
+    end)
+    return meshId, texId, scale
+end
+
+local function resolveSkinName(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    if JUNK_NAME[string.lower(name)] then return nil end
+    for _, kind in ipairs({ "Knife", "Gun" }) do
+        for _, item in ipairs(state.catalog[kind]) do
+            if item.name == name or compactName(item.name) == compactName(name) then
+                return item.name
+            end
+        end
+    end
+    if #name >= 2 and #name <= 42 then return name end
+end
+
+local function recordMesh(name, inst)
+    local resolved = resolveSkinName(name)
+    if not resolved then return end
+    if inst then stashTemplate(resolved, inst) end
+    local meshId, texId, scale = extractMesh(inst)
+    if type(meshId) == "string" and meshId ~= "" then
+        state.meshLib[resolved] = {
+            mesh = meshId,
+            tex = texId or "",
+            sx = (scale and scale.X) or 1,
+            sy = (scale and scale.Y) or 1,
+            sz = (scale and scale.Z) or 1,
+        }
+    end
+end
+
+local function collectAllMeshes()
+    pcall(capturePlayers)
+    local function consider(inst)
+        if not inst or inst.Name == "" then return end
+        recordMesh(inst.Name, inst)
+        local attr = inst:GetAttribute("ItemName") or inst:GetAttribute("SkinName")
+        if type(attr) == "string" then recordMesh(attr, inst) end
+    end
+    for _, root in ipairs({ ReplicatedStorage, game:GetService("Lighting"), Workspace, game:GetService("StarterPack"), game:GetService("ReplicatedFirst") }) do
+        pcall(function()
+            for _, inst in ipairs(root:GetDescendants()) do consider(inst) end
+        end)
+    end
+    pcall(function()
+        if type(getnilinstances) ~= "function" then return end
+        for _, inst in ipairs(getnilinstances()) do consider(inst) end
+    end)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local char = plr.Character
+        if char then
+            for _, slot in ipairs({ "Knife", "Gun" }) do
+                local name = plr == LocalPlayer and equippedName(slot) or nil
+                local tool = char:FindFirstChild(slot)
+                if tool then recordMesh(name or tool:GetAttribute("ItemName") or tool.Name, tool) end
+                local display = getDisplayObj(char, slot)
+                if display then recordMesh(name or display:GetAttribute("ItemName") or display.Name, display) end
+            end
+        end
+    end
+    local n = 0
+    for _ in pairs(state.meshLib) do n += 1 end
+    save()
+    return n
+end
+
+local function loadModel(name, kind)
+    local built = makeMeshPart(name)
+    if built then return built end
+    do
+        local c = CATALOG_DB[name]
+        local id = type(c) == "table" and tonumber(c.ItemID) or tonumber(c)
+        if id then
+            local obj = tryGetObjects(id)
+            if obj then
+                state.templates[name] = obj
+                return obj
+            end
+        end
+    end
+    capturePlayers()
+    local t = getTemplate(name)
+    if t then return t end
+    pcall(function()
+        if type(getrenv) ~= "function" then return end
+        local db = getrenv()._G and getrenv()._G.Database
+        local item = db and raw(db, "Item")
+        item = type(item) == "table" and (item[name] or (raw(item, kind) and raw(item, kind)[name]))
+        if type(item) ~= "table" then return end
+        for _, key in ipairs({ "AssetId", "ModelId", "MeshId", "AssetID", "Model", "Id", "ItemId" }) do
+            local obj = tryGetObjects(raw(item, key))
+            if obj then
+                state.templates[name] = obj
+                return
+            end
+        end
+    end)
+    t = getTemplate(name)
+    if t then return t end
+    clickNamed(name)
+    task.wait(0.25)
+    capturePlayers()
+    t = getTemplate(name)
+    if t then return t end
+    local stolen = stealViewport()
+    if stolen then
+        local ok, cl = pcall(function() return stolen:Clone() end)
+        if ok and cl then
+            state.templates[name] = cl
+            return cl
+        end
+    end
+end
+
+visualTargets = function(kind)
+    local list, seen = {}, {}
+    local function add(inst)
+        if inst and not seen[inst] then
+            seen[inst] = true
+            list[#list + 1] = inst
+        end
+    end
+    local character = LocalPlayer.Character
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local slot = kind == "Gun" and "Gun" or "Knife"
+    if character then
+        add(getDisplayObj(character, slot))
+        add(character:FindFirstChild(slot))
+        add(character:FindFirstChild(slot .. "Display"))
+    end
+    if backpack then add(backpack:FindFirstChild(slot)) end
+    return list
+end
+
+local function catalogItem(kind, skinName)
+    for _, item in ipairs(state.catalog[kind] or {}) do
+        if item.name == skinName then return item end
+    end
+end
+
+local function writePlayerData(kind, skinName)
+    if type(skinName) ~= "string" or skinName == "" then return end
+    local pd = playerData()
+    if type(pd) ~= "table" then return end
+    pcall(function()
+        if kind == "Gun" then
+            pd.Gun, pd.gun, pd.EquippedGun = skinName, skinName, skinName
+        else
+            pd.Knife, pd.knife, pd.EquippedKnife = skinName, skinName, skinName
+        end
+        local weapons = raw(pd, "Weapons") or raw(pd, "weapons")
+        if type(weapons) ~= "table" then return end
+        if type(raw(weapons, "Owned")) == "table" then weapons.Owned[skinName] = weapons.Owned[skinName] or 1 end
+        local equipped = raw(weapons, "Equipped") or raw(weapons, "equipped")
+        if type(equipped) == "table" then
+            if kind == "Gun" then equipped.Gun = skinName; equipped.gun = skinName else equipped.Knife = skinName; equipped.knife = skinName end
+        end
+        if type(raw(weapons, "Current")) == "table" then
+            if kind == "Gun" then weapons.Current.Gun = skinName else weapons.Current.Knife = skinName end
+        end
+    end)
+end
+
+local function skinIcon(skinName)
+    if type(skinName) ~= "string" or skinName == "" then return "" end
+    local c = CATALOG_DB[skinName]
+    if type(c) ~= "table" then
+        local db = MESH_DB[skinName]
+        local want = db and db.name or skinName
+        for _, v in pairs(CATALOG_DB) do
+            if type(v) == "table" and (v.ItemName == skinName or v.ItemName == want) then
+                c = v
+                break
+            end
+        end
+    end
+    if type(c) == "table" and type(c.Image) == "string" and c.Image ~= "" then return c.Image end
+    local db = MESH_DB[skinName]
+    local id = 0
+    if type(c) == "table" then id = tonumber(c.ItemID) or 0 end
+    if id == 0 and type(db) == "table" then id = tonumber(db.itemid) or 0 end
+    if id and id > 0 then return "rbxthumb://type=Asset&w=150&h=150&id=" .. tostring(id) end
+    return ""
+end
+
+local function eachSlotTool(kind, fn)
+    local slot = kind == "Gun" and "Gun" or "Knife"
+    local character = LocalPlayer.Character
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if character then
+        local t = character:FindFirstChild(slot)
+        if t then fn(t) end
+    end
+    if backpack then
+        local t = backpack:FindFirstChild(slot)
+        if t then fn(t) end
+    end
+end
+
+local function applyGrip(kind, db)
+    if type(db) ~= "table" or type(db.grip) ~= "table" or #db.grip < 12 then return end
+    local g = db.grip
+    pcall(function()
+        eachSlotTool(kind, function(tool)
+            if tool:IsA("Tool") then
+                tool.Grip = CFrame.new(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12])
+            end
+        end)
+    end)
+end
+
+local hudIconCache = { Equip = nil, Throw = nil }
+local lastHud = { Gun = "", Knife = "" }
+local DEFAULT_MARK = {
+    Gun = { "126534866", "198042673", "95356090" },
+    Knife = { "12222216", "121944778" },
+}
+
+local function isNoirGui(inst)
+    local p = inst
+    for _ = 1, 14 do
+        if not p then return false end
+        local n = p.Name
+        if n == "SkinsContent" or n == "NOIR" or n == "NoirHub" then return true end
+        p = p.Parent
+    end
+    return false
+end
+
+local function setIconTree(obj, img)
+    if not obj then return end
+    if obj:IsA("ImageButton") or obj:IsA("ImageLabel") then obj.Image = img end
+    for _, c in ipairs(obj:GetChildren()) do
+        if c:IsA("ImageButton") or c:IsA("ImageLabel") then c.Image = img end
+    end
+end
+
+local function cacheHudIcons()
+    if hudIconCache.Equip and hudIconCache.Equip.Parent then return end
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return end
+    pcall(function()
+        local roots = {}
+        for _, n in ipairs({ "MainGUI", "MainGui", "HUD", "GameGUI" }) do
+            local g = pg:FindFirstChild(n)
+            if g then roots[#roots + 1] = g end
+        end
+        if #roots == 0 then
+            for _, g in ipairs(pg:GetChildren()) do
+                if g:IsA("ScreenGui") and g.Name ~= "SkinsContent" then
+                    roots[#roots + 1] = g
+                    if #roots >= 2 then break end
+                end
+            end
+        end
+        for _, root in ipairs(roots) do
+            for _, d in ipairs(root:GetDescendants()) do
+                if d:IsA("TextLabel") or d:IsA("TextButton") then
+                    local t = string.lower(string.gsub(d.Text or "", "%s+", ""))
+                    if t == "equip" or t == "throw" then
+                        local imgObj = d
+                        while imgObj and not (imgObj:IsA("ImageButton") or imgObj:IsA("ImageLabel")) do
+                            imgObj = imgObj.Parent
+                        end
+                        if imgObj and not isNoirGui(imgObj) then
+                            if t == "equip" then hudIconCache.Equip = imgObj else hudIconCache.Throw = imgObj end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function cfFromList(g)
+    if type(g) ~= "table" or #g < 12 then return nil end
+    return CFrame.new(g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9], g[10], g[11], g[12])
+end
+
+local function applyHolster(kind, db)
+    if type(db) ~= "table" then return end
+    local cf = cfFromList(db.acf)
+    if not cf then return end
+    pcall(function()
+        local character = LocalPlayer.Character
+        if not character then return end
+        local slot = kind == "Gun" and "Gun" or "Knife"
+        local display = getDisplayObj(character, slot) or character:FindFirstChild(slot .. "Display")
+        if not display then return end
+        local att = (type(db.att) == "string" and db.att ~= "" and display:FindFirstChild(db.att, true))
+            or display:FindFirstChild("CustomAttachment", true)
+            or display:FindFirstChild("Attachment", true)
+            or display:FindFirstChildWhichIsA("Attachment", true)
+        if att and att:IsA("Attachment") then
+            att.CFrame = cf
+        end
+    end)
+end
+
+local function applyIcons(kind, skinName)
+    local img = skinIcon(skinName)
+    if img == "" then return end
+    pcall(function()
+        eachSlotTool(kind, function(tool)
+            if tool:IsA("Tool") then tool.TextureId = img end
+        end)
+    end)
+    cacheHudIcons()
+    pcall(function()
+        if kind == "Gun" then setIconTree(hudIconCache.Equip, img) end
+        if kind == "Knife" then setIconTree(hudIconCache.Throw, img) end
+    end)
+    lastHud[kind] = img
+end
+
+local function paintFXInst(inst, db, kind)
+    if not inst or type(db) ~= "table" then return end
+    if inst:IsA("Sound") and type(db.snd) == "string" and kind == "Gun" then
+        if string.find(db.snd, "90731824782499", 1, true) then return end
+        local n = string.lower(inst.Name)
+        if string.find(n, "shoot") or string.find(n, "fire") or string.find(n, "alt") or n == "sound" or string.find(n, "gun") then
+            inst.SoundId = db.snd
+            if type(db.spd) == "number" then inst.PlaybackSpeed = db.spd end
+        end
+    elseif (inst:IsA("Beam") or inst:IsA("Trail") or inst:IsA("ParticleEmitter")) and type(db.br) == "number" then
+        local col = Color3.new(db.br, db.bg or 1, db.bb or 1)
+        pcall(function() inst.Color = ColorSequence.new(col) end)
+        if inst:IsA("Beam") then
+            if type(db.btex) == "string" and db.btex ~= "" then inst.Texture = db.btex end
+            if type(db.bw) == "number" then inst.Width0 = db.bw inst.Width1 = db.bw end
+        end
+    elseif (inst:IsA("BasePart")) and type(db.br) == "number" then
+        local n = string.lower(inst.Name)
+        if string.find(n, "bullet") or string.find(n, "tracer") or string.find(n, "laser") or string.find(n, "shot") or string.find(n, "beam") or string.find(n, "pew") then
+            inst.Color = Color3.new(db.br, db.bg or 1, db.bb or 1)
+        end
+    end
+end
+
+local armShotListen
+local function applyFX(kind, db)
+    if type(db) ~= "table" then return end
+    pcall(function()
+        eachSlotTool(kind, function(tool)
+            for _, d in ipairs(tool:GetDescendants()) do paintFXInst(d, db, kind) end
+            if kind == "Gun" and not tool:GetAttribute("NoirShotHook") then
+                tool:SetAttribute("NoirShotHook", true)
+                tool.Activated:Connect(function()
+                    if state.enabled then armShotListen() end
+                end)
+            end
+            if kind == "Gun" and type(db.snd) == "string" and not string.find(db.snd, "90731824782499", 1, true) then
+                local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+                if handle and not handle:FindFirstChild("NoirShoot") then
+                    local s = Instance.new("Sound")
+                    s.Name = "NoirShoot"
+                    s.SoundId = db.snd
+                    s.Volume = 1
+                    if type(db.spd) == "number" then s.PlaybackSpeed = db.spd end
+                    s.Parent = handle
+                    tool.Activated:Connect(function()
+                        if state.enabled then s:Play() end
+                    end)
+                elseif handle and handle:FindFirstChild("NoirShoot") then
+                    handle.NoirShoot.SoundId = db.snd
+                    if type(db.spd) == "number" then handle.NoirShoot.PlaybackSpeed = db.spd end
+                end
+            end
+        end)
+        local character = LocalPlayer.Character
+        if character then
+            local slot = kind == "Gun" and "Gun" or "Knife"
+            local display = getDisplayObj(character, slot)
+            if display then
+                for _, d in ipairs(display:GetDescendants()) do paintFXInst(d, db, kind) end
+            end
+        end
+    end)
+end
+
+local noirAnimTrack
+local function applyHoldAnim()
+end
+
+local function applyKind(kind, allowLoad, light)
+    if not state.enabled then return false end
+    local skinName = kind == "Gun" and state.selectedGun or state.selectedKnife
+    if type(skinName) ~= "string" or skinName == "" then return false end
+    if not light then writePlayerData(kind, skinName) end
+    local db = MESH_DB[skinName]
+    if db then
+        local scale = Vector3.new(db.sx or db[3] or 1, db.sy or db[4] or 1, db.sz or db[5] or 1)
+        local painted = applyMeshDirect(kind, db.mesh or db[1], db.tex or db[2], scale)
+        applyGrip(kind, db)
+        applyHolster(kind, db)
+        if not light then
+            applyIcons(kind, skinName)
+            applyFX(kind, db)
+        end
+        if painted or light then return true end
+    end
+    local lib = state.meshLib[skinName]
+    if lib and lib.mesh then
+        if applyMeshDirect(kind, lib.mesh, lib.tex, Vector3.new(lib.sx or 1, lib.sy or 1, lib.sz or 1)) then return true end
+    end
+    local template = getTemplate(skinName)
+    if not template and allowLoad then template = loadModel(skinName, kind) end
+    if not template then return false end
+    local ok = false
+    for _, target in ipairs(visualTargets(kind)) do
+        if target ~= template then
+            if target:GetAttribute("NoirSkin") ~= skinName then
+                restoreSkin(target)
+                if applySkinCore(target, template) then
+                    target:SetAttribute("NoirSkin", skinName)
+                    ok = true
+                end
+            else
+                ok = true
+            end
+        end
+    end
+    if light then return ok end
+    applyGrip(kind, MESH_DB[skinName])
+    applyHolster(kind, MESH_DB[skinName])
+    applyIcons(kind, skinName)
+    applyFX(kind, MESH_DB[skinName])
+    return ok
+end
+
+local function applyAll(light)
+    if state.applying or not state.enabled then return end
+    state.applying = true
+    pcall(function()
+        applyKind("Knife", false, light)
+        applyKind("Gun", false, light)
+    end)
+    state.applying = false
+end
+
+-- UI
+local page = CTX.template:Clone()
+page.Name = "SkinsContent"
+page:ClearAllChildren()
+page.Parent = CTX.win
+page.Visible = false
+page.ScrollingEnabled = false
+page.ScrollBarThickness = 0
+pcall(function() getgenv().__NoirRegisterPage("skins", page) end)
+
+local root = New("Frame", { Parent = page, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 })
+local header = New("Frame", { Parent = root, Size = UDim2.new(1, 0, 0, 58), BackgroundTransparency = 1 })
+text(header, "SKINCHANGER", 18, UDim2.fromOffset(4, 8))
+text(header, "Full MM2 dump with rarity and icons. Tap a skin to apply.", 12, UDim2.fromOffset(4, 32), true)
+
+local function makeToggle(parent, label, position, initial, callback)
+    local holder = New("TextButton", { Parent = parent, Position = position, Size = UDim2.fromOffset(176, 40), BackgroundTransparency = 1, Text = "", AutoButtonColor = false })
+    New("TextLabel", { Parent = holder, Size = UDim2.new(1, -72, 1, 0), BackgroundTransparency = 1, Text = label, TextColor3 = C.text, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+    local pill = New("Frame", { Parent = holder, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(58, 30), BackgroundColor3 = initial and C.accent or C.off })
+    corner(pill, 15); stroke(pill, C.border, .5)
+    local dot = New("Frame", { Parent = pill, Position = initial and UDim2.fromOffset(30, 4) or UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = Color3.new(1, 1, 1) })
+    corner(dot, 11)
+    local on = initial == true
+    local last = 0
+    local function set(v)
+        on = v == true
+        pill.BackgroundColor3 = on and C.accent or C.off
+        dot.Position = on and UDim2.fromOffset(30, 4) or UDim2.fromOffset(4, 4)
+        callback(on)
+    end
+    local function tap()
+        local now = os.clock()
+        if now - last < .22 then return end
+        last = now
+        set(not on)
+    end
+    holder.MouseButton1Click:Connect(tap)
+    holder.Activated:Connect(tap)
+    set(initial == true)
+    return set
+end
+
+makeToggle(header, "Enable", UDim2.new(1, -360, 0, 12), state.enabled, function(v)
+    state.enabled = v
+    save()
+    if v then applyAll() end
+end)
+makeToggle(header, "Keep applied", UDim2.new(1, -176, 0, 12), state.keep, function(v)
+    state.keep = v
+    save()
+end)
+
+local toolbar = New("Frame", { Parent = root, Position = UDim2.fromOffset(0, 62), Size = UDim2.new(1, 0, 0, 86), BackgroundTransparency = 1 })
+local kindBar = New("Frame", { Parent = toolbar, Size = UDim2.fromOffset(188, 34), BackgroundColor3 = C.surface })
+corner(kindBar, 10); stroke(kindBar, C.border, .45)
+local function kindButton(label, x)
+    local b = New("TextButton", { Parent = kindBar, Position = UDim2.fromOffset(x, 3), Size = UDim2.fromOffset(88, 28), BackgroundColor3 = C.surface, Text = label, TextColor3 = C.text, TextSize = 13, Font = Enum.Font.GothamBold, AutoButtonColor = false })
+    corner(b, 8)
+    return b
+end
+local knivesBtn = kindButton("Knives", 4)
+local gunsBtn = kindButton("Guns", 96)
+
+local search = New("TextBox", { Parent = toolbar, Position = UDim2.fromOffset(204, 0), Size = UDim2.new(1, -8, 0, 34), BackgroundColor3 = C.surface, Text = "", PlaceholderText = "Search skins by name...", TextColor3 = C.text, PlaceholderColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, ClearTextOnFocus = false })
+corner(search, 10); stroke(search, C.border, .45)
+local countLabel = New("TextLabel", { Parent = toolbar, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 48), Size = UDim2.fromOffset(160, 22), BackgroundTransparency = 1, Text = "", TextColor3 = C.dim, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Right })
+
+local rarityBar = New("ScrollingFrame", { Parent = toolbar, Position = UDim2.fromOffset(0, 44), Size = UDim2.new(1, 0, 0, 36), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, ScrollingDirection = Enum.ScrollingDirection.X, CanvasSize = UDim2.fromOffset(#RARITIES * 96, 0) })
+local rarityLayout = New("UIListLayout", { Parent = rarityBar, FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+local rarityButtons = {}
+
+local gridHost = New("ScrollingFrame", { Parent = root, Position = UDim2.fromOffset(0, 156), Size = UDim2.new(1, 0, 1, -156), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 5, ScrollBarImageColor3 = C.accent, CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y })
+local grid = New("UIGridLayout", { Parent = gridHost, CellSize = UDim2.fromOffset(128, 148), CellPadding = UDim2.fromOffset(10, 10), SortOrder = Enum.SortOrder.LayoutOrder, FillDirectionMaxCells = 6 })
+New("UIPadding", { Parent = gridHost, PaddingBottom = UDim.new(0, 12) })
+
+local function currentList()
+    local src = state.catalog[state.kind] or {}
+    local out = {}
+    local q = string.lower(state.query or "")
+    for _, item in ipairs(src) do
+        if (not state.rarity or item.rarity == state.rarity) and (q == "" or string.find(string.lower(item.name), q, 1, true)) then
+            out[#out + 1] = item
+        end
+    end
+    return out, #src
+end
+
+local function selectedName()
+    return state.kind == "Gun" and state.selectedGun or state.selectedKnife
+end
+
+local function paintKind()
+    knivesBtn.BackgroundColor3 = state.kind == "Knife" and C.accent or C.surface
+    gunsBtn.BackgroundColor3 = state.kind == "Gun" and C.accent or C.surface
+end
+
+local function rebuildGrid()
+    for _, card in ipairs(state.cards) do pcall(function() card:Destroy() end) end
+    table.clear(state.cards)
+    local list, total = currentList()
+    countLabel.Text = string.format("%02d of %d %s", #list, total, state.kind == "Gun" and "guns" or "knives")
+    local chosen = selectedName()
+    for index, item in ipairs(list) do
+        local card = New("TextButton", { Parent = gridHost, BackgroundColor3 = C.panel, Text = "", AutoButtonColor = false, LayoutOrder = index })
+        corner(card, 14); local border = stroke(card, item.name == chosen and C.accent or C.border, item.name == chosen and .15 or .55)
+        local icon = New("ImageLabel", { Parent = card, Position = UDim2.fromOffset(18, 10), Size = UDim2.fromOffset(92, 84), BackgroundTransparency = 1, Image = item.image, ScaleType = Enum.ScaleType.Fit })
+        if item.image == "" then
+            icon.Image = ""
+            local letter = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(92, 70), BackgroundTransparency = 1, Text = string.sub(item.name, 1, 1), TextColor3 = C.text, TextSize = 36, Font = Enum.Font.GothamBold })
+        end
+        local title = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(8, 98), Size = UDim2.new(1, -16, 0, 22), BackgroundTransparency = 1, Text = item.name, TextColor3 = C.text, TextSize = 12, Font = Enum.Font.GothamBold, TextTruncate = Enum.TextTruncate.AtEnd })
+        local rare = New("TextLabel", { Parent = card, Position = UDim2.fromOffset(8, 120), Size = UDim2.new(1, -16, 0, 18), BackgroundTransparency = 1, Text = item.rarity, TextColor3 = RARITY_COLOR[item.rarity] or C.dim, TextSize = 11, Font = Enum.Font.Gotham })
+        local function fire()
+            if state.kind == "Gun" then state.selectedGun = item.name else state.selectedKnife = item.name end
+            save()
+            if not state.enabled then
+                notify("Turn Enable on first", 2)
+            else
+                task.spawn(function()
+                    local ok = applyKind(state.kind, true)
+                    if ok then
+                        notify("Skin: " .. item.name, 2)
+                    else
+                        notify("No 3D model for " .. item.name, 2)
+                    end
+                end)
+            end
+            rebuildGrid()
+        end
+        card.MouseButton1Click:Connect(fire)
+        card.Activated:Connect(fire)
+        state.cards[#state.cards + 1] = card
+    end
+end
+
+local function setKind(kind)
+    state.kind = kind
+    paintKind()
+    rebuildGrid()
+    save()
+end
+knivesBtn.MouseButton1Click:Connect(function() setKind("Knife") end)
+gunsBtn.MouseButton1Click:Connect(function() setKind("Gun") end)
+knivesBtn.Activated:Connect(function() setKind("Knife") end)
+gunsBtn.Activated:Connect(function() setKind("Gun") end)
+
+search:GetPropertyChangedSignal("Text"):Connect(function()
+    state.query = search.Text or ""
+    rebuildGrid()
+end)
+
+for i, rarity in ipairs(RARITIES) do
+    local b = New("TextButton", { Parent = rarityBar, Size = UDim2.fromOffset(90, 30), BackgroundColor3 = C.surface, Text = rarity, TextColor3 = RARITY_COLOR[rarity] or C.text, TextSize = 12, Font = Enum.Font.GothamBold, AutoButtonColor = false, LayoutOrder = i })
+    corner(b, 8); stroke(b, C.border, .5)
+    local function tap()
+        state.rarity = state.rarity == rarity and nil or rarity
+        for name, btn in pairs(rarityButtons) do
+            btn.BackgroundColor3 = (state.rarity == name) and C.accent or C.surface
+        end
+        rebuildGrid()
+    end
+    b.MouseButton1Click:Connect(tap)
+    b.Activated:Connect(tap)
+    rarityButtons[rarity] = b
+end
+
+paintKind()
+task.defer(function()
+    pcall(function()
+        for k, v in pairs(MESH_DB) do
+            if type(v) == "table" then
+                addItem(k, v.kind or "Knife", v.rarity or "Godly", skinIcon(k))
+            end
+        end
+        rebuildGrid()
+    end)
+end)
+
+local function paintShot(inst)
+    if not state.enabled then return end
+    local db = MESH_DB[state.selectedGun]
+    if type(db) ~= "table" or type(db.br) ~= "number" then return end
+    paintFXInst(inst, db, "Gun")
+end
+
+local shotConn, shotGen = nil, 0
+armShotListen = function()
+    if type(MESH_DB[state.selectedGun]) ~= "table" or type(MESH_DB[state.selectedGun].br) ~= "number" then return end
+    shotGen += 1
+    local gen = shotGen
+    if shotConn then
+        shotConn:Disconnect()
+        shotConn = nil
+    end
+    shotConn = workspace.DescendantAdded:Connect(function(inst)
+        local cls = inst.ClassName
+        if cls == "Beam" or cls == "Trail" then paintShot(inst) end
+    end)
+    task.delay(0.35, function()
+        if gen == shotGen and shotConn then
+            shotConn:Disconnect()
+            shotConn = nil
+        end
+    end)
+end
+
+local keepQueued = false
+local function queueKeep()
+    if keepQueued or not (state.enabled and state.keep) then return end
+    keepQueued = true
+    task.delay(0.4, function()
+        keepQueued = false
+        if state.enabled and state.keep then applyAll(true) end
+    end)
+end
+
+local function hookCharacter(character)
+    if not character then return end
+    character.ChildAdded:Connect(queueKeep)
+    character.DescendantAdded:Connect(function(inst)
+        local cls = inst.ClassName
+        if cls == "Beam" or cls == "Trail" then paintShot(inst) end
+    end)
+end
+LocalPlayer.CharacterAdded:Connect(function(character)
+    hookCharacter(character)
+    hudIconCache.Equip, hudIconCache.Throw = nil, nil
+    task.delay(0.4, function()
+        if state.enabled and state.keep then applyAll() end
+    end)
+end)
+hookCharacter(LocalPlayer.Character)
+pcall(function()
+    local backpack = LocalPlayer:WaitForChild("Backpack", 5)
+    if backpack then backpack.ChildAdded:Connect(queueKeep) end
+end)
+local acc = 0
+RunService.Heartbeat:Connect(function(dt)
+    if not (state.enabled and state.keep) then return end
+    acc += dt
+    if acc < 3 then return end
+    acc = 0
+    applyAll(true)
+end)
+]==]
+    local ok, fn = pcall(compiler, source)
+    if not ok or type(fn) ~= "function" then
+        warn("[Noir Skins] compile failed: " .. tostring(fn))
+        return
+    end
+    local ran, err = xpcall(fn, function(message) return tostring(message) end)
+    if not ran then warn("[Noir Skins] startup failed: " .. tostring(err)) end
+end)
