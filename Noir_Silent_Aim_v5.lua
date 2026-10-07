@@ -4404,7 +4404,7 @@ do
     local antiFlingStep = RunService.PreSimulation or RunService.Stepped
     antiFlingStep:Connect(function()
         if not universalState.antiFling then return end
-        local quota, cursor = 256, universalState.antiFlingNextPart
+        local quota, cursor = 48, universalState.antiFlingNextPart
         if cursor and universalState.antiFlingTracked[cursor] == nil then cursor = nil end
         while quota > 0 do
             cursor = next(universalState.antiFlingTracked, cursor)
@@ -5379,7 +5379,7 @@ if RunService then
     RunService.Heartbeat:Connect(function()
         local now = os.clock()
         if now < nextRefresh then return end
-        nextRefresh = now + .12
+        nextRefresh = now + .45
         local character = LocalPlayer.Character
         if state.korblox then applyKorbloxMesh(character) end
         if state.headless then applyHeadless(character) end
@@ -14104,11 +14104,18 @@ local function paintFXInst(inst, db, kind)
     end
 end
 
+local armShotListen
 local function applyFX(kind, db)
     if type(db) ~= "table" then return end
     pcall(function()
         eachSlotTool(kind, function(tool)
             for _, d in ipairs(tool:GetDescendants()) do paintFXInst(d, db, kind) end
+            if kind == "Gun" and not tool:GetAttribute("NoirShotHook") then
+                tool:SetAttribute("NoirShotHook", true)
+                tool.Activated:Connect(function()
+                    if state.enabled then armShotListen() end
+                end)
+            end
             if kind == "Gun" and type(db.snd) == "string" and not string.find(db.snd, "90731824782499", 1, true) then
                 local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
                 if handle and not handle:FindFirstChild("NoirShoot") then
@@ -14379,20 +14386,47 @@ end)
 local function paintShot(inst)
     if not state.enabled then return end
     local db = MESH_DB[state.selectedGun]
-    if type(db) ~= "table" then return end
+    if type(db) ~= "table" or type(db.br) ~= "number" then return end
     paintFXInst(inst, db, "Gun")
+end
+
+local shotConn, shotGen = nil, 0
+armShotListen = function()
+    if type(MESH_DB[state.selectedGun]) ~= "table" or type(MESH_DB[state.selectedGun].br) ~= "number" then return end
+    shotGen += 1
+    local gen = shotGen
+    if shotConn then
+        shotConn:Disconnect()
+        shotConn = nil
+    end
+    shotConn = workspace.DescendantAdded:Connect(function(inst)
+        local cls = inst.ClassName
+        if cls == "Beam" or cls == "Trail" then paintShot(inst) end
+    end)
+    task.delay(0.35, function()
+        if gen == shotGen and shotConn then
+            shotConn:Disconnect()
+            shotConn = nil
+        end
+    end)
+end
+
+local keepQueued = false
+local function queueKeep()
+    if keepQueued or not (state.enabled and state.keep) then return end
+    keepQueued = true
+    task.delay(0.4, function()
+        keepQueued = false
+        if state.enabled and state.keep then applyAll(true) end
+    end)
 end
 
 local function hookCharacter(character)
     if not character then return end
-    character.ChildAdded:Connect(function()
-        if state.enabled and state.keep then task.delay(0.15, function() applyAll(true) end) end
-    end)
+    character.ChildAdded:Connect(queueKeep)
     character.DescendantAdded:Connect(function(inst)
         local cls = inst.ClassName
-        if cls == "Beam" or cls == "Trail" or cls == "ParticleEmitter" then
-            paintShot(inst)
-        end
+        if cls == "Beam" or cls == "Trail" then paintShot(inst) end
     end)
 end
 LocalPlayer.CharacterAdded:Connect(function(character)
@@ -14405,24 +14439,13 @@ end)
 hookCharacter(LocalPlayer.Character)
 pcall(function()
     local backpack = LocalPlayer:WaitForChild("Backpack", 5)
-    if backpack then
-        backpack.ChildAdded:Connect(function()
-            if state.enabled and state.keep then task.delay(0.15, function() applyAll(true) end) end
-        end)
-    end
-end)
-pcall(function()
-    workspace.DescendantAdded:Connect(function(inst)
-        local cls = inst.ClassName
-        if cls ~= "Beam" and cls ~= "Trail" and cls ~= "ParticleEmitter" then return end
-        paintShot(inst)
-    end)
+    if backpack then backpack.ChildAdded:Connect(queueKeep) end
 end)
 local acc = 0
 RunService.Heartbeat:Connect(function(dt)
     if not (state.enabled and state.keep) then return end
     acc += dt
-    if acc < 2.5 then return end
+    if acc < 3 then return end
     acc = 0
     applyAll(true)
 end)
