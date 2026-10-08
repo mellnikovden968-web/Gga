@@ -534,33 +534,57 @@ startLoading = function()
     retryButton.Visible = false
     footerMeta.Visible = true
     setProgress(0)
-    setStatus("Preparing Noir Hub", "Connecting to the Noir source…", "loading")
+
+    -- Check every URL first, then fetch all three modules at the same time.
+    for i, url in ipairs(RAW) do
+        if type(url) ~= "string" or url == "" or string.find(url, "USER/REPO", 1, true) then
+            fail("Source links missing", "Add the three GitHub raw links to the loader.", "RAW URL " .. tostring(i) .. " is not configured")
+            return
+        end
+    end
+    setStatus("Connecting to GitHub", "Fetching all three Noir modules in parallel…", "loading")
 
     task.spawn(function()
         local chunks = {}
+        local completed = 0
+        local finished = 0
+        local failed = false
+
         for i, url in ipairs(RAW) do
-            if not active or myAttempt ~= attemptId then return end
-            if type(url) ~= "string" or url == "" or string.find(url, "USER/REPO", 1, true) then
-                fail("Source links missing", "Add the three GitHub raw links to the loader.", "RAW URLs are not configured")
-                return
-            end
+            task.spawn(function()
+                local fetchCallOk, body, fetchError = pcall(fetch, url)
+                if not fetchCallOk then
+                    fetchError = tostring(body)
+                    body = nil
+                end
+                if not active or myAttempt ~= attemptId then return end
 
-            setStatus("Downloading module " .. tostring(i) .. " / 3", "Fetching Noir_Part" .. tostring(i) .. ".lua…", "loading")
-            local body, fetchError = fetch(url)
-            if not active or myAttempt ~= attemptId then return end
-            local lower = type(body) == "string" and string.lower(body:sub(1, 512)) or ""
-            if type(body) ~= "string" or #body < 32 or string.find(lower, "<html", 1, true) or string.find(lower, "404: not found", 1, true) then
-                local reason = fetchError or "empty or invalid response"
-                fail("Download failed", "Module " .. tostring(i) .. " could not be fetched. Check its raw GitHub URL.", "Part " .. tostring(i) .. ": " .. tostring(reason))
-                return
-            end
-
-            chunks[i] = body
-            setProgress((i / 3) * 0.72)
-            task.wait(0.12)
+                local lower = type(body) == "string" and string.lower(body:sub(1, 512)) or ""
+                if type(body) ~= "string" or #body < 32 or string.find(lower, "<html", 1, true) or string.find(lower, "404: not found", 1, true) then
+                    if not failed then
+                        failed = true
+                        local reason = fetchError or "empty or invalid response"
+                        fail("Download failed", "Module " .. tostring(i) .. " could not be fetched. Check its raw GitHub URL.", "Part " .. tostring(i) .. ": " .. tostring(reason))
+                    end
+                else
+                    chunks[i] = body
+                    completed = completed + 1
+                    if not failed then
+                        setProgress((completed / #RAW) * 0.72)
+                        setStatus("Downloading modules", "Received " .. tostring(completed) .. " of " .. tostring(#RAW) .. " parts…", "loading")
+                    end
+                end
+                finished = finished + 1
+            end)
         end
 
+        while finished < #RAW do
+            if not active or myAttempt ~= attemptId then return end
+            task.wait()
+        end
         if not active or myAttempt ~= attemptId then return end
+        if failed then return end
+
         setStatus("Compiling build", "Joining the three modules into one Noir chunk…", "loading")
         setProgress(0.84)
         if type(loadFn) ~= "function" then
@@ -588,7 +612,7 @@ startLoading = function()
         busy = false
         setProgress(1)
         setStatus("Noir is ready", "The hub has started successfully.", "success")
-        task.wait(0.75)
+        task.wait(0.42)
         closeLoader()
     end)
 end
