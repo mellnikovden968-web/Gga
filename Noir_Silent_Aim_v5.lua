@@ -1747,7 +1747,7 @@ do
         local bagIsFull, auraRadius = false, 8
         local noclipConn, auraConn, statusLbl
         local fopt = { method = "Standard", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false, ret = "Map" }
-        local lastMapCF, lastCoin, holdReturnUntil, farmTw, skipUntil = nil, nil, 0, nil, {}
+        local lastMapCF, lastCoin, holdReturnUntil, farmTw = nil, nil, 0, nil
         local function farmKey(k) return "Autofarm::" .. k end
         local function farmRead(bag, key, def)
             local store = NoirPersistence.data[bag]
@@ -1866,7 +1866,7 @@ do
             end
             freezeRoot(r, true)
             local spd = 4 + fopt.spd * 0.16
-            local dur = math.clamp(dist / math.max(spd, 5), 0.12, 1.15)
+            local dur = math.clamp(dist / math.max(spd, 5), 0.18, 3.2)
             farmTw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
             farmTw:Play()
             local t0 = os.clock()
@@ -2154,7 +2154,6 @@ do
                     end
                     if #parts == 0 then
                         lastCoin = nil
-                        skipUntil = {}
                         goHome()
                         setStatus("Return To " .. fopt.ret)
                         task.wait(0.45)
@@ -2172,24 +2171,19 @@ do
                         hum.PlatformStand = false
                         hum.AutoRotate = true
                     end
-                    local now = os.clock()
                     local part, bestD = nil, 1e9
                     local fallback, fallD = nil, 1e9
                     for n = 1, #parts do
                         local p = parts[n]
                         if p and p.Parent then
-                            local blocked = skipUntil[p] and skipUntil[p] > now
                             local d = (r.Position - p.Position).Magnitude
-                            if not blocked then
-                                if d < fallD then fallD, fallback = d, p end
-                                if p ~= lastCoin and d < bestD then bestD, part = d, p end
-                            end
+                            if d < fallD then fallD, fallback = d, p end
+                            if p ~= lastCoin and d < bestD then bestD, part = d, p end
                         end
                     end
                     part = part or fallback
                     if not part then
-                        skipUntil = {}
-                        task.wait(0.12)
+                        task.wait(0.15)
                         continue
                     end
                     setStatus(fopt.method .. " · spd " .. tostring(fopt.spd) .. "% · coins " .. tostring(#parts))
@@ -2201,9 +2195,6 @@ do
                         magnetCoins()
                     end
                     lastCoin = part
-                    if part and part.Parent then
-                        skipUntil[part] = os.clock() + 2.5
-                    end
                     local waitD = fopt.dly * 0.01
                     if waitD < 0.01 then waitD = 0.01 end
                     task.wait(waitD)
@@ -5580,134 +5571,6 @@ task.defer(function()
     desyncMods:AddLabel("Enable Desync to save the current position; you can then move locally while its saved position is sent on desync frames.")
     if not desyncState.bindEnabled then removeDesyncBindButton() end
 end)
-
-do
-    local sg = { ui = false, on = false, speed = 150, size = 80, jump = false, sideways = false, emote = nil, gui = nil, btn = nil }
-    local emoteIds = { Moonwalk = "79127989560307", ["Happier Jump"] = "15610015346", ["Bouncy Twirl"] = "14353423348", ["Flex Walk"] = "15506506103" }
-    local function sgChar()
-        local c = LocalPlayer.Character
-        if not c then return nil, nil, nil end
-        return c, c:FindFirstChildOfClass("Humanoid"), c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso")
-    end
-    local function sgPlayEmote(id)
-        if not id then return end
-        local _, hum = sgChar()
-        if not hum then return end
-        local ok = pcall(function() hum:PlayEmoteAndGetAnimTrackById(id) end)
-        if not ok then
-            pcall(function()
-                local anim = Instance.new("Animation")
-                anim.AnimationId = "rbxassetid://" .. tostring(id)
-                local track = hum:LoadAnimation(anim)
-                if track then track:Play() end
-            end)
-        end
-    end
-    local function sgPaint()
-        if not sg.btn then return end
-        sg.btn.BackgroundColor3 = sg.on and C.accent or Color3.fromRGB(8, 8, 10)
-        sg.btn.TextColor3 = sg.on and Color3.fromRGB(255, 255, 255) or C.text
-    end
-    local function sgDestroy()
-        if sg.gui then pcall(function() sg.gui:Destroy() end) end
-        sg.gui, sg.btn, sg.on = nil, nil, false
-    end
-    local function sgCreate()
-        if sg.btn and sg.btn.Parent then return end
-        sgDestroy()
-        local parent = guiParent
-        if typeof(parent) ~= "Instance" then parent = LocalPlayer:WaitForChild("PlayerGui") end
-        sg.gui = New("ScreenGui", { Parent = parent, Name = "NoirSpeedGlitch", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 84, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
-        local btn = New("TextButton", {
-            Parent = sg.gui, Name = "SpeedGlitch", AnchorPoint = Vector2.new(.5, .5),
-            Position = NoirPersistence.GetPosition("speedglitch_bind_v1", UDim2.new(.62, 0, .82, 0)),
-            Size = UDim2.fromOffset(sg.size, sg.size),
-            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .22, BorderSizePixel = 0,
-            Text = "SG", TextColor3 = C.text, TextSize = 15, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 8,
-        })
-        corner(btn, 999)
-        stroke(btn, Color3.fromRGB(255, 255, 255), .35)
-        local dragging, moved, grab, grabPos = false, false, nil, nil
-        local function toggleSg()
-            sg.on = not sg.on
-            sgPaint()
-            if sg.on and sg.emote then sgPlayEmote(sg.emote) end
-        end
-        btn.InputBegan:Connect(function(input)
-            if not isPrimaryPress(input) then return end
-            dragging, moved = true, false
-            grab, grabPos = Vector2.new(input.Position.X, input.Position.Y), btn.Position
-        end)
-        UIS.InputChanged:Connect(function(input)
-            if not dragging then return end
-            if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
-            local delta = Vector2.new(input.Position.X, input.Position.Y) - grab
-            if delta.Magnitude > 10 then moved = true end
-            if moved then
-                btn.Position = UDim2.new(grabPos.X.Scale, grabPos.X.Offset + delta.X, grabPos.Y.Scale, grabPos.Y.Offset + delta.Y)
-            end
-        end)
-        UIS.InputEnded:Connect(function(input)
-            if not isPrimaryPress(input) then return end
-            if dragging and not moved then toggleSg() end
-            if dragging and moved then NoirPersistence.SetPosition("speedglitch_bind_v1", btn.Position) end
-            dragging = false
-        end)
-        sg.btn = btn
-        sgPaint()
-    end
-    local function sgHook(char)
-        task.spawn(function()
-            local hum = char:WaitForChild("Humanoid", 8)
-            if not hum then return end
-            sg.jump = false
-            hum.Jumping:Connect(function() sg.jump = true end)
-            hum.StateChanged:Connect(function(_, st)
-                if st == Enum.HumanoidStateType.Landed or st == Enum.HumanoidStateType.Dead then sg.jump = false end
-            end)
-        end)
-    end
-    if LocalPlayer.Character then sgHook(LocalPlayer.Character) end
-    LocalPlayer.CharacterAdded:Connect(sgHook)
-    RunService.Heartbeat:Connect(function()
-        if not sg.on then return end
-        local _, hum, hrp = sgChar()
-        if not hum or not hrp or not sg.jump then return end
-        local md = hum.MoveDirection
-        if md.Magnitude <= 0 then return end
-        local dir
-        if sg.sideways then
-            local right = workspace.CurrentCamera.CFrame.RightVector
-            local flat = Vector3.new(right.X, 0, right.Z)
-            if flat.Magnitude <= 0 then return end
-            flat = flat.Unit
-            local side = flat:Dot(md)
-            if math.abs(side) < 0.35 then return end
-            dir = flat * (side > 0 and 1 or -1)
-        else
-            dir = md.Unit
-        end
-        local vel = dir * sg.speed + Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
-        pcall(function()
-            hrp.AssemblyLinearVelocity = vel
-            hrp.Velocity = vel
-        end)
-    end)
-    local speedMods = tab:AddSection("MISC \u{2022} SPEED GLITCH", "HUD button \u{2022} jump + move to boost (Better ODH)")
-    speedMods:AddToggle("Enable Speed Glitch Button", function(on)
-        sg.ui = on == true
-        if sg.ui then sgCreate() else sgDestroy() end
-    end)
-    speedMods:AddToggle("Only Work Sideways", function(on) sg.sideways = on == true end)
-    speedMods:AddSlider("Side Speed", 10, 400, 150, function(v) sg.speed = tonumber(v) or 150 end)
-    speedMods:AddSlider("Button Size", 48, 140, 80, function(v)
-        sg.size = tonumber(v) or 80
-        if sg.btn then sg.btn.Size = UDim2.fromOffset(sg.size, sg.size) end
-    end)
-    speedMods:AddDropdown("Emote on enable", { "None", "Moonwalk", "Happier Jump", "Bouncy Twirl", "Flex Walk" }, function(choice)
-        sg.emote = emoteIds[choice]
-    end)
-end
 
 -- Visuals are compiled in a separate deferred chunk.  The primary UI stays identical to the last verified mobile-safe build.
 local __noirVisualContext = {
