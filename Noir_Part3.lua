@@ -17,3 +17,15 @@ task.defer(function()
     local ran, err = xpcall(fn, function(message) return tostring(message) end)
     if not ran then warn("\x5b\x4e\x6f\x69\x72\x20\x53\x6b\x69\x6e\x73\x5d\x20\x73\x74\x61\x72\x74\x75\x70\x20\x66\x61\x69\x6c\x65\x64\x3a\x20" .. tostring(err)) end
 end)
+
+if __NOIR_SHARED[__NOIR_GUARD_KEY] == __NOIR_GUARD then
+    __NOIR_GUARD.state = "\x72\x75\x6e\x6e\x69\x6e\x67"
+    __NOIR_GUARD.startedAt = os.clock()
+    __NOIR_GUARD.heartbeat = os.clock()
+    task.spawn(function()
+        while __NOIR_SHARED[__NOIR_GUARD_KEY] == __NOIR_GUARD and __NOIR_GUARD.state == "\x72\x75\x6e\x6e\x69\x6e\x67" do
+            __NOIR_GUARD.heartbeat = os.clock()
+            task.wait(15)
+        end
+    end)
+end

@@ -31,6 +31,46 @@ local function getEnvironment()
 end
 
 local G = getEnvironment()
+local HUB_LOCK_KEY = "__NoirHubRuntimeLock"
+local LOADER_LOCK_KEY = "__NoirLoaderRuntimeLock"
+
+local function recordGuiAlive(record)
+    if type(record) ~= "table" or not record.gui then return false end
+    local ok, parent = pcall(function() return record.gui.Parent end)
+    return ok and parent ~= nil
+end
+
+local function duplicateNotice(message)
+    pcall(function() warn("[Noir] " .. message) end)
+end
+
+local existingHub = G[HUB_LOCK_KEY]
+if type(existingHub) == "table" then
+    local age = os.clock() - (tonumber(existingHub.startedAt) or os.clock())
+    local heartbeatAge = os.clock() - (tonumber(existingHub.heartbeat) or tonumber(existingHub.startedAt) or os.clock())
+    if (existingHub.state == "running" and (recordGuiAlive(existingHub) or heartbeatAge < 120))
+        or (existingHub.state == "starting" and (recordGuiAlive(existingHub) or age < 120)) then
+        duplicateNotice("hub already starting/running; duplicate launch ignored")
+        return
+    end
+    G[HUB_LOCK_KEY] = nil
+end
+
+local existingLoader = G[LOADER_LOCK_KEY]
+if type(existingLoader) == "table" then
+    local age = os.clock() - (tonumber(existingLoader.startedAt) or os.clock())
+    local state = existingLoader.status
+    if ((state == "loading" or state == "compiling" or state == "launching") and (recordGuiAlive(existingLoader) or age < 180))
+        or ((state == "failed" or state == "running") and recordGuiAlive(existingLoader)) then
+        duplicateNotice("loader already active; duplicate launch ignored")
+        return
+    end
+    G[LOADER_LOCK_KEY] = nil
+end
+
+local loaderRecord = { status = "loading", startedAt = os.clock() }
+G[LOADER_LOCK_KEY] = loaderRecord
+
 local function pick(...)
     for i = 1, select("#", ...) do
         local value = select(i, ...)
@@ -132,6 +172,15 @@ local C = {
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local parentGui = getGuiParent()
+local existingHubGui = parentGui:FindFirstChild("NoirSilentAimUI")
+if not existingHubGui then
+    pcall(function() existingHubGui = game:GetService("CoreGui"):FindFirstChild("NoirSilentAimUI") end)
+end
+if existingHubGui then
+    G[LOADER_LOCK_KEY] = nil
+    duplicateNotice("Noir Hub GUI already exists; duplicate launch ignored")
+    return
+end
 
 pcall(function()
     local old = parentGui:FindFirstChild("NoirHubLoader")
@@ -155,6 +204,7 @@ if not parentOk then
         gui.Parent = player and player:FindFirstChildOfClass("PlayerGui")
     end)
 end
+loaderRecord.gui = gui
 
 local function make(className, parent, properties)
     local object = Instance.new(className)
@@ -506,6 +556,7 @@ local function closeLoader()
     if not active then return end
     active = false
     attemptId = attemptId + 1
+    if G[LOADER_LOCK_KEY] == loaderRecord then G[LOADER_LOCK_KEY] = nil end
     if viewportConnection then pcall(function() viewportConnection:Disconnect() end) end
     pcall(function() pulseTween:Cancel() end)
     pcall(function()
@@ -518,8 +569,18 @@ local function closeLoader()
 end
 
 local startLoading
+local function clearStartingHubGuard()
+    local hub = G[HUB_LOCK_KEY]
+    if type(hub) == "table" and hub.state == "starting" then
+        if hub.gui then pcall(function() hub.gui:Destroy() end) end
+        G[HUB_LOCK_KEY] = nil
+    end
+end
+
 local function fail(titleText, detailText, logText)
     busy = false
+    loaderRecord.status = "failed"
+    loaderRecord.startedAt = os.clock()
     retryButton.Visible = true
     footerMeta.Visible = false
     setStatus(titleText, shorten(detailText, 112), "error")
@@ -529,6 +590,8 @@ end
 startLoading = function()
     if not active or busy then return end
     busy = true
+    loaderRecord.status = "loading"
+    loaderRecord.startedAt = os.clock()
     attemptId = attemptId + 1
     local myAttempt = attemptId
     retryButton.Visible = false
@@ -585,6 +648,7 @@ startLoading = function()
         if not active or myAttempt ~= attemptId then return end
         if failed then return end
 
+        loaderRecord.status = "compiling"
         setStatus("Compiling build", "Joining the three modules into one Noir chunk…", "loading")
         setProgress(0.84)
         if type(loadFn) ~= "function" then
@@ -601,14 +665,26 @@ startLoading = function()
         end
 
         if not active or myAttempt ~= attemptId then return end
+        loaderRecord.status = "launching"
+        loaderRecord.startedAt = os.clock()
         setStatus("Launching Noir", "Starting the hub in the current session…", "loading")
         setProgress(0.94)
         local runOk, runError = pcall(runChunk)
         if not runOk then
+            clearStartingHubGuard()
             fail("Startup failed", shorten(runError, 112), "runtime failed: " .. tostring(runError))
             return
         end
 
+        local hubState = G[HUB_LOCK_KEY]
+        if type(hubState) ~= "table" or hubState.state ~= "running" then
+            clearStartingHubGuard()
+            fail("Hub startup incomplete", "Noir did not finish its startup guard. Update the three GitHub parts and retry.", "hub did not report running state")
+            return
+        end
+
+        loaderRecord.status = "running"
+        loaderRecord.startedAt = os.clock()
         busy = false
         setProgress(1)
         setStatus("Noir is ready", "The hub has started successfully.", "success")

@@ -6225,6 +6225,9 @@ end)
 
 local function unload()
     RootMaid:DoCleaning()
+    if __NOIR_SHARED[__NOIR_GUARD_KEY] == __NOIR_GUARD then
+        __NOIR_SHARED[__NOIR_GUARD_KEY] = nil
+    end
 end
 
 pcall(function()
