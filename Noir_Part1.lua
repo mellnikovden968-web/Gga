@@ -1780,604 +1780,607 @@ do
 end
 
 do
-    local page = win:FindFirstChild("\x46\x61\x72\x6d\x43\x6f\x6e\x74\x65\x6e\x74")
-    local col = page and page:FindFirstChild("\x4e\x6f\x69\x72\x43\x6f\x6c\x75\x6d\x6e\x31")
-    if page and col then
-        local function panel(title, subtitle)
-            local card = New("\x46\x72\x61\x6d\x65", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
-                BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
-            table.insert(sectionPanels, { panel = card, page = "\x66\x61\x72\x6d", name = string.lower(title .. "\x20" .. (subtitle or "") .. "\x20\x61\x75\x74\x6f\x66\x61\x72\x6d\x20\x66\x61\x72\x6d\x20\x63\x6f\x69\x6e\x73\x20\x63\x6f\x69\x6e") })
-            corner(card, 18); stroke(card, C.border, .5)
-            local tick = New("\x46\x72\x61\x6d\x65", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
-            corner(tick, 2)
-            text(card, title, 18, UDim2.fromOffset(24, 16))
-            if subtitle and subtitle ~= "" then text(card, subtitle, 12, UDim2.fromOffset(24, 44), true) end
-            local holder = New("\x46\x72\x61\x6d\x65", { Parent = card, Position = UDim2.fromOffset(20, subtitle ~= "" and 74 or 57), Size = UDim2.new(1, -40, 0, 0),
-                AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
-            New("\x55\x49\x4c\x69\x73\x74\x4c\x61\x79\x6f\x75\x74", { Parent = holder, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
-            New("\x55\x49\x50\x61\x64\x64\x69\x6e\x67", { Parent = holder, PaddingBottom = UDim.new(0, 12) })
-            return holder
-        end
-        local function makeToggle(parent, label, callback, startOn)
-            local state = false
-            local r = New("\x46\x72\x61\x6d\x65", { Parent = parent, Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1 })
-            text(r, label, 16, UDim2.fromOffset(0, 10))
-            local pill = New("\x54\x65\x78\x74\x42\x75\x74\x74\x6f\x6e", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(64, 34),
-                BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
-            corner(pill, 17); stroke(pill, C.border, .55)
-            local dot = New("\x46\x72\x61\x6d\x65", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = Color3.fromRGB(150, 155, 162) })
-            corner(dot, 13)
-            local function apply(v)
-                state = v == true
-                TweenService:Create(pill, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = state and C.accent or C.off }):Play()
-                TweenService:Create(dot, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-                    Position = state and UDim2.fromOffset(34, 4) or UDim2.fromOffset(4, 4),
-                    BackgroundColor3 = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 155, 162)
-                }):Play()
-                callback(state)
+    local function buildAutofarmUI()
+        local page = win:FindFirstChild("\x46\x61\x72\x6d\x43\x6f\x6e\x74\x65\x6e\x74")
+        local col = page and page:FindFirstChild("\x4e\x6f\x69\x72\x43\x6f\x6c\x75\x6d\x6e\x31")
+        if page and col then
+            local function panel(title, subtitle)
+                local card = New("\x46\x72\x61\x6d\x65", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
+                    BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
+                table.insert(sectionPanels, { panel = card, page = "\x66\x61\x72\x6d", name = string.lower(title .. "\x20" .. (subtitle or "") .. "\x20\x61\x75\x74\x6f\x66\x61\x72\x6d\x20\x66\x61\x72\x6d\x20\x63\x6f\x69\x6e\x73\x20\x63\x6f\x69\x6e") })
+                corner(card, 18); stroke(card, C.border, .5)
+                local tick = New("\x46\x72\x61\x6d\x65", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
+                corner(tick, 2)
+                text(card, title, 18, UDim2.fromOffset(24, 16))
+                if subtitle and subtitle ~= "" then text(card, subtitle, 12, UDim2.fromOffset(24, 44), true) end
+                local holder = New("\x46\x72\x61\x6d\x65", { Parent = card, Position = UDim2.fromOffset(20, subtitle ~= "" and 74 or 57), Size = UDim2.new(1, -40, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
+                New("\x55\x49\x4c\x69\x73\x74\x4c\x61\x79\x6f\x75\x74", { Parent = holder, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+                New("\x55\x49\x50\x61\x64\x64\x69\x6e\x67", { Parent = holder, PaddingBottom = UDim.new(0, 12) })
+                return holder
             end
-            local last = 0
-            local function fire()
-                local now = os.clock()
-                if now - last < .18 then return end
-                last = now
-                apply(not state)
-            end
-            pill.MouseButton1Click:Connect(fire)
-            pill.Activated:Connect(fire)
-            if startOn == true then apply(true) end
-        end
-        local farming, gunFarm, auraOn, resetFull, killAllOn, shootMurdOn, noRenderOn = false, false, false, false, false, false, false
-        local bagIsFull, auraRadius = false, 8
-        local noclipConn, auraConn, statusLbl
-        local fopt = { method = "\x53\x74\x61\x6e\x64\x61\x72\x64", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false, ret = "\x4d\x61\x70" }
-        local lastMapCF, lastCoin, holdReturnUntil, farmTw = nil, nil, 0, nil
-        local function farmKey(k) return "\x41\x75\x74\x6f\x66\x61\x72\x6d\x3a\x3a" .. k end
-        local function farmRead(bag, key, def)
-            local store = NoirPersistence.data[bag]
-            if type(store) ~= "\x74\x61\x62\x6c\x65" then return def end
-            local v = store[farmKey(key)]
-            if v == nil then return def end
-            return v
-        end
-        local function farmWrite(bag, key, val)
-            NoirPersistence.data[bag][farmKey(key)] = val
-            NoirPersistence.Save()
-        end
-        fopt.spd = math.clamp(tonumber(farmRead("\x73\x6c\x69\x64\x65\x72\x73", "\x54\x77\x65\x65\x6e\x20\x53\x70\x65\x65\x64\x20\x28\x25\x29", 30)) or 30, 1, 100)
-        fopt.dly = math.clamp(tonumber(farmRead("\x73\x6c\x69\x64\x65\x72\x73", "\x54\x77\x65\x65\x6e\x20\x44\x65\x6c\x61\x79\x20\x28\x25\x29", 10)) or 10, 0, 100)
-        fopt.method = farmRead("\x64\x72\x6f\x70\x64\x6f\x77\x6e\x73", "\x4d\x65\x74\x68\x6f\x64", "\x53\x74\x61\x6e\x64\x61\x72\x64")
-        if fopt.method ~= "\x4c\x61\x79" then fopt.method = "\x53\x74\x61\x6e\x64\x61\x72\x64" end
-        fopt.ret = farmRead("\x64\x72\x6f\x70\x64\x6f\x77\x6e\x73", "\x52\x65\x74\x75\x72\x6e\x20\x54\x6f", "\x4d\x61\x70")
-        if fopt.ret ~= "\x41\x62\x6f\x76\x65\x20\x4d\x61\x70" and fopt.ret ~= "\x4c\x6f\x62\x62\x79" then fopt.ret = "\x4d\x61\x70" end
-        fopt.avoid = farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x46\x61\x72\x6d\x20\x41\x76\x6f\x69\x64\x20\x4d\x75\x72\x64\x65\x72\x65\x72", false) == true
-        fopt.rstM = farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x4d\x75\x72\x64\x65\x72\x65\x72", false) == true
-        fopt.rstS = farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x53\x68\x65\x72\x69\x66\x66", false) == true
-        auraRadius = tonumber(farmRead("\x73\x6c\x69\x64\x65\x72\x73", "\x41\x75\x72\x61\x20\x72\x61\x64\x69\x75\x73", 8)) or 8
-        local origDestroyH = workspace.FallenPartsDestroyHeight
-        local function setStatus(msg)
-            if statusLbl then statusLbl.Text = msg end
-        end
-        local function touch(a, b)
-            pcall(function()
-                firetouchinterest(a, b, 0)
-                firetouchinterest(a, b, 1)
-            end)
-        end
-        local function getContainer()
-            for _, child in ipairs(workspace:GetChildren()) do
-                if child:IsA("\x4d\x6f\x64\x65\x6c") then
-                    local inner = child:FindFirstChild("\x43\x6f\x69\x6e\x43\x6f\x6e\x74\x61\x69\x6e\x65\x72")
-                    if inner then return inner, child end
+            local function makeToggle(parent, label, callback, startOn)
+                local state = false
+                local r = New("\x46\x72\x61\x6d\x65", { Parent = parent, Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1 })
+                text(r, label, 16, UDim2.fromOffset(0, 10))
+                local pill = New("\x54\x65\x78\x74\x42\x75\x74\x74\x6f\x6e", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(64, 34),
+                    BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
+                corner(pill, 17); stroke(pill, C.border, .55)
+                local dot = New("\x46\x72\x61\x6d\x65", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = Color3.fromRGB(150, 155, 162) })
+                corner(dot, 13)
+                local function apply(v)
+                    state = v == true
+                    TweenService:Create(pill, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = state and C.accent or C.off }):Play()
+                    TweenService:Create(dot, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                        Position = state and UDim2.fromOffset(34, 4) or UDim2.fromOffset(4, 4),
+                        BackgroundColor3 = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 155, 162)
+                    }):Play()
+                    callback(state)
                 end
+                local last = 0
+                local function fire()
+                    local now = os.clock()
+                    if now - last < .18 then return end
+                    last = now
+                    apply(not state)
+                end
+                pill.MouseButton1Click:Connect(fire)
+                pill.Activated:Connect(fire)
+                if startOn == true then apply(true) end
             end
-            local box = workspace:FindFirstChild("\x43\x6f\x69\x6e\x43\x6f\x6e\x74\x61\x69\x6e\x65\x72")
-            if box then return box, box.Parent end
-            return nil, nil
-        end
-        local function getCoinParts()
-            local parts, box = {}, getContainer()
-            if not box then return parts end
-            for _, child in ipairs(box:GetChildren()) do
-                if child.Name == "\x43\x6f\x69\x6e\x5f\x53\x65\x72\x76\x65\x72" or child.Name == "\x43\x6f\x69\x6e\x56\x69\x73\x75\x61\x6c" or child.Name == "\x43\x6f\x69\x6e" or child.Name == "\x43\x61\x6e\x64\x79" or child:FindFirstChild("\x54\x6f\x75\x63\x68\x49\x6e\x74\x65\x72\x65\x73\x74") then
-                    if child:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") then
-                        parts[#parts + 1] = child
-                    else
-                        local p = child:FindFirstChildWhichIsA("\x42\x61\x73\x65\x50\x61\x72\x74", true)
-                        if p then parts[#parts + 1] = p end
+            local farming, gunFarm, auraOn, resetFull, killAllOn, shootMurdOn, noRenderOn = false, false, false, false, false, false, false
+            local bagIsFull, auraRadius = false, 8
+            local noclipConn, auraConn, statusLbl
+            local fopt = { method = "\x53\x74\x61\x6e\x64\x61\x72\x64", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false, ret = "\x4d\x61\x70" }
+            local lastMapCF, lastCoin, holdReturnUntil, farmTw = nil, nil, 0, nil
+            local function farmKey(k) return "\x41\x75\x74\x6f\x66\x61\x72\x6d\x3a\x3a" .. k end
+            local function farmRead(bag, key, def)
+                local store = NoirPersistence.data[bag]
+                if type(store) ~= "\x74\x61\x62\x6c\x65" then return def end
+                local v = store[farmKey(key)]
+                if v == nil then return def end
+                return v
+            end
+            local function farmWrite(bag, key, val)
+                NoirPersistence.data[bag][farmKey(key)] = val
+                NoirPersistence.Save()
+            end
+            fopt.spd = math.clamp(tonumber(farmRead("\x73\x6c\x69\x64\x65\x72\x73", "\x54\x77\x65\x65\x6e\x20\x53\x70\x65\x65\x64\x20\x28\x25\x29", 30)) or 30, 1, 100)
+            fopt.dly = math.clamp(tonumber(farmRead("\x73\x6c\x69\x64\x65\x72\x73", "\x54\x77\x65\x65\x6e\x20\x44\x65\x6c\x61\x79\x20\x28\x25\x29", 10)) or 10, 0, 100)
+            fopt.method = farmRead("\x64\x72\x6f\x70\x64\x6f\x77\x6e\x73", "\x4d\x65\x74\x68\x6f\x64", "\x53\x74\x61\x6e\x64\x61\x72\x64")
+            if fopt.method ~= "\x4c\x61\x79" then fopt.method = "\x53\x74\x61\x6e\x64\x61\x72\x64" end
+            fopt.ret = farmRead("\x64\x72\x6f\x70\x64\x6f\x77\x6e\x73", "\x52\x65\x74\x75\x72\x6e\x20\x54\x6f", "\x4d\x61\x70")
+            if fopt.ret ~= "\x41\x62\x6f\x76\x65\x20\x4d\x61\x70" and fopt.ret ~= "\x4c\x6f\x62\x62\x79" then fopt.ret = "\x4d\x61\x70" end
+            fopt.avoid = farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x46\x61\x72\x6d\x20\x41\x76\x6f\x69\x64\x20\x4d\x75\x72\x64\x65\x72\x65\x72", false) == true
+            fopt.rstM = farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x4d\x75\x72\x64\x65\x72\x65\x72", false) == true
+            fopt.rstS = farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x53\x68\x65\x72\x69\x66\x66", false) == true
+            auraRadius = tonumber(farmRead("\x73\x6c\x69\x64\x65\x72\x73", "\x41\x75\x72\x61\x20\x72\x61\x64\x69\x75\x73", 8)) or 8
+            local origDestroyH = workspace.FallenPartsDestroyHeight
+            local function setStatus(msg)
+                if statusLbl then statusLbl.Text = msg end
+            end
+            local function touch(a, b)
+                pcall(function()
+                    firetouchinterest(a, b, 0)
+                    firetouchinterest(a, b, 1)
+                end)
+            end
+            local function getContainer()
+                for _, child in ipairs(workspace:GetChildren()) do
+                    if child:IsA("\x4d\x6f\x64\x65\x6c") then
+                        local inner = child:FindFirstChild("\x43\x6f\x69\x6e\x43\x6f\x6e\x74\x61\x69\x6e\x65\x72")
+                        if inner then return inner, child end
                     end
                 end
+                local box = workspace:FindFirstChild("\x43\x6f\x69\x6e\x43\x6f\x6e\x74\x61\x69\x6e\x65\x72")
+                if box then return box, box.Parent end
+                return nil, nil
             end
-            if #parts == 0 then
-                local ok, descs = pcall(function() return box:GetDescendants() end)
-                if ok and descs then
-                    for n = 1, #descs do
-                        local d = descs[n]
-                        if d:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") and d:FindFirstChild("\x54\x6f\x75\x63\x68\x49\x6e\x74\x65\x72\x65\x73\x74") then
-                            parts[#parts + 1] = d
+            local function getCoinParts()
+                local parts, box = {}, getContainer()
+                if not box then return parts end
+                for _, child in ipairs(box:GetChildren()) do
+                    if child.Name == "\x43\x6f\x69\x6e\x5f\x53\x65\x72\x76\x65\x72" or child.Name == "\x43\x6f\x69\x6e\x56\x69\x73\x75\x61\x6c" or child.Name == "\x43\x6f\x69\x6e" or child.Name == "\x43\x61\x6e\x64\x79" or child:FindFirstChild("\x54\x6f\x75\x63\x68\x49\x6e\x74\x65\x72\x65\x73\x74") then
+                        if child:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") then
+                            parts[#parts + 1] = child
+                        else
+                            local p = child:FindFirstChildWhichIsA("\x42\x61\x73\x65\x50\x61\x72\x74", true)
+                            if p then parts[#parts + 1] = p end
                         end
                     end
                 end
+                if #parts == 0 then
+                    local ok, descs = pcall(function() return box:GetDescendants() end)
+                    if ok and descs then
+                        for n = 1, #descs do
+                            local d = descs[n]
+                            if d:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") and d:FindFirstChild("\x54\x6f\x75\x63\x68\x49\x6e\x74\x65\x72\x65\x73\x74") then
+                                parts[#parts + 1] = d
+                            end
+                        end
+                    end
+                end
+                return parts
             end
-            return parts
-        end
-        local function poseAt(part)
-            local pos = part.Position
-            if fopt.method == "\x4c\x61\x79" then
+            local function poseAt(part)
+                local pos = part.Position
+                if fopt.method == "\x4c\x61\x79" then
+                     
+                    return CFrame.new(pos.X, pos.Y - 2, pos.Z) * CFrame.Angles(math.pi / 2, 0, 0)
+                end
                  
-                return CFrame.new(pos.X, pos.Y - 2, pos.Z) * CFrame.Angles(math.pi / 2, 0, 0)
+                return CFrame.new(pos.X, pos.Y + 2.4, pos.Z)
             end
-             
-            return CFrame.new(pos.X, pos.Y + 2.4, pos.Z)
-        end
-        local function freezeRoot(r, on)
-            if not r then return end
-            pcall(function()
-                r.Anchored = on and true or false
-                r.AssemblyLinearVelocity = Vector3.zero
-                r.AssemblyAngularVelocity = Vector3.zero
-            end)
-        end
-        local function returnCFrame()
-            if fopt.ret == "\x4c\x6f\x62\x62\x79" then
-                local cf = lobbyCFrame and lobbyCFrame()
-                if cf then return cf end
-                for _, name in ipairs({ "\x4c\x6f\x62\x62\x79", "\x4c\x6f\x62\x62\x79\x4d\x61\x70", "\x56\x6f\x74\x69\x6e\x67", "\x57\x61\x69\x74\x69\x6e\x67" }) do
-                    local inst = workspace:FindFirstChild(name)
-                    local p = inst and inst:FindFirstChildWhichIsA("\x42\x61\x73\x65\x50\x61\x72\x74", true)
-                    if p then return p.CFrame + Vector3.new(0, 4, 0) end
-                end
-                return lastMapCF
-            end
-            local map = findMapModel and findMapModel()
-            local cf = (mapCFrame and mapCFrame(map)) or lastMapCF
-            if not cf then return nil end
-            if fopt.ret == "\x41\x62\x6f\x76\x65\x20\x4d\x61\x70" then
-                return cf + Vector3.new(0, 40, 0)
-            end
-            return cf
-        end
-        local function tweenTo(cf)
-            local r = localRoot()
-            if not r or not cf then return end
-            if farmTw then pcall(function() farmTw:Cancel() end); farmTw = nil end
-            local dist = (r.Position - cf.Position).Magnitude
-            if dist <= 2.5 then
-                freezeRoot(r, true)
-                r.CFrame = cf
-                freezeRoot(r, false)
-                return
-            end
-            freezeRoot(r, true)
-            local spd = 8 + fopt.spd * 0.55
-            local dur = math.clamp(dist / math.max(spd, 10), 0.08, 1.35)
-            farmTw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
-            farmTw:Play()
-            local t0 = os.clock()
-            while farming and os.clock() - t0 < dur + 0.02 do
-                if not farmTw or farmTw.PlaybackState ~= Enum.PlaybackState.Playing then break end
-                task.wait()
-            end
-            if farmTw then pcall(function() farmTw:Cancel() end); farmTw = nil end
-            if r.Parent then r.CFrame = cf end
-            freezeRoot(r, false)
-        end
-        local function setNoclip(on)
-            if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
-            local char = LocalPlayer.Character
-            if not on then
-                if char then
-                    for _, p in ipairs(char:GetChildren()) do
-                        if p:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") then p.CanCollide = true end
-                    end
-                end
-                return
-            end
-            noclipConn = RunService.Stepped:Connect(function()
-                if not farming then return end
-                local c = LocalPlayer.Character
-                if not c then return end
-                for _, p in ipairs(c:GetChildren()) do
-                    if p:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") then p.CanCollide = false end
-                end
-            end)
-        end
-        local function magnetCoins()
-            local char = LocalPlayer.Character
-            local root = localRoot()
-            if not char or not root then return 0 end
-            freezeRoot(root, false)
-            local parts = getCoinParts()
-            for n = 1, #parts do
-                local part = parts[n]
-                if part and part.Parent then
-                    touch(root, part)
-                    for _, bp in ipairs(char:GetChildren()) do
-                        if bp:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") then touch(bp, part) end
-                    end
-                end
-            end
-            return #parts
-        end
-        local function collectAura()
-            local root = localRoot()
-            if not root then return end
-            local pos = root.Position
-            local parts = getCoinParts()
-            for n = 1, #parts do
-                local part = parts[n]
-                if part and part.Parent and (pos - part.Position).Magnitude <= auraRadius then
-                    touch(root, part)
-                end
-            end
-        end
-        local function hasTool(name)
-            local char, bp = LocalPlayer.Character, LocalPlayer:FindFirstChild("\x42\x61\x63\x6b\x70\x61\x63\x6b")
-            return (char and char:FindFirstChild(name)) or (bp and bp:FindFirstChild(name))
-        end
-        local function doKillAll()
-            local char = LocalPlayer.Character
-            local knife = char and char:FindFirstChild("\x4b\x6e\x69\x66\x65") or (LocalPlayer:FindFirstChild("\x42\x61\x63\x6b\x70\x61\x63\x6b") and LocalPlayer.Backpack:FindFirstChild("\x4b\x6e\x69\x66\x65"))
-            local ht = knife and knife:FindFirstChild("\x45\x76\x65\x6e\x74\x73") and knife.Events:FindFirstChild("\x48\x61\x6e\x64\x6c\x65\x54\x6f\x75\x63\x68\x65\x64")
-            if not ht then return end
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer and plr.Character then
-                    local tgt = plr.Character:FindFirstChild("\x55\x70\x70\x65\x72\x54\x6f\x72\x73\x6f") or plr.Character:FindFirstChild("\x48\x75\x6d\x61\x6e\x6f\x69\x64\x52\x6f\x6f\x74\x50\x61\x72\x74")
-                    if tgt then pcall(function() ht:FireServer(tgt) end) end
-                end
-            end
-        end
-        local function doShootMurd()
-            task.spawn(function()
-                local gun = hasTool("\x47\x75\x6e")
-                local murd = findByKnife and findByKnife()
-                if not gun or not murd then return end
-                local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
-                if hum and gun.Parent ~= LocalPlayer.Character then pcall(function() hum:EquipTool(gun) end) end
-                task.wait(0.2)
+            local function freezeRoot(r, on)
+                if not r then return end
                 pcall(function()
-                    local vu = game:GetService("\x56\x69\x72\x74\x75\x61\x6c\x55\x73\x65\x72")
-                    local cam = workspace.CurrentCamera
-                    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-                    vu:Button1Down(center, cam.CFrame)
-                    task.wait(0.1)
-                    vu:Button1Up(center, cam.CFrame)
-                end)
-            end)
-        end
-        local function maybeRoleReset()
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
-            if not hum then return end
-            if fopt.rstM and hasTool("\x4b\x6e\x69\x66\x65") then hum.Health = 0 end
-            if fopt.rstS and hasTool("\x47\x75\x6e") then hum.Health = 0 end
-        end
-        local function murdTooClose()
-            if not fopt.avoid then return false end
-            local murd = findByKnife and findByKnife()
-            local r = localRoot()
-            local hrp = murd and murd.Character and murd.Character:FindFirstChild("\x48\x75\x6d\x61\x6e\x6f\x69\x64\x52\x6f\x6f\x74\x50\x61\x72\x74")
-            if not r or not hrp then return false end
-            return (r.Position - hrp.Position).Magnitude < 38
-        end
-        local function onBagFull()
-            bagIsFull = true
-            if not farming then return end
-            notify("\x34\x30\x20\xd0\xbc\xd0\xbe\xd0\xbd\xd0\xb5\xd1\x82\x20\xe2\x80\x94\x20\x62\x61\x67\x20\x66\x75\x6c\x6c", 3)
-            if killAllOn then task.spawn(doKillAll) end
-            if shootMurdOn then doShootMurd() end
-            if resetFull then
-                local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
-                if hum then hum.Health = 0 end
-            end
-        end
-        pcall(function()
-            local gp = ReplicatedStorage:FindFirstChild("\x52\x65\x6d\x6f\x74\x65\x73")
-            gp = gp and gp:FindFirstChild("\x47\x61\x6d\x65\x70\x6c\x61\x79")
-            local ev = gp and gp:FindFirstChild("\x43\x6f\x69\x6e\x43\x6f\x6c\x6c\x65\x63\x74\x65\x64")
-            if ev and ev.OnClientEvent then
-                ev.OnClientEvent:Connect(function(_, current, max)
-                    current, max = tonumber(current), tonumber(max)
-                    if current and max and current >= max then onBagFull() end
+                    r.Anchored = on and true or false
+                    r.AssemblyLinearVelocity = Vector3.zero
+                    r.AssemblyAngularVelocity = Vector3.zero
                 end)
             end
-            local endEv = gp and gp:FindFirstChild("\x52\x6f\x75\x6e\x64\x45\x6e\x64\x46\x61\x64\x65")
-            if endEv and endEv.OnClientEvent then
-                endEv.OnClientEvent:Connect(function() bagIsFull = false end)
-            end
-            local startEv = gp and gp:FindFirstChild("\x52\x6f\x75\x6e\x64\x53\x74\x61\x72\x74")
-            if startEv and startEv.OnClientEvent then
-                startEv.OnClientEvent:Connect(function() bagIsFull = false end)
-            end
-        end)
-        pcall(function()
-            LocalPlayer.Idled:Connect(function()
-                local vu = game:GetService("\x56\x69\x72\x74\x75\x61\x6c\x55\x73\x65\x72")
-                vu:CaptureController()
-                vu:ClickButton2(Vector2.new())
-            end)
-        end)
-        local function farmBtn(parent, label, fn)
-            local b = New("\x54\x65\x78\x74\x42\x75\x74\x74\x6f\x6e", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
-                Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
-            corner(b, 12); stroke(b, C.border, .5)
-            b.MouseButton1Click:Connect(fn)
-            b.Activated:Connect(fn)
-            return b
-        end
-        local function makeFarmSlider(parent, label, minV, maxV, default, cb)
-            local r = New("\x46\x72\x61\x6d\x65", { Parent = parent, Size = UDim2.new(1, 0, 0, 68), BackgroundTransparency = 1 })
-            text(r, label, 16, UDim2.fromOffset(0, 8))
-            local value = New("\x54\x65\x78\x74\x42\x6f\x78", { Parent = r, Position = UDim2.new(1, -72, 0, 5), Size = UDim2.fromOffset(72, 30), BackgroundColor3 = C.surface,
-                BackgroundTransparency = .12, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
-                TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false })
-            corner(value, 9); stroke(value, C.border, .4)
-            local track = New("\x54\x65\x78\x74\x42\x75\x74\x74\x6f\x6e", { Parent = r, Position = UDim2.new(0, 0, 1, -18), Size = UDim2.new(1, 0, 0, 6),
-                BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
-            corner(track, 3)
-            local span = math.max(maxV - minV, 1)
-            local fill = New("\x46\x72\x61\x6d\x65", { Parent = track, Size = UDim2.fromScale((default - minV) / span, 1), BackgroundColor3 = C.accent, BorderSizePixel = 0 })
-            corner(fill, 3)
-            local knob = New("\x46\x72\x61\x6d\x65", { Parent = track, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new((default - minV) / span, 0, .5, 0),
-                Size = UDim2.fromOffset(14, 14), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BorderSizePixel = 0, ZIndex = 2 })
-            corner(knob, 7)
-            local current = default
-            local function set(v)
-                current = math.clamp(math.floor((tonumber(v) or current or default) + .5), minV, maxV)
-                fill.Size = UDim2.fromScale((current - minV) / span, 1)
-                knob.Position = UDim2.new((current - minV) / span, 0, .5, 0)
-                value.Text = tostring(current)
-                cb(current)
-                farmWrite("\x73\x6c\x69\x64\x65\x72\x73", label, current)
-            end
-            set(default)
-            value.FocusLost:Connect(function() set(value.Text) end)
-            local drag = false
-            local function fromInput(i)
-                local w = track.AbsoluteSize.X
-                if w < 1 then return end
-                set(minV + span * math.clamp((i.Position.X - track.AbsolutePosition.X) / w, 0, 1))
-            end
-            track.InputBegan:Connect(function(i)
-                if isPrimaryPress(i) then drag = true; fromInput(i) end
-            end)
-            track.InputEnded:Connect(function(i)
-                if isPrimaryPress(i) then drag = false end
-            end)
-            UIS.InputChanged:Connect(function(i)
-                if drag and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
-                    fromInput(i)
+            local function returnCFrame()
+                if fopt.ret == "\x4c\x6f\x62\x62\x79" then
+                    local cf = lobbyCFrame and lobbyCFrame()
+                    if cf then return cf end
+                    for _, name in ipairs({ "\x4c\x6f\x62\x62\x79", "\x4c\x6f\x62\x62\x79\x4d\x61\x70", "\x56\x6f\x74\x69\x6e\x67", "\x57\x61\x69\x74\x69\x6e\x67" }) do
+                        local inst = workspace:FindFirstChild(name)
+                        local p = inst and inst:FindFirstChildWhichIsA("\x42\x61\x73\x65\x50\x61\x72\x74", true)
+                        if p then return p.CFrame + Vector3.new(0, 4, 0) end
+                    end
+                    return lastMapCF
                 end
-            end)
-            UIS.InputEnded:Connect(function(i)
-                if isPrimaryPress(i) then drag = false end
-            end)
-        end
-        local function goHome()
-            local r = localRoot()
-            local cf = returnCFrame()
-            if not r or not cf then return false end
-            freezeRoot(r, false)
-            r.CFrame = cf
-            pcall(function()
-                r.AssemblyLinearVelocity = Vector3.zero
-                r.AssemblyAngularVelocity = Vector3.zero
-            end)
-            return true
-        end
-        local function stopFarmHold()
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
-            if hum then
-                hum.PlatformStand = false
-                hum.AutoRotate = true
-                pcall(function()
-                    hum.WalkSpeed = 16
-                    hum.JumpPower = 50
-                    hum.JumpHeight = 7.2
-                end)
-            end
-            freezeRoot(localRoot(), false)
-            pcall(function() workspace.FallenPartsDestroyHeight = origDestroyH end)
-        end
-        pcall(function()
-            LocalPlayer.CharacterAdded:Connect(function(char)
-                local hrp = char:WaitForChild("\x48\x75\x6d\x61\x6e\x6f\x69\x64\x52\x6f\x6f\x74\x50\x61\x72\x74", 5)
-                task.wait(0.25)
-                freezeRoot(hrp, false)
-                local hum = char:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
-                if hum then hum.PlatformStand = false; hum.AutoRotate = true end
-                if farming then
-                    holdReturnUntil = os.clock() + 0.9
-                    goHome()
-                    setStatus("\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x20" .. fopt.ret)
+                local map = findMapModel and findMapModel()
+                local cf = (mapCFrame and mapCFrame(map)) or lastMapCF
+                if not cf then return nil end
+                if fopt.ret == "\x41\x62\x6f\x76\x65\x20\x4d\x61\x70" then
+                    return cf + Vector3.new(0, 40, 0)
                 end
-            end)
-        end)
-
-        local holder = panel("\x41\x75\x74\x6f\x66\x61\x72\x6d", "\x54\x77\x65\x65\x6e\x20\x53\x70\x65\x65\x64\x20\x2f\x20\x44\x65\x6c\x61\x79\x20\xd0\xba\xd0\xb0\xd0\xba\x20\x4f\x76\x65\x72\x64\x72\x69\x76\x65", "\x66\x61\x72\x6d", farmCol or col)
-        statusLbl = New("\x54\x65\x78\x74\x4c\x61\x62\x65\x6c", { Parent = holder, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
-            Text = "\x49\x64\x6c\x65", TextColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
-        makeToggle(holder, "\x41\x75\x74\x6f\x20\x46\x61\x72\x6d", function(on)
-            farming = on
-            if not on then
+                return cf
+            end
+            local function tweenTo(cf)
+                local r = localRoot()
+                if not r or not cf then return end
                 if farmTw then pcall(function() farmTw:Cancel() end); farmTw = nil end
-                setNoclip(false)
-                stopFarmHold()
-                goHome()
-                setStatus("\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x20" .. fopt.ret)
-                notify("\x41\x75\x74\x6f\x66\x61\x72\x6d\x20\x4f\x46\x46\x20\xe2\x86\x92\x20" .. fopt.ret, 2)
-                return
+                local dist = (r.Position - cf.Position).Magnitude
+                if dist <= 2.5 then
+                    freezeRoot(r, true)
+                    r.CFrame = cf
+                    freezeRoot(r, false)
+                    return
+                end
+                freezeRoot(r, true)
+                local spd = 8 + fopt.spd * 0.55
+                local dur = math.clamp(dist / math.max(spd, 10), 0.08, 1.35)
+                farmTw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
+                farmTw:Play()
+                local t0 = os.clock()
+                while farming and os.clock() - t0 < dur + 0.02 do
+                    if not farmTw or farmTw.PlaybackState ~= Enum.PlaybackState.Playing then break end
+                    task.wait()
+                end
+                if farmTw then pcall(function() farmTw:Cancel() end); farmTw = nil end
+                if r.Parent then r.CFrame = cf end
+                freezeRoot(r, false)
             end
-            notify("\x41\x75\x74\x6f\x66\x61\x72\x6d\x20\x4f\x4e\x20\xc2\xb7\x20" .. fopt.method, 2)
-            pcall(function() workspace.FallenPartsDestroyHeight = -50000 end)
-            setNoclip(true)
-            task.spawn(function()
-                while farming do
-                    local char = LocalPlayer.Character
-                    local r = localRoot()
-                    local hum = char and char:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
-                    if not r or not hum or hum.Health <= 0 then
-                        freezeRoot(r, false)
-                        setStatus("\x57\x61\x69\x74\x20\x72\x65\x73\x70\x61\x77\x6e\x2e\x2e\x2e")
-                        task.wait(0.4)
-                        continue
+            local function setNoclip(on)
+                if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
+                local char = LocalPlayer.Character
+                if not on then
+                    if char then
+                        for _, p in ipairs(char:GetChildren()) do
+                            if p:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") then p.CanCollide = true end
+                        end
                     end
-                    if os.clock() < holdReturnUntil then
-                        task.wait(0.08)
-                        continue
+                    return
+                end
+                noclipConn = RunService.Stepped:Connect(function()
+                    if not farming then return end
+                    local c = LocalPlayer.Character
+                    if not c then return end
+                    for _, p in ipairs(c:GetChildren()) do
+                        if p:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") then p.CanCollide = false end
                     end
-                    if bagIsFull then
-                        setStatus("\x42\x61\x67\x20\x66\x75\x6c\x6c\x20\x28\x34\x30\x29")
-                        maybeRoleReset()
-                        task.wait(1)
-                        continue
+                end)
+            end
+            local function magnetCoins()
+                local char = LocalPlayer.Character
+                local root = localRoot()
+                if not char or not root then return 0 end
+                freezeRoot(root, false)
+                local parts = getCoinParts()
+                for n = 1, #parts do
+                    local part = parts[n]
+                    if part and part.Parent then
+                        touch(root, part)
+                        for _, bp in ipairs(char:GetChildren()) do
+                            if bp:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") then touch(bp, part) end
+                        end
                     end
-                    maybeRoleReset()
-                    local parts = getCoinParts()
-                    if #parts > 0 then
-                        lastMapCF = CFrame.new(parts[1].Position + Vector3.new(0, 5, 0))
+                end
+                return #parts
+            end
+            local function collectAura()
+                local root = localRoot()
+                if not root then return end
+                local pos = root.Position
+                local parts = getCoinParts()
+                for n = 1, #parts do
+                    local part = parts[n]
+                    if part and part.Parent and (pos - part.Position).Magnitude <= auraRadius then
+                        touch(root, part)
                     end
-                    if #parts == 0 then
-                        lastCoin = nil
+                end
+            end
+            local function hasTool(name)
+                local char, bp = LocalPlayer.Character, LocalPlayer:FindFirstChild("\x42\x61\x63\x6b\x70\x61\x63\x6b")
+                return (char and char:FindFirstChild(name)) or (bp and bp:FindFirstChild(name))
+            end
+            local function doKillAll()
+                local char = LocalPlayer.Character
+                local knife = char and char:FindFirstChild("\x4b\x6e\x69\x66\x65") or (LocalPlayer:FindFirstChild("\x42\x61\x63\x6b\x70\x61\x63\x6b") and LocalPlayer.Backpack:FindFirstChild("\x4b\x6e\x69\x66\x65"))
+                local ht = knife and knife:FindFirstChild("\x45\x76\x65\x6e\x74\x73") and knife.Events:FindFirstChild("\x48\x61\x6e\x64\x6c\x65\x54\x6f\x75\x63\x68\x65\x64")
+                if not ht then return end
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= LocalPlayer and plr.Character then
+                        local tgt = plr.Character:FindFirstChild("\x55\x70\x70\x65\x72\x54\x6f\x72\x73\x6f") or plr.Character:FindFirstChild("\x48\x75\x6d\x61\x6e\x6f\x69\x64\x52\x6f\x6f\x74\x50\x61\x72\x74")
+                        if tgt then pcall(function() ht:FireServer(tgt) end) end
+                    end
+                end
+            end
+            local function doShootMurd()
+                task.spawn(function()
+                    local gun = hasTool("\x47\x75\x6e")
+                    local murd = findByKnife and findByKnife()
+                    if not gun or not murd then return end
+                    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
+                    if hum and gun.Parent ~= LocalPlayer.Character then pcall(function() hum:EquipTool(gun) end) end
+                    task.wait(0.2)
+                    pcall(function()
+                        local vu = game:GetService("\x56\x69\x72\x74\x75\x61\x6c\x55\x73\x65\x72")
+                        local cam = workspace.CurrentCamera
+                        local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                        vu:Button1Down(center, cam.CFrame)
+                        task.wait(0.1)
+                        vu:Button1Up(center, cam.CFrame)
+                    end)
+                end)
+            end
+            local function maybeRoleReset()
+                local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
+                if not hum then return end
+                if fopt.rstM and hasTool("\x4b\x6e\x69\x66\x65") then hum.Health = 0 end
+                if fopt.rstS and hasTool("\x47\x75\x6e") then hum.Health = 0 end
+            end
+            local function murdTooClose()
+                if not fopt.avoid then return false end
+                local murd = findByKnife and findByKnife()
+                local r = localRoot()
+                local hrp = murd and murd.Character and murd.Character:FindFirstChild("\x48\x75\x6d\x61\x6e\x6f\x69\x64\x52\x6f\x6f\x74\x50\x61\x72\x74")
+                if not r or not hrp then return false end
+                return (r.Position - hrp.Position).Magnitude < 38
+            end
+            local function onBagFull()
+                bagIsFull = true
+                if not farming then return end
+                notify("\x34\x30\x20\xd0\xbc\xd0\xbe\xd0\xbd\xd0\xb5\xd1\x82\x20\xe2\x80\x94\x20\x62\x61\x67\x20\x66\x75\x6c\x6c", 3)
+                if killAllOn then task.spawn(doKillAll) end
+                if shootMurdOn then doShootMurd() end
+                if resetFull then
+                    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
+                    if hum then hum.Health = 0 end
+                end
+            end
+            pcall(function()
+                local gp = ReplicatedStorage:FindFirstChild("\x52\x65\x6d\x6f\x74\x65\x73")
+                gp = gp and gp:FindFirstChild("\x47\x61\x6d\x65\x70\x6c\x61\x79")
+                local ev = gp and gp:FindFirstChild("\x43\x6f\x69\x6e\x43\x6f\x6c\x6c\x65\x63\x74\x65\x64")
+                if ev and ev.OnClientEvent then
+                    ev.OnClientEvent:Connect(function(_, current, max)
+                        current, max = tonumber(current), tonumber(max)
+                        if current and max and current >= max then onBagFull() end
+                    end)
+                end
+                local endEv = gp and gp:FindFirstChild("\x52\x6f\x75\x6e\x64\x45\x6e\x64\x46\x61\x64\x65")
+                if endEv and endEv.OnClientEvent then
+                    endEv.OnClientEvent:Connect(function() bagIsFull = false end)
+                end
+                local startEv = gp and gp:FindFirstChild("\x52\x6f\x75\x6e\x64\x53\x74\x61\x72\x74")
+                if startEv and startEv.OnClientEvent then
+                    startEv.OnClientEvent:Connect(function() bagIsFull = false end)
+                end
+            end)
+            pcall(function()
+                LocalPlayer.Idled:Connect(function()
+                    local vu = game:GetService("\x56\x69\x72\x74\x75\x61\x6c\x55\x73\x65\x72")
+                    vu:CaptureController()
+                    vu:ClickButton2(Vector2.new())
+                end)
+            end)
+            local function farmBtn(parent, label, fn)
+                local b = New("\x54\x65\x78\x74\x42\x75\x74\x74\x6f\x6e", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
+                    Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
+                corner(b, 12); stroke(b, C.border, .5)
+                b.MouseButton1Click:Connect(fn)
+                b.Activated:Connect(fn)
+                return b
+            end
+            local function makeFarmSlider(parent, label, minV, maxV, default, cb)
+                local r = New("\x46\x72\x61\x6d\x65", { Parent = parent, Size = UDim2.new(1, 0, 0, 68), BackgroundTransparency = 1 })
+                text(r, label, 16, UDim2.fromOffset(0, 8))
+                local value = New("\x54\x65\x78\x74\x42\x6f\x78", { Parent = r, Position = UDim2.new(1, -72, 0, 5), Size = UDim2.fromOffset(72, 30), BackgroundColor3 = C.surface,
+                    BackgroundTransparency = .12, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
+                    TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false })
+                corner(value, 9); stroke(value, C.border, .4)
+                local track = New("\x54\x65\x78\x74\x42\x75\x74\x74\x6f\x6e", { Parent = r, Position = UDim2.new(0, 0, 1, -18), Size = UDim2.new(1, 0, 0, 6),
+                    BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
+                corner(track, 3)
+                local span = math.max(maxV - minV, 1)
+                local fill = New("\x46\x72\x61\x6d\x65", { Parent = track, Size = UDim2.fromScale((default - minV) / span, 1), BackgroundColor3 = C.accent, BorderSizePixel = 0 })
+                corner(fill, 3)
+                local knob = New("\x46\x72\x61\x6d\x65", { Parent = track, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new((default - minV) / span, 0, .5, 0),
+                    Size = UDim2.fromOffset(14, 14), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BorderSizePixel = 0, ZIndex = 2 })
+                corner(knob, 7)
+                local current = default
+                local function set(v)
+                    current = math.clamp(math.floor((tonumber(v) or current or default) + .5), minV, maxV)
+                    fill.Size = UDim2.fromScale((current - minV) / span, 1)
+                    knob.Position = UDim2.new((current - minV) / span, 0, .5, 0)
+                    value.Text = tostring(current)
+                    cb(current)
+                    farmWrite("\x73\x6c\x69\x64\x65\x72\x73", label, current)
+                end
+                set(default)
+                value.FocusLost:Connect(function() set(value.Text) end)
+                local drag = false
+                local function fromInput(i)
+                    local w = track.AbsoluteSize.X
+                    if w < 1 then return end
+                    set(minV + span * math.clamp((i.Position.X - track.AbsolutePosition.X) / w, 0, 1))
+                end
+                track.InputBegan:Connect(function(i)
+                    if isPrimaryPress(i) then drag = true; fromInput(i) end
+                end)
+                track.InputEnded:Connect(function(i)
+                    if isPrimaryPress(i) then drag = false end
+                end)
+                UIS.InputChanged:Connect(function(i)
+                    if drag and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
+                        fromInput(i)
+                    end
+                end)
+                UIS.InputEnded:Connect(function(i)
+                    if isPrimaryPress(i) then drag = false end
+                end)
+            end
+            local function goHome()
+                local r = localRoot()
+                local cf = returnCFrame()
+                if not r or not cf then return false end
+                freezeRoot(r, false)
+                r.CFrame = cf
+                pcall(function()
+                    r.AssemblyLinearVelocity = Vector3.zero
+                    r.AssemblyAngularVelocity = Vector3.zero
+                end)
+                return true
+            end
+            local function stopFarmHold()
+                local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
+                if hum then
+                    hum.PlatformStand = false
+                    hum.AutoRotate = true
+                    pcall(function()
+                        hum.WalkSpeed = 16
+                        hum.JumpPower = 50
+                        hum.JumpHeight = 7.2
+                    end)
+                end
+                freezeRoot(localRoot(), false)
+                pcall(function() workspace.FallenPartsDestroyHeight = origDestroyH end)
+            end
+            pcall(function()
+                LocalPlayer.CharacterAdded:Connect(function(char)
+                    local hrp = char:WaitForChild("\x48\x75\x6d\x61\x6e\x6f\x69\x64\x52\x6f\x6f\x74\x50\x61\x72\x74", 5)
+                    task.wait(0.25)
+                    freezeRoot(hrp, false)
+                    local hum = char:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
+                    if hum then hum.PlatformStand = false; hum.AutoRotate = true end
+                    if farming then
+                        holdReturnUntil = os.clock() + 0.9
                         goHome()
                         setStatus("\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x20" .. fopt.ret)
-                        task.wait(0.45)
-                        continue
                     end
-                    if murdTooClose() then
-                        setStatus("\x41\x76\x6f\x69\x64\x20\x4d\x75\x72\x64\x65\x72\x65\x72")
-                        task.wait(0.4)
-                        continue
-                    end
-                    if fopt.method == "\x4c\x61\x79" then
-                        hum.PlatformStand = true
-                        hum.AutoRotate = false
-                    else
-                        hum.PlatformStand = false
-                        hum.AutoRotate = true
-                    end
-                    local part, bestD = nil, 1e9
-                    local fallback, fallD = nil, 1e9
-                    for n = 1, #parts do
-                        local p = parts[n]
-                        if p and p.Parent then
-                            local d = (r.Position - p.Position).Magnitude
-                            if d < fallD then fallD, fallback = d, p end
-                            if p ~= lastCoin and d < bestD then bestD, part = d, p end
+                end)
+            end)
+
+            local holder = panel("\x41\x75\x74\x6f\x66\x61\x72\x6d", "\x54\x77\x65\x65\x6e\x20\x53\x70\x65\x65\x64\x20\x2f\x20\x44\x65\x6c\x61\x79\x20\xd0\xba\xd0\xb0\xd0\xba\x20\x4f\x76\x65\x72\x64\x72\x69\x76\x65", "\x66\x61\x72\x6d", farmCol or col)
+            statusLbl = New("\x54\x65\x78\x74\x4c\x61\x62\x65\x6c", { Parent = holder, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
+                Text = "\x49\x64\x6c\x65", TextColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
+            makeToggle(holder, "\x41\x75\x74\x6f\x20\x46\x61\x72\x6d", function(on)
+                farming = on
+                if not on then
+                    if farmTw then pcall(function() farmTw:Cancel() end); farmTw = nil end
+                    setNoclip(false)
+                    stopFarmHold()
+                    goHome()
+                    setStatus("\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x20" .. fopt.ret)
+                    notify("\x41\x75\x74\x6f\x66\x61\x72\x6d\x20\x4f\x46\x46\x20\xe2\x86\x92\x20" .. fopt.ret, 2)
+                    return
+                end
+                notify("\x41\x75\x74\x6f\x66\x61\x72\x6d\x20\x4f\x4e\x20\xc2\xb7\x20" .. fopt.method, 2)
+                pcall(function() workspace.FallenPartsDestroyHeight = -50000 end)
+                setNoclip(true)
+                task.spawn(function()
+                    while farming do
+                        local char = LocalPlayer.Character
+                        local r = localRoot()
+                        local hum = char and char:FindFirstChildOfClass("\x48\x75\x6d\x61\x6e\x6f\x69\x64")
+                        if not r or not hum or hum.Health <= 0 then
+                            freezeRoot(r, false)
+                            setStatus("\x57\x61\x69\x74\x20\x72\x65\x73\x70\x61\x77\x6e\x2e\x2e\x2e")
+                            task.wait(0.4)
+                            continue
                         end
+                        if os.clock() < holdReturnUntil then
+                            task.wait(0.08)
+                            continue
+                        end
+                        if bagIsFull then
+                            setStatus("\x42\x61\x67\x20\x66\x75\x6c\x6c\x20\x28\x34\x30\x29")
+                            maybeRoleReset()
+                            task.wait(1)
+                            continue
+                        end
+                        maybeRoleReset()
+                        local parts = getCoinParts()
+                        if #parts > 0 then
+                            lastMapCF = CFrame.new(parts[1].Position + Vector3.new(0, 5, 0))
+                        end
+                        if #parts == 0 then
+                            lastCoin = nil
+                            goHome()
+                            setStatus("\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x20" .. fopt.ret)
+                            task.wait(0.45)
+                            continue
+                        end
+                        if murdTooClose() then
+                            setStatus("\x41\x76\x6f\x69\x64\x20\x4d\x75\x72\x64\x65\x72\x65\x72")
+                            task.wait(0.4)
+                            continue
+                        end
+                        if fopt.method == "\x4c\x61\x79" then
+                            hum.PlatformStand = true
+                            hum.AutoRotate = false
+                        else
+                            hum.PlatformStand = false
+                            hum.AutoRotate = true
+                        end
+                        local part, bestD = nil, 1e9
+                        local fallback, fallD = nil, 1e9
+                        for n = 1, #parts do
+                            local p = parts[n]
+                            if p and p.Parent then
+                                local d = (r.Position - p.Position).Magnitude
+                                if d < fallD then fallD, fallback = d, p end
+                                if p ~= lastCoin and d < bestD then bestD, part = d, p end
+                            end
+                        end
+                        part = part or fallback
+                        if not part then
+                            task.wait(0.15)
+                            continue
+                        end
+                        setStatus(fopt.method .. "\x20\xc2\xb7\x20\x73\x70\x64\x20" .. tostring(fopt.spd) .. "\x25\x20\xc2\xb7\x20\x63\x6f\x69\x6e\x73\x20" .. tostring(#parts))
+                        tweenTo(poseAt(part))
+                        local root = localRoot()
+                        if root and part and part.Parent then
+                            freezeRoot(root, false)
+                            touch(root, part)
+                            magnetCoins()
+                        end
+                        lastCoin = part
+                        local waitD = fopt.dly * 0.01
+                        if waitD < 0.01 then waitD = 0.01 end
+                        task.wait(waitD)
                     end
-                    part = part or fallback
-                    if not part then
-                        task.wait(0.15)
-                        continue
-                    end
-                    setStatus(fopt.method .. "\x20\xc2\xb7\x20\x73\x70\x64\x20" .. tostring(fopt.spd) .. "\x25\x20\xc2\xb7\x20\x63\x6f\x69\x6e\x73\x20" .. tostring(#parts))
-                    tweenTo(poseAt(part))
-                    local root = localRoot()
-                    if root and part and part.Parent then
-                        freezeRoot(root, false)
-                        touch(root, part)
-                        magnetCoins()
-                    end
-                    lastCoin = part
-                    local waitD = fopt.dly * 0.01
-                    if waitD < 0.01 then waitD = 0.01 end
-                    task.wait(waitD)
-                end
-                setNoclip(false)
-                stopFarmHold()
-                goHome()
-                setStatus("\x49\x64\x6c\x65")
+                    setNoclip(false)
+                    stopFarmHold()
+                    goHome()
+                    setStatus("\x49\x64\x6c\x65")
+                end)
             end)
-        end)
-        makeFarmSlider(holder, "\x54\x77\x65\x65\x6e\x20\x53\x70\x65\x65\x64\x20\x28\x25\x29", 1, 100, fopt.spd, function(v) fopt.spd = v end)
-        makeFarmSlider(holder, "\x54\x77\x65\x65\x6e\x20\x44\x65\x6c\x61\x79\x20\x28\x25\x29", 0, 100, fopt.dly, function(v) fopt.dly = v end)
-        local methodBtn = farmBtn(holder, "\x4d\x65\x74\x68\x6f\x64\x3a\x20" .. fopt.method, function() end)
-        local methods, mi = { "\x53\x74\x61\x6e\x64\x61\x72\x64", "\x4c\x61\x79" }, (fopt.method == "\x4c\x61\x79" and 2 or 1)
-        methodBtn.MouseButton1Click:Connect(function()
-            mi = mi % #methods + 1
-            fopt.method = methods[mi]
-            methodBtn.Text = "\x4d\x65\x74\x68\x6f\x64\x3a\x20" .. fopt.method
-            farmWrite("\x64\x72\x6f\x70\x64\x6f\x77\x6e\x73", "\x4d\x65\x74\x68\x6f\x64", fopt.method)
-            notify("\x46\x61\x72\x6d\x20\x6d\x65\x74\x68\x6f\x64\x3a\x20" .. fopt.method, 2)
-        end)
-        local retBtn = farmBtn(holder, "\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x3a\x20" .. fopt.ret, function() end)
-        local rets = { "\x4d\x61\x70", "\x41\x62\x6f\x76\x65\x20\x4d\x61\x70", "\x4c\x6f\x62\x62\x79" }
-        local reti = 1
-        for i = 1, #rets do if rets[i] == fopt.ret then reti = i end end
-        retBtn.MouseButton1Click:Connect(function()
-            reti = reti % #rets + 1
-            fopt.ret = rets[reti]
-            retBtn.Text = "\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x3a\x20" .. fopt.ret
-            farmWrite("\x64\x72\x6f\x70\x64\x6f\x77\x6e\x73", "\x52\x65\x74\x75\x72\x6e\x20\x54\x6f", fopt.ret)
-            notify("\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x3a\x20" .. fopt.ret, 2)
-        end)
-        makeToggle(holder, "\x43\x6f\x69\x6e\x20\x41\x75\x72\x61", function(on)
-            auraOn = on
-            farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x43\x6f\x69\x6e\x20\x41\x75\x72\x61", on)
-            if auraConn then auraConn:Disconnect(); auraConn = nil end
-            if not on then return end
-            auraConn = RunService.Heartbeat:Connect(function()
-                if auraOn then collectAura() end
+            makeFarmSlider(holder, "\x54\x77\x65\x65\x6e\x20\x53\x70\x65\x65\x64\x20\x28\x25\x29", 1, 100, fopt.spd, function(v) fopt.spd = v end)
+            makeFarmSlider(holder, "\x54\x77\x65\x65\x6e\x20\x44\x65\x6c\x61\x79\x20\x28\x25\x29", 0, 100, fopt.dly, function(v) fopt.dly = v end)
+            local methodBtn = farmBtn(holder, "\x4d\x65\x74\x68\x6f\x64\x3a\x20" .. fopt.method, function() end)
+            local methods, mi = { "\x53\x74\x61\x6e\x64\x61\x72\x64", "\x4c\x61\x79" }, (fopt.method == "\x4c\x61\x79" and 2 or 1)
+            methodBtn.MouseButton1Click:Connect(function()
+                mi = mi % #methods + 1
+                fopt.method = methods[mi]
+                methodBtn.Text = "\x4d\x65\x74\x68\x6f\x64\x3a\x20" .. fopt.method
+                farmWrite("\x64\x72\x6f\x70\x64\x6f\x77\x6e\x73", "\x4d\x65\x74\x68\x6f\x64", fopt.method)
+                notify("\x46\x61\x72\x6d\x20\x6d\x65\x74\x68\x6f\x64\x3a\x20" .. fopt.method, 2)
             end)
-            notify("\x43\x6f\x69\x6e\x20\x41\x75\x72\x61\x20\x4f\x4e", 2)
-        end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x43\x6f\x69\x6e\x20\x41\x75\x72\x61", false) == true)
-        local radBtn = farmBtn(holder, "\x41\x75\x72\x61\x20\x72\x61\x64\x69\x75\x73\x3a\x20" .. tostring(auraRadius), function() end)
-        local rads, ri = { 4, 8, 16, 32, 64 }, 2
-        for i = 1, #rads do if rads[i] == auraRadius then ri = i end end
-        radBtn.MouseButton1Click:Connect(function()
-            ri = ri % #rads + 1
-            auraRadius = rads[ri]
-            radBtn.Text = "\x41\x75\x72\x61\x20\x72\x61\x64\x69\x75\x73\x3a\x20" .. tostring(auraRadius)
-            farmWrite("\x73\x6c\x69\x64\x65\x72\x73", "\x41\x75\x72\x61\x20\x72\x61\x64\x69\x75\x73", auraRadius)
-        end)
-        makeToggle(holder, "\x46\x61\x72\x6d\x20\x41\x76\x6f\x69\x64\x20\x4d\x75\x72\x64\x65\x72\x65\x72", function(on)
-            fopt.avoid = on
-            farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x46\x61\x72\x6d\x20\x41\x76\x6f\x69\x64\x20\x4d\x75\x72\x64\x65\x72\x65\x72", on)
-        end, fopt.avoid)
-        makeToggle(holder, "\x41\x75\x74\x6f\x20\x47\x72\x61\x62\x20\x47\x75\x6e", function(on)
-            gunFarm = on
-            farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x47\x72\x61\x62\x20\x47\x75\x6e", on)
-            if not on then return end
-            task.spawn(function()
-                while gunFarm do
-                    local drop = workspace:FindFirstChild("\x47\x75\x6e\x44\x72\x6f\x70")
-                    local root = localRoot()
-                    if drop and root and not hasTool("\x47\x75\x6e") then
-                        local part = drop:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") and drop or drop:FindFirstChildWhichIsA("\x42\x61\x73\x65\x50\x61\x72\x74", true)
-                        if part then touch(root, part) end
+            local retBtn = farmBtn(holder, "\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x3a\x20" .. fopt.ret, function() end)
+            local rets = { "\x4d\x61\x70", "\x41\x62\x6f\x76\x65\x20\x4d\x61\x70", "\x4c\x6f\x62\x62\x79" }
+            local reti = 1
+            for i = 1, #rets do if rets[i] == fopt.ret then reti = i end end
+            retBtn.MouseButton1Click:Connect(function()
+                reti = reti % #rets + 1
+                fopt.ret = rets[reti]
+                retBtn.Text = "\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x3a\x20" .. fopt.ret
+                farmWrite("\x64\x72\x6f\x70\x64\x6f\x77\x6e\x73", "\x52\x65\x74\x75\x72\x6e\x20\x54\x6f", fopt.ret)
+                notify("\x52\x65\x74\x75\x72\x6e\x20\x54\x6f\x3a\x20" .. fopt.ret, 2)
+            end)
+            makeToggle(holder, "\x43\x6f\x69\x6e\x20\x41\x75\x72\x61", function(on)
+                auraOn = on
+                farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x43\x6f\x69\x6e\x20\x41\x75\x72\x61", on)
+                if auraConn then auraConn:Disconnect(); auraConn = nil end
+                if not on then return end
+                auraConn = RunService.Heartbeat:Connect(function()
+                    if auraOn then collectAura() end
+                end)
+                notify("\x43\x6f\x69\x6e\x20\x41\x75\x72\x61\x20\x4f\x4e", 2)
+            end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x43\x6f\x69\x6e\x20\x41\x75\x72\x61", false) == true)
+            local radBtn = farmBtn(holder, "\x41\x75\x72\x61\x20\x72\x61\x64\x69\x75\x73\x3a\x20" .. tostring(auraRadius), function() end)
+            local rads, ri = { 4, 8, 16, 32, 64 }, 2
+            for i = 1, #rads do if rads[i] == auraRadius then ri = i end end
+            radBtn.MouseButton1Click:Connect(function()
+                ri = ri % #rads + 1
+                auraRadius = rads[ri]
+                radBtn.Text = "\x41\x75\x72\x61\x20\x72\x61\x64\x69\x75\x73\x3a\x20" .. tostring(auraRadius)
+                farmWrite("\x73\x6c\x69\x64\x65\x72\x73", "\x41\x75\x72\x61\x20\x72\x61\x64\x69\x75\x73", auraRadius)
+            end)
+            makeToggle(holder, "\x46\x61\x72\x6d\x20\x41\x76\x6f\x69\x64\x20\x4d\x75\x72\x64\x65\x72\x65\x72", function(on)
+                fopt.avoid = on
+                farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x46\x61\x72\x6d\x20\x41\x76\x6f\x69\x64\x20\x4d\x75\x72\x64\x65\x72\x65\x72", on)
+            end, fopt.avoid)
+            makeToggle(holder, "\x41\x75\x74\x6f\x20\x47\x72\x61\x62\x20\x47\x75\x6e", function(on)
+                gunFarm = on
+                farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x47\x72\x61\x62\x20\x47\x75\x6e", on)
+                if not on then return end
+                task.spawn(function()
+                    while gunFarm do
+                        local drop = workspace:FindFirstChild("\x47\x75\x6e\x44\x72\x6f\x70")
+                        local root = localRoot()
+                        if drop and root and not hasTool("\x47\x75\x6e") then
+                            local part = drop:IsA("\x42\x61\x73\x65\x50\x61\x72\x74") and drop or drop:FindFirstChildWhichIsA("\x42\x61\x73\x65\x50\x61\x72\x74", true)
+                            if part then touch(root, part) end
+                        end
+                        task.wait(0.45)
                     end
-                    task.wait(0.45)
-                end
-            end)
-        end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x47\x72\x61\x62\x20\x47\x75\x6e", false) == true)
-        makeToggle(holder, "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x4d\x75\x72\x64\x65\x72\x65\x72", function(on)
-            fopt.rstM = on
-            farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x4d\x75\x72\x64\x65\x72\x65\x72", on)
-        end, fopt.rstM)
-        makeToggle(holder, "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x53\x68\x65\x72\x69\x66\x66", function(on)
-            fopt.rstS = on
-            farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x53\x68\x65\x72\x69\x66\x66", on)
-        end, fopt.rstS)
-        makeToggle(holder, "\x52\x65\x73\x65\x74\x20\x77\x68\x65\x6e\x20\x62\x61\x67\x20\x66\x75\x6c\x6c", function(on)
-            resetFull = on
-            farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x52\x65\x73\x65\x74\x20\x77\x68\x65\x6e\x20\x62\x61\x67\x20\x66\x75\x6c\x6c", on)
-        end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x52\x65\x73\x65\x74\x20\x77\x68\x65\x6e\x20\x62\x61\x67\x20\x66\x75\x6c\x6c", false) == true)
-        makeToggle(holder, "\x44\x69\x73\x61\x62\x6c\x65\x20\x33\x44\x20\x52\x65\x6e\x64\x65\x72\x69\x6e\x67", function(on)
-            noRenderOn = on
-            farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x44\x69\x73\x61\x62\x6c\x65\x20\x33\x44\x20\x52\x65\x6e\x64\x65\x72\x69\x6e\x67", on)
-            pcall(function() RunService:Set3dRenderingEnabled(not on) end)
-        end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x44\x69\x73\x61\x62\x6c\x65\x20\x33\x44\x20\x52\x65\x6e\x64\x65\x72\x69\x6e\x67", false) == true)
-        makeToggle(holder, "\x41\x75\x74\x6f\x2d\x4b\x69\x6c\x6c\x20\x41\x6c\x6c", function(on)
-            killAllOn = on
-            farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x2d\x4b\x69\x6c\x6c\x20\x41\x6c\x6c", on)
-            if on then notify("\x4b\x69\x6c\x6c\x20\x41\x6c\x6c\x20\xe2\x80\x94\x20\xd0\xbf\xd0\xbe\xd1\x81\xd0\xbb\xd0\xb5\x20\x34\x30\x20\xd0\xbc\xd0\xbe\xd0\xbd\xd0\xb5\xd1\x82", 2) end
-        end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x2d\x4b\x69\x6c\x6c\x20\x41\x6c\x6c", false) == true)
-        makeToggle(holder, "\x41\x75\x74\x6f\x2d\x53\x68\x6f\x6f\x74\x20\x4d\x75\x72\x64", function(on)
-            shootMurdOn = on
-            farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x2d\x53\x68\x6f\x6f\x74\x20\x4d\x75\x72\x64", on)
-            if on then notify("\x53\x68\x6f\x6f\x74\x20\x4d\x75\x72\x64\x20\xe2\x80\x94\x20\xd0\xbf\xd0\xbe\xd1\x81\xd0\xbb\xd0\xb5\x20\x34\x30\x20\xd0\xbc\xd0\xbe\xd0\xbd\xd0\xb5\xd1\x82", 2) end
-        end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x2d\x53\x68\x6f\x6f\x74\x20\x4d\x75\x72\x64", false) == true)
+                end)
+            end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x47\x72\x61\x62\x20\x47\x75\x6e", false) == true)
+            makeToggle(holder, "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x4d\x75\x72\x64\x65\x72\x65\x72", function(on)
+                fopt.rstM = on
+                farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x4d\x75\x72\x64\x65\x72\x65\x72", on)
+            end, fopt.rstM)
+            makeToggle(holder, "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x53\x68\x65\x72\x69\x66\x66", function(on)
+                fopt.rstS = on
+                farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x20\x52\x65\x73\x65\x74\x20\x41\x73\x20\x53\x68\x65\x72\x69\x66\x66", on)
+            end, fopt.rstS)
+            makeToggle(holder, "\x52\x65\x73\x65\x74\x20\x77\x68\x65\x6e\x20\x62\x61\x67\x20\x66\x75\x6c\x6c", function(on)
+                resetFull = on
+                farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x52\x65\x73\x65\x74\x20\x77\x68\x65\x6e\x20\x62\x61\x67\x20\x66\x75\x6c\x6c", on)
+            end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x52\x65\x73\x65\x74\x20\x77\x68\x65\x6e\x20\x62\x61\x67\x20\x66\x75\x6c\x6c", false) == true)
+            makeToggle(holder, "\x44\x69\x73\x61\x62\x6c\x65\x20\x33\x44\x20\x52\x65\x6e\x64\x65\x72\x69\x6e\x67", function(on)
+                noRenderOn = on
+                farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x44\x69\x73\x61\x62\x6c\x65\x20\x33\x44\x20\x52\x65\x6e\x64\x65\x72\x69\x6e\x67", on)
+                pcall(function() RunService:Set3dRenderingEnabled(not on) end)
+            end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x44\x69\x73\x61\x62\x6c\x65\x20\x33\x44\x20\x52\x65\x6e\x64\x65\x72\x69\x6e\x67", false) == true)
+            makeToggle(holder, "\x41\x75\x74\x6f\x2d\x4b\x69\x6c\x6c\x20\x41\x6c\x6c", function(on)
+                killAllOn = on
+                farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x2d\x4b\x69\x6c\x6c\x20\x41\x6c\x6c", on)
+                if on then notify("\x4b\x69\x6c\x6c\x20\x41\x6c\x6c\x20\xe2\x80\x94\x20\xd0\xbf\xd0\xbe\xd1\x81\xd0\xbb\xd0\xb5\x20\x34\x30\x20\xd0\xbc\xd0\xbe\xd0\xbd\xd0\xb5\xd1\x82", 2) end
+            end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x2d\x4b\x69\x6c\x6c\x20\x41\x6c\x6c", false) == true)
+            makeToggle(holder, "\x41\x75\x74\x6f\x2d\x53\x68\x6f\x6f\x74\x20\x4d\x75\x72\x64", function(on)
+                shootMurdOn = on
+                farmWrite("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x2d\x53\x68\x6f\x6f\x74\x20\x4d\x75\x72\x64", on)
+                if on then notify("\x53\x68\x6f\x6f\x74\x20\x4d\x75\x72\x64\x20\xe2\x80\x94\x20\xd0\xbf\xd0\xbe\xd1\x81\xd0\xbb\xd0\xb5\x20\x34\x30\x20\xd0\xbc\xd0\xbe\xd0\xbd\xd0\xb5\xd1\x82", 2) end
+            end, farmRead("\x74\x6f\x67\x67\x6c\x65\x73", "\x41\x75\x74\x6f\x2d\x53\x68\x6f\x6f\x74\x20\x4d\x75\x72\x64", false) == true)
+        end
     end
+    buildAutofarmUI()
 end
 
 function consumeData(data, fullSnapshot)
