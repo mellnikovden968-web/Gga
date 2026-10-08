@@ -1745,7 +1745,7 @@ do
         local farming, gunFarm, auraOn, resetFull, killAllOn, shootMurdOn, noRenderOn = false, false, false, false, false, false, false
         local bagIsFull, auraRadius = false, 8
         local noclipConn, auraConn, statusLbl
-        local fopt = { method = "Lay", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false }
+        local fopt = { method = "Standard", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false }
         local origDestroyH = workspace.FallenPartsDestroyHeight
         local function setStatus(msg)
             if statusLbl then statusLbl.Text = msg end
@@ -1795,35 +1795,48 @@ do
         end
         local function poseAt(part)
             local pos = part.Position
-            local m = fopt.method
-            if m == "Lay" then
+            -- Standard: лицом в пол (не на спине). Lay: 5 стадов под монетой, лицом к карте.
+            if fopt.method == "Lay" then
                 return CFrame.new(pos.X, pos.Y - 5, pos.Z) * CFrame.Angles(-math.pi / 2, 0, 0)
-            elseif m == "Safe" then
-                return CFrame.new(pos + Vector3.new(0, 7, 0))
             end
-            return CFrame.new(pos + Vector3.new(0, 2.4, 0))
+            return CFrame.new(pos.X, pos.Y + 1.2, pos.Z) * CFrame.Angles(math.pi / 2, 0, 0)
+        end
+        local function freezeRoot(r, on)
+            if not r then return end
+            pcall(function()
+                r.Anchored = on
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.AssemblyAngularVelocity = Vector3.zero
+            end)
         end
         local function tweenTo(cf)
             local r = localRoot()
             if not r then return end
+            freezeRoot(r, true)
             local dist = (r.Position - cf.Position).Magnitude
-            local spd = 8 + fopt.spd * 1.15
-            if fopt.method == "Safe" then spd = spd * 0.5 end
-            local dur = math.clamp(dist / math.max(spd, 6), 0.05, 2.8)
+            if dist <= 3.5 then
+                r.CFrame = cf
+                local waitD = fopt.dly * 0.004
+                if waitD > 0 then task.wait(waitD) end
+                return
+            end
+            local spd = 28 + fopt.spd * 2.4
+            local dur = math.clamp(dist / math.max(spd, 20), 0.02, 0.55)
             local tw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
             tw:Play()
             local t0 = os.clock()
-            while farming and os.clock() - t0 < dur + 0.12 do
+            while farming and os.clock() - t0 < dur + 0.05 do
                 if tw.PlaybackState ~= Enum.PlaybackState.Playing then break end
+                pcall(function()
+                    r.AssemblyLinearVelocity = Vector3.zero
+                    r.AssemblyAngularVelocity = Vector3.zero
+                end)
                 task.wait()
             end
             pcall(function() tw:Cancel() end)
             r.CFrame = cf
-            pcall(function()
-                r.AssemblyLinearVelocity = Vector3.zero
-                r.AssemblyAngularVelocity = Vector3.zero
-            end)
-            local waitD = fopt.dly * 0.008
+            freezeRoot(r, true)
+            local waitD = fopt.dly * 0.004
             if waitD > 0 then task.wait(waitD) end
         end
         local function setNoclip(on)
@@ -2011,6 +2024,7 @@ do
         local function stopFarmHold()
             local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
             if hum then hum.PlatformStand = false; hum.AutoRotate = true end
+            freezeRoot(localRoot(), false)
             pcall(function() workspace.FallenPartsDestroyHeight = origDestroyH end)
         end
 
@@ -2051,9 +2065,16 @@ do
                     end
                     local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                     if hum then
-                        hum.PlatformStand = (fopt.method == "Lay")
+                        hum.PlatformStand = true
                         hum.AutoRotate = false
+                        pcall(function()
+                            hum:ChangeState(Enum.HumanoidStateType.Physics)
+                            hum.WalkSpeed = 0
+                            hum.JumpPower = 0
+                            hum.JumpHeight = 0
+                        end)
                     end
+                    freezeRoot(localRoot(), true)
                     local part = parts[1]
                     local best, bestD = nil, 1e9
                     local r = localRoot()
@@ -2082,8 +2103,8 @@ do
         end)
         makeFarmSlider(holder, "Tween Speed (%)", 1, 100, 30, function(v) fopt.spd = v end)
         makeFarmSlider(holder, "Tween Delay (%)", 0, 100, 10, function(v) fopt.dly = v end)
-        local methodBtn = farmBtn(holder, "Method: Lay", function() end)
-        local methods, mi = { "Lay", "Standard", "Safe" }, 1
+        local methodBtn = farmBtn(holder, "Method: Standard", function() end)
+        local methods, mi = { "Standard", "Lay" }, 1
         methodBtn.MouseButton1Click:Connect(function()
             mi = mi % #methods + 1
             fopt.method = methods[mi]
