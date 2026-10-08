@@ -1812,7 +1812,7 @@ do
         end
         local function returnCFrame()
             local map = findMapModel and findMapModel()
-            if fopt.ret == "Voting Map" then
+            if fopt.ret == "Lobby" then
                 return lobbyCFrame and lobbyCFrame()
             end
             local cf = mapCFrame and mapCFrame(map)
@@ -2038,12 +2038,44 @@ do
                 if isPrimaryPress(i) then drag = false end
             end)
         end
+        local function goHome()
+            local r = localRoot()
+            local cf = returnCFrame()
+            if not r or not cf then return false end
+            freezeRoot(r, false)
+            r.CFrame = cf
+            pcall(function()
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.AssemblyAngularVelocity = Vector3.zero
+            end)
+            return true
+        end
         local function stopFarmHold()
             local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then hum.PlatformStand = false; hum.AutoRotate = true end
+            if hum then
+                hum.PlatformStand = false
+                hum.AutoRotate = true
+                pcall(function()
+                    hum.WalkSpeed = 16
+                    hum.JumpPower = 50
+                    hum.JumpHeight = 7.2
+                end)
+            end
             freezeRoot(localRoot(), false)
             pcall(function() workspace.FallenPartsDestroyHeight = origDestroyH end)
         end
+        pcall(function()
+            LocalPlayer.CharacterAdded:Connect(function(char)
+                task.wait(0.55)
+                freezeRoot(char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"), false)
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then hum.PlatformStand = false; hum.AutoRotate = true end
+                if farming then
+                    goHome()
+                    setStatus("Return To " .. fopt.ret)
+                end
+            end)
+        end)
 
         local holder = panel("Autofarm", "Tween Speed / Delay как Overdrive", "farm", farmCol or col)
         statusLbl = New("TextLabel", { Parent = holder, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
@@ -2053,7 +2085,10 @@ do
             if not on then
                 setNoclip(false)
                 stopFarmHold()
-                setStatus("Idle")
+                task.delay(0.12, function()
+                    goHome()
+                    setStatus("Return To " .. fopt.ret)
+                end)
                 notify("Autofarm OFF", 2)
                 return
             end
@@ -2062,6 +2097,15 @@ do
             setNoclip(true)
             task.spawn(function()
                 while farming do
+                    local char = LocalPlayer.Character
+                    local r = localRoot()
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    if not r or not hum or hum.Health <= 0 then
+                        freezeRoot(r, false)
+                        setStatus("Wait respawn...")
+                        task.wait(0.4)
+                        continue
+                    end
                     if bagIsFull then
                         setStatus("Bag full (40)")
                         maybeRoleReset()
@@ -2072,13 +2116,11 @@ do
                     local parts = getCoinParts()
                     if #parts == 0 then
                         local home = returnCFrame()
-                        local r = localRoot()
-                        if home and r then
-                            freezeRoot(r, false)
-                            r.CFrame = home
+                        if home and (r.Position - home.Position).Magnitude > 14 then
+                            goHome()
                             setStatus("Return To " .. fopt.ret)
                         else
-                            setStatus("Ждём раунд / монеты...")
+                            setStatus("Wait round / coins...")
                         end
                         task.wait(0.5)
                         continue
@@ -2088,39 +2130,38 @@ do
                         task.wait(0.4)
                         continue
                     end
-                    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum.PlatformStand = (fopt.method == "Lay")
+                    if fopt.method == "Lay" then
+                        hum.PlatformStand = true
                         hum.AutoRotate = false
-                        pcall(function()
-                            hum.WalkSpeed = 0
-                            hum.JumpPower = 0
-                            hum.JumpHeight = 0
-                        end)
+                    else
+                        hum.PlatformStand = false
+                        hum.AutoRotate = true
                     end
-                    local part = parts[1]
-                    local best, bestD = nil, 1e9
-                    local r = localRoot()
-                    if r then
-                        for n = 1, #parts do
-                            local p = parts[n]
-                            if p and p.Parent then
-                                local d = (r.Position - p.Position).Magnitude
-                                if d < bestD then bestD, best = d, p end
-                            end
+                    local part, bestD = parts[1], 1e9
+                    for n = 1, #parts do
+                        local p = parts[n]
+                        if p and p.Parent then
+                            local d = (r.Position - p.Position).Magnitude
+                            if d < bestD then bestD, part = d, p end
                         end
-                        part = best or part
                     end
-                    setStatus(fopt.method .. " · spd " .. tostring(fopt.spd) .. "% · монет " .. tostring(#parts))
+                    if not part then
+                        task.wait(0.2)
+                        continue
+                    end
+                    setStatus(fopt.method .. " · spd " .. tostring(fopt.spd) .. "% · coins " .. tostring(#parts))
                     tweenTo(poseAt(part))
                     local root = localRoot()
                     if root and part and part.Parent then
+                        freezeRoot(root, false)
                         touch(root, part)
                         magnetCoins()
                     end
+                    task.wait(0.05)
                 end
                 setNoclip(false)
                 stopFarmHold()
+                goHome()
                 setStatus("Idle")
             end)
         end)
@@ -2135,7 +2176,7 @@ do
             notify("Farm method: " .. fopt.method, 2)
         end)
         local retBtn = farmBtn(holder, "Return To: Map", function() end)
-        local rets, reti = { "Map", "Above Map", "Voting Map" }, 1
+        local rets, reti = { "Map", "Above Map", "Lobby" }, 1
         retBtn.MouseButton1Click:Connect(function()
             reti = reti % #rets + 1
             fopt.ret = rets[reti]
@@ -14368,6 +14409,7 @@ local MESH_DB = {
     ["SnowstormChroma"] = { mesh = "rbxassetid://86944837615327", tex = "rbxassetid://86253759560362", sx = 0.0770485, sy = 0.0770485, sz = 0.0770485, kind = "Knife", name = "Snowstorm", rarity = "Godly", itemid = 70973050894155, mk = "SpecialMesh", grip = {0,-1.247,-0.209,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Sorry"] = { mesh = "rbxassetid://121944778", tex = "rbxassetid://162016526", sx = 1, sy = 1, sz = 1, kind = "Knife", name = "Corrupt", rarity = "Unique", itemid = 197879343, mk = "SpecialMesh", grip = {0,-1,-0.1,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Spectre2022"] = { mesh = "rbxassetid://11165536294", tex = "rbxassetid://11165715120", sx = 0.0519647, sy = 0.0519647, sz = 0.0519647, kind = "Gun", name = "Spectre", rarity = "Godly", itemid = 11229779932, mk = "MeshPart", grip = {-9.53674e-07,-0.400002,0.85001,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["Spider"] = { mesh = "rbxassetid://302165984", tex = "rbxassetid://315122091", sx = 0.55, sy = 0.57, sz = 0.52, kind = "Knife", name = "Spider", rarity = "Godly", itemid = 473571549, mk = "SpecialMesh"0519647, kind = "Gun", name = "Spectre", rarity = "Godly", itemid = 11229779932, mk = "MeshPart", grip = {-9.53674e-07,-0.400002,0.85001,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["Spider"] = { mesh = "rbxassetid://302165984", tex = "rbxassetid://315122091", sx = 0.55, sy = 0.57, sz = 0.52, kind = "Knife", name = "Spider", rarity = "Godly", itemid = 473571549, mk = "SpecialMesh", grip = {0.025,0,1.23,1,0,0,0,0,1,0,-1,0}, att = "CustomAttachment", acf = {-0.00147438,0.0873165,-0.121957,0.998168,-0.0604927,-0.000748175,0.0060784,0.0879775,0.996104,-0.0601912,-0.994284,0.0881841} },
     ["Sugar"] = { mesh = "rbxassetid://101086719", tex = "rbxassetid://101086650", sx = 0.5, sy = 0.5, sz = 0.5, kind = "Gun", name = "Sugar", rarity = "Godly", itemid = 332848695, mk = "SpecialMesh", grip = {-0.1,0.537018,0.851522,-1,0,0,0,-1,0,0,0,1}, att = "CustomAttachment", acf = {-0.0999983,0.282317,0.307193,-1,0,0,0,-0.0871315,-0.996197,0,-0.996197,0.0871315} },
     ["SunsetGun"] = { mesh = "rbxassetid://109742397574153", tex = "rbxassetid://71731808219690", sx = 0.045846, sy = 0.045846, sz = 0.045846, kind = "Gun", name = "Sunrise", rarity = "Godly", itemid = 129480661108374, mk = "SpecialMesh", grip = {0,-0.312398,0.598953,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -14413,8 +14455,7 @@ local MESH_DB = {
     ["Turkey2023"] = { mesh = "rbxassetid://15320557481", tex = "rbxassetid://15320558272", sx = 0.056, sy = 0.056, sz = 0.056, kind = "Knife", name = "Turkey", rarity = "Godly", itemid = 15413149176, mk = "SpecialMesh", grip = {0,-0.869298,-0.00832939,0.29273,0,-0.956195,0,1,0,0.956195,0,0.29273}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1}, snd = "rbxassetid://22593942", spd = 2 },
     ["UFOKnife"] = { mesh = "rbxassetid://86649405964534", tex = "rbxassetid://94763497877100", sx = 0.0758249, sy = 0.0758249, sz = 0.0758249, kind = "Knife", name = "Alienbeam", rarity = "Godly", itemid = 77607127867154, mk = "MeshPart", grip = {0,-1.33999,-0.0485134,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["UFOKnifeChroma"] = { mesh = "rbxassetid://86649405964534", tex = "rbxassetid://94763497877100", sx = 0.0769716, sy = 0.0769716, sz = 0.0769716, kind = "Knife", name = "Alienbeam", rarity = "Godly", itemid = 77607127867154, mk = "SpecialMesh", grip = {0,-1.33999,-0.0485134,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["VampireAxe"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://73008954478338", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Vampire's Axe", rarity = "Ancient", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
-    ["VampireAxe_Bronze"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://111596346843508", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Bronze Vampire's Axe", rarity = "Unique", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
+    ["VampireAxe"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://73008954478338", sx = 0.0725499, sy = 0.0725499s Axe", rarity = "Unique", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["VampireAxe_Gold"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://74854973007045", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Gold Vampire's Axe", rarity = "Unique", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["VampireAxe_Purple"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://105697888796687", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Purple Vampire's Axe", rarity = "Unique", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
     ["VampireAxe_Silver"] = { mesh = "rbxassetid://92263601594064", tex = "rbxassetid://134673784441932", sx = 0.0725499, sy = 0.0725499, sz = 0.0725499, kind = "Knife", name = "Silver Vampire's Axe", rarity = "Unique", itemid = 130837676383567, mk = "MeshPart", grip = {0,-0.662537,0.230433,1,0,0,0,1,0,0,0,1}, att = "Attachment", acf = {0,0,0,1,0,0,0,1,0,0,0,1} },
@@ -14494,6 +14535,8 @@ local CATALOG_DB = {
     ["Darkbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=4751387674", ItemID = 4749071819, ItemName = "Darkbringer", ItemType = "Gun", Rarity = "Godly" },
     ["Darkshot"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15080280688", ItemID = 15080280688, ItemName = "Darkshot", ItemType = "Gun", Rarity = "Godly" },
     ["Darksword"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=15080267070", ItemID = 15080267070, ItemName = "Darksword", ItemType = "Knife", Rarity = "Godly" },
+    ["Dartbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8626617523", ItemID = 8626617523, ItemName = "Dartbringer", ItemType = "Gun", Rarity = "Unique" },
+    ["Deathshard"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3175017717", ItemID = 196750305, ItemName = "Deathshard", ItemType = "Knife"&id=15080267070", ItemID = 15080267070, ItemName = "Darksword", ItemType = "Knife", Rarity = "Godly" },
     ["Dartbringer"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=8626617523", ItemID = 8626617523, ItemName = "Dartbringer", ItemType = "Gun", Rarity = "Unique" },
     ["Deathshard"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3175017717", ItemID = 196750305, ItemName = "Deathshard", ItemType = "Knife", Rarity = "Godly" },
     ["DeathshardChroma"] = { Image = "rbxthumb://type=Asset&w=150&h=150&id=3187397317", ItemID = 3187390667, ItemName = "Deathshard", ItemType = "Knife", Rarity = "Godly" },
