@@ -1746,6 +1746,7 @@ do
         local bagIsFull, auraRadius = false, 8
         local noclipConn, auraConn, statusLbl
         local fopt = { method = "Standard", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false, ret = "Map" }
+        local lastMapCF, lastCoin, holdReturnUntil, farmTw = nil, nil, 0, nil
         local origDestroyH = workspace.FallenPartsDestroyHeight
         local function setStatus(msg)
             if statusLbl then statusLbl.Text = msg end
@@ -1811,11 +1812,18 @@ do
             end)
         end
         local function returnCFrame()
-            local map = findMapModel and findMapModel()
             if fopt.ret == "Lobby" then
-                return lobbyCFrame and lobbyCFrame()
+                local cf = lobbyCFrame and lobbyCFrame()
+                if cf then return cf end
+                for _, name in ipairs({ "Lobby", "LobbyMap", "Voting", "Waiting" }) do
+                    local inst = workspace:FindFirstChild(name)
+                    local p = inst and inst:FindFirstChildWhichIsA("BasePart", true)
+                    if p then return p.CFrame + Vector3.new(0, 4, 0) end
+                end
+                return lastMapCF
             end
-            local cf = mapCFrame and mapCFrame(map)
+            local map = findMapModel and findMapModel()
+            local cf = (mapCFrame and mapCFrame(map)) or lastMapCF
             if not cf then return nil end
             if fopt.ret == "Above Map" then
                 return cf + Vector3.new(0, 40, 0)
@@ -1824,30 +1832,28 @@ do
         end
         local function tweenTo(cf)
             local r = localRoot()
-            if not r then return end
+            if not r or not cf then return end
+            if farmTw then pcall(function() farmTw:Cancel() end); farmTw = nil end
             local dist = (r.Position - cf.Position).Magnitude
-            if dist <= 4 then
-                freezeRoot(r, false)
+            if dist <= 2.5 then
+                freezeRoot(r, true)
                 r.CFrame = cf
-                local waitD = fopt.dly * 0.004
-                if waitD > 0 then task.wait(waitD) end
+                freezeRoot(r, false)
                 return
             end
             freezeRoot(r, true)
-            local spd = 28 + fopt.spd * 2.4
-            local dur = math.clamp(dist / math.max(spd, 20), 0.02, 0.55)
-            local tw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
-            tw:Play()
+            local spd = 40 + fopt.spd * 3.2
+            local dur = math.clamp(dist / math.max(spd, 30), 0.015, 0.22)
+            farmTw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
+            farmTw:Play()
             local t0 = os.clock()
-            while farming and os.clock() - t0 < dur + 0.05 do
-                if tw.PlaybackState ~= Enum.PlaybackState.Playing then break end
+            while farming and os.clock() - t0 < dur + 0.02 do
+                if not farmTw or farmTw.PlaybackState ~= Enum.PlaybackState.Playing then break end
                 task.wait()
             end
-            pcall(function() tw:Cancel() end)
-            r.CFrame = cf
+            if farmTw then pcall(function() farmTw:Cancel() end); farmTw = nil end
+            if r.Parent then r.CFrame = cf end
             freezeRoot(r, false)
-            local waitD = fopt.dly * 0.004
-            if waitD > 0 then task.wait(waitD) end
         end
         local function setNoclip(on)
             if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
@@ -2066,11 +2072,13 @@ do
         end
         pcall(function()
             LocalPlayer.CharacterAdded:Connect(function(char)
-                task.wait(0.55)
-                freezeRoot(char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"), false)
+                local hrp = char:WaitForChild("HumanoidRootPart", 5)
+                task.wait(0.25)
+                freezeRoot(hrp, false)
                 local hum = char:FindFirstChildOfClass("Humanoid")
                 if hum then hum.PlatformStand = false; hum.AutoRotate = true end
                 if farming then
+                    holdReturnUntil = os.clock() + 0.9
                     goHome()
                     setStatus("Return To " .. fopt.ret)
                 end
@@ -2083,13 +2091,12 @@ do
         makeToggle(holder, "Auto Farm", function(on)
             farming = on
             if not on then
+                if farmTw then pcall(function() farmTw:Cancel() end); farmTw = nil end
                 setNoclip(false)
                 stopFarmHold()
-                task.delay(0.12, function()
-                    goHome()
-                    setStatus("Return To " .. fopt.ret)
-                end)
-                notify("Autofarm OFF", 2)
+                goHome()
+                setStatus("Return To " .. fopt.ret)
+                notify("Autofarm OFF → " .. fopt.ret, 2)
                 return
             end
             notify("Autofarm ON · " .. fopt.method, 2)
@@ -2106,6 +2113,10 @@ do
                         task.wait(0.4)
                         continue
                     end
+                    if os.clock() < holdReturnUntil then
+                        task.wait(0.08)
+                        continue
+                    end
                     if bagIsFull then
                         setStatus("Bag full (40)")
                         maybeRoleReset()
@@ -2114,15 +2125,14 @@ do
                     end
                     maybeRoleReset()
                     local parts = getCoinParts()
+                    if #parts > 0 then
+                        lastMapCF = CFrame.new(parts[1].Position + Vector3.new(0, 5, 0))
+                    end
                     if #parts == 0 then
-                        local home = returnCFrame()
-                        if home and (r.Position - home.Position).Magnitude > 14 then
-                            goHome()
-                            setStatus("Return To " .. fopt.ret)
-                        else
-                            setStatus("Wait round / coins...")
-                        end
-                        task.wait(0.5)
+                        lastCoin = nil
+                        goHome()
+                        setStatus("Return To " .. fopt.ret)
+                        task.wait(0.45)
                         continue
                     end
                     if murdTooClose() then
@@ -2137,16 +2147,19 @@ do
                         hum.PlatformStand = false
                         hum.AutoRotate = true
                     end
-                    local part, bestD = parts[1], 1e9
+                    local part, bestD = nil, 1e9
+                    local fallback, fallD = nil, 1e9
                     for n = 1, #parts do
                         local p = parts[n]
                         if p and p.Parent then
                             local d = (r.Position - p.Position).Magnitude
-                            if d < bestD then bestD, part = d, p end
+                            if d < fallD then fallD, fallback = d, p end
+                            if p ~= lastCoin and d < bestD then bestD, part = d, p end
                         end
                     end
+                    part = part or fallback
                     if not part then
-                        task.wait(0.2)
+                        task.wait(0.15)
                         continue
                     end
                     setStatus(fopt.method .. " · spd " .. tostring(fopt.spd) .. "% · coins " .. tostring(#parts))
@@ -2157,7 +2170,10 @@ do
                         touch(root, part)
                         magnetCoins()
                     end
-                    task.wait(0.05)
+                    lastCoin = part
+                    local waitD = fopt.dly * 0.01
+                    if waitD < 0.01 then waitD = 0.01 end
+                    task.wait(waitD)
                 end
                 setNoclip(false)
                 stopFarmHold()
