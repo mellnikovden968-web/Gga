@@ -657,7 +657,11 @@ startLoading = function()
         end
 
         local source = table.concat(chunks, "\n")
+        -- Drop the three fetched buffers before compilation; loadstring only needs the joined chunk.
+        for i = 1, #RAW do chunks[i] = nil end
+        chunks = nil
         local compileOk, runChunk, compileError = pcall(loadFn, source)
+        source = nil
         if not compileOk or type(runChunk) ~= "function" then
             local detail = compileError or runChunk or "compiler returned no function or error"
             fail("Compile failed", shorten(detail, 112), "compile failed: " .. tostring(detail))
@@ -670,6 +674,7 @@ startLoading = function()
         setStatus("Launching Noir", "Starting the hub in the current session…", "loading")
         setProgress(0.94)
         local runOk, runError = pcall(runChunk)
+        runChunk = nil
         if not runOk then
             clearStartingHubGuard()
             fail("Startup failed", shorten(runError, 112), "runtime failed: " .. tostring(runError))
