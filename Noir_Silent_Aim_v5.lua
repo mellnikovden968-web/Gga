@@ -1865,8 +1865,8 @@ do
                 return
             end
             freezeRoot(r, true)
-            local spd = 8 + fopt.spd * 0.55
-            local dur = math.clamp(dist / math.max(spd, 10), 0.08, 1.35)
+            local spd = 4 + fopt.spd * 0.16
+            local dur = math.clamp(dist / math.max(spd, 5), 0.18, 3.2)
             farmTw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
             farmTw:Play()
             local t0 = os.clock()
