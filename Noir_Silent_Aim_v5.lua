@@ -1,248 +1,14 @@
---[[ Noir Hub · Xeno/Solara/Madium/Real/SirHurt/Potassium/Volt/Delta/Codex/Arceus X/Opiumware/Macsploit ]]
-do
-    local function pick(...)
-        for i = 1, select("#", ...) do
-            local v = select(i, ...)
-            if type(v) == "function" then return v end
-        end
-    end
-    local env
-    local okEnv, got = pcall(function()
-        return getgenv()
-    end)
-    if okEnv and type(got) == "table" then
-        env = got
-    else
-        env = (type(_G) == "table" and _G) or {}
-    end
-    if type(env.getgenv) ~= "function" then
-        env.getgenv = function()
-            return env
-        end
-    end
-    if type(getgenv) ~= "function" then
-        getgenv = env.getgenv
-    end
-    local function adopt(name, value)
-        if value == nil then return end
-        if env[name] == nil then env[name] = value end
-        pcall(function()
-            if _G[name] == nil then _G[name] = value end
-        end)
-    end
-    adopt("cloneref", pick(cloneref, env.cloneref) or function(x) return x end)
-    adopt("newcclosure", pick(newcclosure, env.newcclosure) or function(f) return f end)
-    adopt("checkcaller", pick(checkcaller, env.checkcaller) or function() return false end)
-    adopt("iscclosure", pick(iscclosure, env.iscclosure) or function() return false end)
-    adopt("islclosure", pick(islclosure, env.islclosure) or function() return true end)
-    local compile = pick(loadstring, load, env.loadstring, env.load)
-    adopt("loadstring", compile)
-    adopt("load", compile)
-    local req = pick(
-        (type(syn) == "table" and syn.request) or nil,
-        (type(env.syn) == "table" and env.syn.request) or nil,
-        http_request, env.http_request,
-        request, env.request,
-        (type(http) == "table" and http.request) or nil,
-        (type(env.http) == "table" and env.http.request) or nil,
-        (type(fluxus) == "table" and fluxus.request) or nil
-    )
-    local function httpGet(url)
-        if type(url) ~= "string" or url == "" then return nil end
-        if req then
-            local ok, res = pcall(req, { Url = url, Method = "GET", Headers = { ["User-Agent"] = "Mozilla/5.0" } })
-            if ok and type(res) == "table" then
-                local body = res.Body or res.body or res.Source
-                if type(body) == "string" then return body end
-            elseif ok and type(res) == "string" then
-                return res
-            end
-        end
-        local ok, body = pcall(function()
-            return game:HttpGet(url)
-        end)
-        if ok and type(body) == "string" then return body end
-        ok, body = pcall(function()
-            return game:HttpGetAsync(url)
-        end)
-        if ok and type(body) == "string" then return body end
-        return nil
-    end
-    adopt("request", req)
-    adopt("http_request", req)
-    adopt("httpget", httpGet)
-    env.__NoirHttpGet = httpGet
-    if type(env.http) ~= "table" then env.http = {} end
-    if type(env.http.request) ~= "function" then env.http.request = req end
-    if type(env.syn) ~= "table" then env.syn = {} end
-    if type(env.syn.request) ~= "function" then env.syn.request = req end
-    if type(env.syn.protect_gui) ~= "function" then
-        env.syn.protect_gui = function() end
-    end
-    if type(syn) ~= "table" then syn = env.syn end
-    local nativeGethui = pick(gethui, gethiddenui, get_hidden_gui, env.gethui, env.gethiddenui)
-    local function hiddenGui()
-        if nativeGethui then
-            local ok, ui = pcall(nativeGethui)
-            if ok and typeof(ui) == "Instance" then return ui end
-        end
-        local cg = game:GetService("CoreGui")
-        local cr = env.cloneref
-        if type(cr) == "function" then
-            local ok, c = pcall(cr, cg)
-            if ok and typeof(c) == "Instance" then return c end
-        end
-        return cg
-    end
-    if type(nativeGethui) ~= "function" then
-        adopt("gethui", hiddenGui)
-        adopt("gethiddenui", hiddenGui)
-    end
-    adopt("firetouchinterest", pick(firetouchinterest, fire_touch_interest, env.firetouchinterest))
-    adopt("firesignal", pick(firesignal, fire_signal, env.firesignal))
-    adopt("fireclickdetector", pick(fireclickdetector, fire_click_detector, env.fireclickdetector))
-    adopt("getcustomasset", pick(getcustomasset, getsynasset, env.getcustomasset, env.getsynasset))
-    adopt("getsynasset", pick(getsynasset, getcustomasset, env.getsynasset, env.getcustomasset))
-    adopt("identifyexecutor", pick(identifyexecutor, getexecutorname, env.identifyexecutor) or function()
-        return "unknown", "0"
-    end)
-    adopt("isnetworkowner", pick(isnetworkowner, env.isnetworkowner) or function()
-        return true
-    end)
-    adopt("setfpscap", pick(setfpscap, set_fps_cap, env.setfpscap) or function() end)
-    adopt("queue_on_teleport", pick(queue_on_teleport, queueonteleport, env.queue_on_teleport, env.syn and env.syn.queue_on_teleport) or function() end)
-    local fileNames = { "isfile", "readfile", "writefile", "makefolder", "isfolder", "listfiles", "delfile", "appendfile", "loadfile" }
-    for i = 1, #fileNames do
-        local name = fileNames[i]
-        local fn = pick(env[name], (type(_G) == "table" and _G[name]) or nil)
-        if type(fn) == "function" then adopt(name, fn) end
-    end
-    if type(gethui) ~= "function" then gethui = env.gethui end
-    if type(cloneref) ~= "function" then cloneref = env.cloneref end
-    if type(loadstring) ~= "function" then loadstring = env.loadstring end
-    if type(request) ~= "function" and type(env.request) == "function" then request = env.request end
-    if type(http_request) ~= "function" and type(env.http_request) == "function" then http_request = env.http_request end
-    if type(httpget) ~= "function" then httpget = env.httpget end
-    if type(newcclosure) ~= "function" then newcclosure = env.newcclosure end
-    if type(checkcaller) ~= "function" then checkcaller = env.checkcaller end
-    if type(firetouchinterest) ~= "function" and type(env.firetouchinterest) == "function" then firetouchinterest = env.firetouchinterest end
-    if type(firesignal) ~= "function" and type(env.firesignal) == "function" then firesignal = env.firesignal end
-    if type(getcustomasset) ~= "function" and type(env.getcustomasset) == "function" then getcustomasset = env.getcustomasset end
-    if type(setfpscap) ~= "function" then setfpscap = env.setfpscap end
-    if type(isnetworkowner) ~= "function" then isnetworkowner = env.isnetworkowner end
-    if type(identifyexecutor) ~= "function" then identifyexecutor = env.identifyexecutor end
-    if type(isfile) ~= "function" and type(env.isfile) == "function" then isfile = env.isfile end
-    if type(readfile) ~= "function" and type(env.readfile) == "function" then readfile = env.readfile end
-    if type(writefile) ~= "function" and type(env.writefile) == "function" then writefile = env.writefile end
-    if type(makefolder) ~= "function" and type(env.makefolder) == "function" then makefolder = env.makefolder end
-    if type(isfolder) ~= "function" and type(env.isfolder) == "function" then isfolder = env.isfolder end
-    if type(listfiles) ~= "function" and type(env.listfiles) == "function" then listfiles = env.listfiles end
-    if type(hookmetamethod) ~= "function" and type(env.hookmetamethod) == "function" then hookmetamethod = env.hookmetamethod end
-    if type(hookfunction) ~= "function" and type(env.hookfunction) == "function" then hookfunction = env.hookfunction end
-    if type(getnamecallmethod) ~= "function" and type(env.getnamecallmethod) == "function" then getnamecallmethod = env.getnamecallmethod end
-    if type(setnamecallmethod) ~= "function" and type(env.setnamecallmethod) == "function" then setnamecallmethod = env.setnamecallmethod end
-    if type(getgc) ~= "function" and type(env.getgc) == "function" then getgc = env.getgc end
-    if type(getsenv) ~= "function" and type(env.getsenv) == "function" then getsenv = env.getsenv end
-    if type(getscripts) ~= "function" and type(env.getscripts) == "function" then getscripts = env.getscripts end
-    if type(getupvalues) ~= "function" and type(env.getupvalues) == "function" then getupvalues = env.getupvalues end
-    if type(setupvalue) ~= "function" and type(env.setupvalue) == "function" then setupvalue = env.setupvalue end
-    if type(table.pack) ~= "function" then
-        table.pack = function(...)
-            return { n = select("#", ...), ... }
-        end
-    end
-    if type(table.unpack) ~= "function" then
-        table.unpack = unpack
-    end
-    if type(table.find) ~= "function" then
-        table.find = function(t, v, start)
-            for i = start or 1, #t do
-                if t[i] == v then return i end
-            end
-        end
-    end
-    if type(table.clone) ~= "function" then
-        table.clone = function(t)
-            local n = {}
-            for k, v in pairs(t) do n[k] = v end
-            return n
-        end
-    end
-    if type(table.clear) ~= "function" then
-        table.clear = function(t)
-            for k in pairs(t) do t[k] = nil end
-        end
-    end
-    if type(table.create) ~= "function" then
-        table.create = function(n, v)
-            local t = {}
-            if v ~= nil then
-                for i = 1, n do t[i] = v end
-            end
-            return t
-        end
-    end
-    if type(task) ~= "table" then
-        task = {}
-    end
-    if type(task.wait) ~= "function" then
-        task.wait = wait or function(n)
-            local t = os.clock()
-            n = n or 0
-            while os.clock() - t < n do end
-        end
-    end
-    if type(task.spawn) ~= "function" then
-        task.spawn = spawn or function(f, ...)
-            local n = select("#", ...)
-            local a1, a2, a3, a4, a5 = ...
-            coroutine.wrap(function()
-                f(a1, a2, a3, a4, a5)
-            end)()
-        end
-    end
-    if type(task.defer) ~= "function" then
-        task.defer = task.spawn
-    end
-    if type(task.delay) ~= "function" then
-        task.delay = function(d, f, ...)
-            local a1, a2, a3, a4, a5 = ...
-            task.spawn(function()
-                task.wait(d)
-                f(a1, a2, a3, a4, a5)
-            end)
-        end
-    end
-    pcall(function()
-        if type(debug) ~= "table" then debug = {} end
-        if type(debug.traceback) ~= "function" then
-            debug.traceback = function(msg)
-                return tostring(msg or "")
-            end
-        end
-    end)
-end
-local function noirRef(inst)
-    if type(cloneref) == "function" then
-        local ok, cloned = pcall(cloneref, inst)
-        if ok and cloned ~= nil then return cloned end
-    end
-    return inst
-end
-local Players           = noirRef(game:GetService("Players"))
-local UIS               = noirRef(game:GetService("UserInputService"))
-local TweenService      = noirRef(game:GetService("TweenService"))
-local RunService        = noirRef(game:GetService("RunService"))
-local Stats             = noirRef(game:GetService("Stats"))
-local Workspace         = noirRef(game:GetService("Workspace"))
-local CoreGui           = noirRef(game:GetService("CoreGui"))
-local ReplicatedStorage = noirRef(game:GetService("ReplicatedStorage"))
-local HttpService       = noirRef(game:GetService("HttpService"))
-local Lighting          = noirRef(game:GetService("Lighting"))
+local Players           = game:GetService("Players")
+local UIS               = game:GetService("UserInputService")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local Stats             = game:GetService("Stats")
+local Workspace         = game:GetService("Workspace")
+local CoreGui           = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService       = game:GetService("HttpService")
+local Lighting          = game:GetService("Lighting")
 local LocalPlayer       = Players.LocalPlayer
-if not LocalPlayer then
-    LocalPlayer = Players.PlayerAdded:Wait()
-end
 
 local IS_TOUCH = UIS.TouchEnabled == true
 local IS_KEYBOARD = UIS.KeyboardEnabled == true
@@ -2019,9 +1785,10 @@ do
             if statusLbl then statusLbl.Text = msg end
         end
         local function touch(a, b)
-            if type(firetouchinterest) ~= "function" or not a or not b then return end
-            pcall(firetouchinterest, a, b, 0)
-            pcall(firetouchinterest, a, b, 1)
+            pcall(function()
+                firetouchinterest(a, b, 0)
+                firetouchinterest(a, b, 1)
+            end)
         end
         local function getContainer()
             for _, child in ipairs(workspace:GetChildren()) do
@@ -5640,25 +5407,25 @@ do
     end)
     RunService.Stepped:Connect(function()
         if not universalState.antiFling then return end
-        pcall(function()
-            for part in pairs(universalState.antiFlingTracked) do
-                if part.Parent then
-                    if part.CanCollide then part.CanCollide = false end
+        for part in pairs(universalState.antiFlingTracked) do
+            if part.Parent then
+                if part.CanCollide then part.CanCollide = false end
+                pcall(function()
                     part.AssemblyLinearVelocity = Vector3.zero
                     part.AssemblyAngularVelocity = Vector3.zero
-                else
-                    antiFlingClearPart(part)
-                end
+                end)
+            else
+                antiFlingClearPart(part)
             end
-            local root = localRoot and localRoot()
-            if root then
-                local v = root.AssemblyLinearVelocity
-                if v.X * v.X + v.Y * v.Y + v.Z * v.Z > 8100 then
-                    root.AssemblyLinearVelocity = Vector3.zero
-                    root.AssemblyAngularVelocity = Vector3.zero
-                end
+        end
+        local root = localRoot()
+        if root then
+            local v = root.AssemblyLinearVelocity
+            if v.X * v.X + v.Y * v.Y + v.Z * v.Z > 8100 then
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
             end
-        end)
+        end
     end)
 
 
@@ -5857,7 +5624,7 @@ task.defer(function()
     if not desyncState.bindEnabled then removeDesyncBindButton() end
 end)
 
-pcall(function()
+do
     local sg = { ui = false, on = false, speed = 150, size = 80, jump = false, sideways = false, emote = nil, gui = nil, btn = nil }
     local emoteIds = { Moonwalk = "79127989560307", ["Happier Jump"] = "15610015346", ["Bouncy Twirl"] = "14353423348", ["Flex Walk"] = "15506506103" }
     local function sgChar()
@@ -5983,7 +5750,7 @@ pcall(function()
     speedMods:AddDropdown("Emote on enable", { "None", "Moonwalk", "Happier Jump", "Bouncy Twirl", "Flex Walk" }, function(choice)
         sg.emote = emoteIds[choice]
     end)
-end)
+end
 
 -- Visuals are compiled in a separate deferred chunk.  The primary UI stays identical to the last verified mobile-safe build.
 local __noirVisualContext = {
@@ -7412,20 +7179,7 @@ local function RefreshCatalog()
     runtime.catalogBusy=true
     Label(catalogLabel,"Updating catalog... current list remains available")
     task.spawn(function()
-        local ok,data=pcall(function()
-            local body
-            local hg = httpget
-            pcall(function()
-                local g = getgenv()
-                if type(g) == "table" and type(g.httpget) == "function" then hg = g.httpget end
-            end)
-            if type(hg) == "function" then
-                body = hg(URL)
-            else
-                body = game:HttpGet(URL)
-            end
-            return HttpService:JSONDecode(body)
-        end)
+        local ok,data=pcall(function() return HttpService:JSONDecode(game:HttpGet(URL)) end)
         if not runtime.alive then return end
         local items=ok and NormalizeCatalog(data) or nil
         runtime.catalogBusy=false
@@ -14408,16 +14162,7 @@ end
 local function pullHttpFallback()
     local raw
     pcall(function()
-        local hg = httpget
-        pcall(function()
-            local g = getgenv()
-            if type(g) == "table" and type(g.httpget) == "function" then hg = g.httpget end
-        end)
-        if type(hg) == "function" then
-            raw = hg("https://raw.githubusercontent.com/timez170/mm2-values/main/values.json")
-        else
-            raw = game:HttpGet("https://raw.githubusercontent.com/timez170/mm2-values/main/values.json")
-        end
+        raw = game:HttpGet("https://raw.githubusercontent.com/timez170/mm2-values/main/values.json")
     end)
     if type(raw) ~= "string" or raw == "" then return end
     local HttpService = game:GetService("HttpService")
