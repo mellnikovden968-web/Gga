@@ -417,8 +417,10 @@ outline(retryButton, C.accent, 0.58, 1)
 -- Intro animation ------------------------------------------------------------
 overlay.BackgroundTransparency = 1
 shellScale.Scale = shellScale.Scale * 0.94
+-- Keep the game fully covered during download/compile/run so the hub UI
+-- cannot peek through before the loader reaches READY.
 TweenService:Create(overlay, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-    BackgroundTransparency = 0.34,
+    BackgroundTransparency = 0,
 }):Play()
 TweenService:Create(shellScale, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
     Scale = shellScale.Scale / 0.94,
