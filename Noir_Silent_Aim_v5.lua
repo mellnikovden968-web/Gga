@@ -160,8 +160,8 @@ local gradientAccum = 0
 RunService.RenderStepped:Connect(function(dt)
     if #gradientStrokes == 0 then return end
     gradientAccum += dt
-    if gradientAccum < 0.04 then return end
-    local step = gradientAccum * 30
+    if gradientAccum < 0.12 then return end
+    local step = gradientAccum * 18
     gradientAccum = 0
     for i = #gradientStrokes, 1, -1 do
         local g = gradientStrokes[i]
@@ -646,36 +646,46 @@ function refreshCanvas()
         end
     end)
 end
+local searchToken = 0
 search:GetPropertyChangedSignal("Text"):Connect(function()
-    local q = string.lower(search.Text or "")
-    local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0, misc = 0, map = 0, farm = 0 }
-    local firstPage, firstSub
-    for _, entry in ipairs(sectionPanels) do
-        local hay = entry.name
-        for _, d in ipairs(entry.panel:GetDescendants()) do
-            if d:IsA("TextLabel") or d:IsA("TextButton") then hay = hay .. " " .. string.lower(d.Text or "") end
-        end
-        local match = q == "" or string.find(hay, q, 1, true) ~= nil
-        entry.panel.Visible = match
-        if match then
-            counts[entry.page] = (counts[entry.page] or 0) + 1
-            if q ~= "" and not firstPage then
-                firstPage, firstSub = entry.page, entry.sub
+    searchToken += 1
+    local tok = searchToken
+    task.delay(0.12, function()
+        if tok ~= searchToken then return end
+        local q = string.lower(search.Text or "")
+        local counts = { main = 0, aim = 0, world = 0, visual = 0, emotes = 0, misc = 0, map = 0, farm = 0 }
+        local firstPage, firstSub
+        for _, entry in ipairs(sectionPanels) do
+            local hay = entry.searchHay
+            if not hay then
+                hay = entry.name or ""
+                for _, d in ipairs(entry.panel:GetDescendants()) do
+                    if d:IsA("TextLabel") or d:IsA("TextButton") then hay = hay .. " " .. string.lower(d.Text or "") end
+                end
+                entry.searchHay = hay
+            end
+            local match = q == "" or string.find(hay, q, 1, true) ~= nil
+            entry.panel.Visible = match
+            if match then
+                counts[entry.page] = (counts[entry.page] or 0) + 1
+                if q ~= "" and not firstPage then
+                    firstPage, firstSub = entry.page, entry.sub
+                end
             end
         end
-    end
-    if q ~= "" and firstPage then
-        if activePage == "home" or activePage == "skins" or activePage ~= firstPage then
-            selectPage(firstPage)
+        if q ~= "" and firstPage then
+            if activePage == "home" or activePage == "skins" or activePage ~= firstPage then
+                selectPage(firstPage)
+            end
+            local shower = getgenv().__NoirSubShow and getgenv().__NoirSubShow[firstPage]
+            if type(shower) == "function" and firstSub then pcall(shower, firstSub) end
+        elseif q == "" then
+            local cur = getgenv().__NoirSubCurrent and getgenv().__NoirSubCurrent[activePage]
+            local shower = getgenv().__NoirSubShow and getgenv().__NoirSubShow[activePage]
+            if type(shower) == "function" and cur then pcall(shower, cur) end
         end
-        local shower = getgenv().__NoirSubShow and getgenv().__NoirSubShow[firstPage]
-        if type(shower) == "function" and firstSub then pcall(shower, firstSub) end
-    elseif q == "" then
-        local cur = getgenv().__NoirSubCurrent and getgenv().__NoirSubCurrent[activePage]
-        local shower = getgenv().__NoirSubShow and getgenv().__NoirSubShow[activePage]
-        if type(shower) == "function" and cur then pcall(shower, cur) end
-    end
-    refreshCanvas()
+        refreshCanvas()
+    end)
 end)
 
 local host = {}
@@ -1791,9 +1801,19 @@ do
             if box then return box, box.Parent end
             return nil, nil
         end
+        local coinCache, coinCacheAt = nil, 0
         local function getCoinParts()
+            local now = os.clock()
+            if coinCache and now - coinCacheAt < 0.2 then
+                local alive = {}
+                for n = 1, #coinCache do
+                    local p = coinCache[n]
+                    if p and p.Parent then alive[#alive + 1] = p end
+                end
+                if #alive > 0 then return alive end
+            end
             local parts, box = {}, getContainer()
-            if not box then return parts end
+            if not box then coinCache, coinCacheAt = parts, now; return parts end
             for _, child in ipairs(box:GetChildren()) do
                 if child.Name == "Coin_Server" or child.Name == "CoinVisual" or child.Name == "Coin" or child.Name == "Candy" or child:FindFirstChild("TouchInterest") then
                     if child:IsA("BasePart") then
@@ -1815,6 +1835,7 @@ do
                     end
                 end
             end
+            coinCache, coinCacheAt = parts, now
             return parts
         end
         local function poseAt(part)
@@ -1878,8 +1899,10 @@ do
             if r.Parent then r.CFrame = cf end
             freezeRoot(r, false)
         end
+        local noclipParts
         local function setNoclip(on)
             if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
+            noclipParts = nil
             local char = LocalPlayer.Character
             if not on then
                 if char then
@@ -1892,30 +1915,35 @@ do
             noclipConn = RunService.Stepped:Connect(function()
                 if not farming then return end
                 local c = LocalPlayer.Character
-                if not c then return end
-                for _, p in ipairs(c:GetChildren()) do
-                    if p:IsA("BasePart") then p.CanCollide = false end
+                if not c then noclipParts = nil; return end
+                if not noclipParts then
+                    noclipParts = {}
+                    for _, p in ipairs(c:GetChildren()) do
+                        if p:IsA("BasePart") then noclipParts[#noclipParts + 1] = p end
+                    end
+                end
+                for n = 1, #noclipParts do
+                    local p = noclipParts[n]
+                    if p and p.CanCollide then p.CanCollide = false end
                 end
             end)
         end
         local function magnetCoins()
-            local char = LocalPlayer.Character
             local root = localRoot()
-            if not char or not root then return 0 end
+            if not root then return 0 end
             freezeRoot(root, false)
             local parts = getCoinParts()
             for n = 1, #parts do
                 local part = parts[n]
-                if part and part.Parent then
-                    touch(root, part)
-                    for _, bp in ipairs(char:GetChildren()) do
-                        if bp:IsA("BasePart") then touch(bp, part) end
-                    end
-                end
+                if part and part.Parent then touch(root, part) end
             end
             return #parts
         end
+        local lastAuraAt = 0
         local function collectAura()
+            local now = os.clock()
+            if now - lastAuraAt < 0.12 then return end
+            lastAuraAt = now
             local root = localRoot()
             if not root then return end
             local pos = root.Position
@@ -5302,7 +5330,7 @@ do
     universalState.antiFling = false
     universalState.antiFlingTracked = {}
     universalState.antiFlingPartSignals = {}
-    universalState.antiFlingNextPart = nil
+    universalState.antiFlingHooked = {}
 
     local function antiFlingClearPart(part)
         local signal = universalState.antiFlingPartSignals[part]
@@ -5317,7 +5345,13 @@ do
         universalState.antiFlingPartSignals[part] = part:GetPropertyChangedSignal("CanCollide"):Connect(function()
             if universalState.antiFling and part.Parent and part.CanCollide then part.CanCollide = false end
         end)
-        if universalState.antiFling and part.CanCollide then part.CanCollide = false end
+        if universalState.antiFling then
+            part.CanCollide = false
+            pcall(function()
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.AssemblyAngularVelocity = Vector3.zero
+            end)
+        end
     end
 
     local function antiFlingSeedCharacter(character)
@@ -5325,11 +5359,16 @@ do
         for _, instance in ipairs(character:GetDescendants()) do
             if instance:IsA("BasePart") then antiFlingTrackPart(instance) end
         end
+        if universalState.antiFlingHooked[character] then return end
+        universalState.antiFlingHooked[character] = true
         character.DescendantAdded:Connect(function(instance)
             if instance:IsA("BasePart") then antiFlingTrackPart(instance) end
         end)
         character.DescendantRemoving:Connect(function(instance)
             if instance:IsA("BasePart") then antiFlingClearPart(instance) end
+        end)
+        character.AncestryChanged:Connect(function(_, parent)
+            if not parent then universalState.antiFlingHooked[character] = nil end
         end)
     end
 
@@ -5366,22 +5405,26 @@ do
             for _, instance in ipairs(player.Character:GetDescendants()) do antiFlingClearPart(instance) end
         end
     end)
-    local antiFlingStep = RunService.PreSimulation or RunService.Stepped
-    antiFlingStep:Connect(function()
+    RunService.Stepped:Connect(function()
         if not universalState.antiFling then return end
-        local quota, cursor = 48, universalState.antiFlingNextPart
-        if cursor and universalState.antiFlingTracked[cursor] == nil then cursor = nil end
-        while quota > 0 do
-            cursor = next(universalState.antiFlingTracked, cursor)
-            if not cursor then universalState.antiFlingNextPart = nil; break end
-            if cursor.Parent then
-                if cursor.CanCollide then cursor.CanCollide = false end
-                universalState.antiFlingNextPart = cursor
+        for part in pairs(universalState.antiFlingTracked) do
+            if part.Parent then
+                if part.CanCollide then part.CanCollide = false end
+                pcall(function()
+                    part.AssemblyLinearVelocity = Vector3.zero
+                    part.AssemblyAngularVelocity = Vector3.zero
+                end)
             else
-                antiFlingClearPart(cursor)
-                universalState.antiFlingNextPart = nil
+                antiFlingClearPart(part)
             end
-            quota = quota - 1
+        end
+        local root = localRoot()
+        if root then
+            local v = root.AssemblyLinearVelocity
+            if v.X * v.X + v.Y * v.Y + v.Z * v.Z > 8100 then
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
+            end
         end
     end)
 
