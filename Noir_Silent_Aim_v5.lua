@@ -9,6 +9,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService       = game:GetService("HttpService")
 local Lighting          = game:GetService("Lighting")
 local LocalPlayer       = Players.LocalPlayer
+if not LocalPlayer then
+    LocalPlayer = Players.PlayerAdded:Wait()
+end
 
 local IS_TOUCH = UIS.TouchEnabled == true
 local IS_KEYBOARD = UIS.KeyboardEnabled == true
@@ -1785,10 +1788,9 @@ do
             if statusLbl then statusLbl.Text = msg end
         end
         local function touch(a, b)
-            pcall(function()
-                firetouchinterest(a, b, 0)
-                firetouchinterest(a, b, 1)
-            end)
+            if type(firetouchinterest) ~= "function" or not a or not b then return end
+            pcall(firetouchinterest, a, b, 0)
+            pcall(firetouchinterest, a, b, 1)
         end
         local function getContainer()
             for _, child in ipairs(workspace:GetChildren()) do
@@ -5407,25 +5409,25 @@ do
     end)
     RunService.Stepped:Connect(function()
         if not universalState.antiFling then return end
-        for part in pairs(universalState.antiFlingTracked) do
-            if part.Parent then
-                if part.CanCollide then part.CanCollide = false end
-                pcall(function()
+        pcall(function()
+            for part in pairs(universalState.antiFlingTracked) do
+                if part.Parent then
+                    if part.CanCollide then part.CanCollide = false end
                     part.AssemblyLinearVelocity = Vector3.zero
                     part.AssemblyAngularVelocity = Vector3.zero
-                end)
-            else
-                antiFlingClearPart(part)
+                else
+                    antiFlingClearPart(part)
+                end
             end
-        end
-        local root = localRoot()
-        if root then
-            local v = root.AssemblyLinearVelocity
-            if v.X * v.X + v.Y * v.Y + v.Z * v.Z > 8100 then
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.AssemblyAngularVelocity = Vector3.zero
+            local root = localRoot and localRoot()
+            if root then
+                local v = root.AssemblyLinearVelocity
+                if v.X * v.X + v.Y * v.Y + v.Z * v.Z > 8100 then
+                    root.AssemblyLinearVelocity = Vector3.zero
+                    root.AssemblyAngularVelocity = Vector3.zero
+                end
             end
-        end
+        end)
     end)
 
 
@@ -5624,7 +5626,7 @@ task.defer(function()
     if not desyncState.bindEnabled then removeDesyncBindButton() end
 end)
 
-do
+pcall(function()
     local sg = { ui = false, on = false, speed = 150, size = 80, jump = false, sideways = false, emote = nil, gui = nil, btn = nil }
     local emoteIds = { Moonwalk = "79127989560307", ["Happier Jump"] = "15610015346", ["Bouncy Twirl"] = "14353423348", ["Flex Walk"] = "15506506103" }
     local function sgChar()
@@ -5750,7 +5752,7 @@ do
     speedMods:AddDropdown("Emote on enable", { "None", "Moonwalk", "Happier Jump", "Bouncy Twirl", "Flex Walk" }, function(choice)
         sg.emote = emoteIds[choice]
     end)
-end
+end)
 
 -- Visuals are compiled in a separate deferred chunk.  The primary UI stays identical to the last verified mobile-safe build.
 local __noirVisualContext = {
