@@ -1795,11 +1795,12 @@ do
         end
         local function poseAt(part)
             local pos = part.Position
-            -- Standard: лицом в пол (не на спине). Lay: 5 стадов под монетой, лицом к карте.
             if fopt.method == "Lay" then
-                return CFrame.new(pos.X, pos.Y - 5, pos.Z) * CFrame.Angles(-math.pi / 2, 0, 0)
+                -- 2 стада под монетой, лицом вверх (к карте), не спиной
+                return CFrame.new(pos.X, pos.Y - 2, pos.Z) * CFrame.Angles(math.pi / 2, 0, 0)
             end
-            return CFrame.new(pos.X, pos.Y + 1.2, pos.Z) * CFrame.Angles(math.pi / 2, 0, 0)
+            -- Standard: стоя над монетой
+            return CFrame.new(pos.X, pos.Y + 2.4, pos.Z)
         end
         local function freezeRoot(r, on)
             if not r then return end
