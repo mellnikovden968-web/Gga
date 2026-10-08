@@ -1714,7 +1714,7 @@ do
             New("UIPadding", { Parent = holder, PaddingBottom = UDim.new(0, 12) })
             return holder
         end
-        local function makeToggle(parent, label, callback)
+        local function makeToggle(parent, label, callback, startOn)
             local state = false
             local r = New("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1 })
             text(r, label, 16, UDim2.fromOffset(0, 10))
@@ -1741,12 +1741,35 @@ do
             end
             pill.MouseButton1Click:Connect(fire)
             pill.Activated:Connect(fire)
+            if startOn == true then apply(true) end
         end
         local farming, gunFarm, auraOn, resetFull, killAllOn, shootMurdOn, noRenderOn = false, false, false, false, false, false, false
         local bagIsFull, auraRadius = false, 8
         local noclipConn, auraConn, statusLbl
         local fopt = { method = "Standard", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false, ret = "Map" }
         local lastMapCF, lastCoin, holdReturnUntil, farmTw = nil, nil, 0, nil
+        local function farmKey(k) return "Autofarm::" .. k end
+        local function farmRead(bag, key, def)
+            local store = NoirPersistence.data[bag]
+            if type(store) ~= "table" then return def end
+            local v = store[farmKey(key)]
+            if v == nil then return def end
+            return v
+        end
+        local function farmWrite(bag, key, val)
+            NoirPersistence.data[bag][farmKey(key)] = val
+            NoirPersistence.Save()
+        end
+        fopt.spd = math.clamp(tonumber(farmRead("sliders", "Tween Speed (%)", 30)) or 30, 1, 100)
+        fopt.dly = math.clamp(tonumber(farmRead("sliders", "Tween Delay (%)", 10)) or 10, 0, 100)
+        fopt.method = farmRead("dropdowns", "Method", "Standard")
+        if fopt.method ~= "Lay" then fopt.method = "Standard" end
+        fopt.ret = farmRead("dropdowns", "Return To", "Map")
+        if fopt.ret ~= "Above Map" and fopt.ret ~= "Lobby" then fopt.ret = "Map" end
+        fopt.avoid = farmRead("toggles", "Farm Avoid Murderer", false) == true
+        fopt.rstM = farmRead("toggles", "Auto Reset As Murderer", false) == true
+        fopt.rstS = farmRead("toggles", "Auto Reset As Sheriff", false) == true
+        auraRadius = tonumber(farmRead("sliders", "Aura radius", 8)) or 8
         local origDestroyH = workspace.FallenPartsDestroyHeight
         local function setStatus(msg)
             if statusLbl then statusLbl.Text = msg end
@@ -1842,8 +1865,8 @@ do
                 return
             end
             freezeRoot(r, true)
-            local spd = 40 + fopt.spd * 3.2
-            local dur = math.clamp(dist / math.max(spd, 30), 0.015, 0.22)
+            local spd = 8 + fopt.spd * 0.55
+            local dur = math.clamp(dist / math.max(spd, 10), 0.08, 1.35)
             farmTw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
             farmTw:Play()
             local t0 = os.clock()
@@ -2020,6 +2043,7 @@ do
                 knob.Position = UDim2.new((current - minV) / span, 0, .5, 0)
                 value.Text = tostring(current)
                 cb(current)
+                farmWrite("sliders", label, current)
             end
             set(default)
             value.FocusLost:Connect(function() set(value.Text) end)
@@ -2181,43 +2205,54 @@ do
                 setStatus("Idle")
             end)
         end)
-        makeFarmSlider(holder, "Tween Speed (%)", 1, 100, 30, function(v) fopt.spd = v end)
-        makeFarmSlider(holder, "Tween Delay (%)", 0, 100, 10, function(v) fopt.dly = v end)
-        local methodBtn = farmBtn(holder, "Method: Standard", function() end)
-        local methods, mi = { "Standard", "Lay" }, 1
+        makeFarmSlider(holder, "Tween Speed (%)", 1, 100, fopt.spd, function(v) fopt.spd = v end)
+        makeFarmSlider(holder, "Tween Delay (%)", 0, 100, fopt.dly, function(v) fopt.dly = v end)
+        local methodBtn = farmBtn(holder, "Method: " .. fopt.method, function() end)
+        local methods, mi = { "Standard", "Lay" }, (fopt.method == "Lay" and 2 or 1)
         methodBtn.MouseButton1Click:Connect(function()
             mi = mi % #methods + 1
             fopt.method = methods[mi]
             methodBtn.Text = "Method: " .. fopt.method
+            farmWrite("dropdowns", "Method", fopt.method)
             notify("Farm method: " .. fopt.method, 2)
         end)
-        local retBtn = farmBtn(holder, "Return To: Map", function() end)
-        local rets, reti = { "Map", "Above Map", "Lobby" }, 1
+        local retBtn = farmBtn(holder, "Return To: " .. fopt.ret, function() end)
+        local rets = { "Map", "Above Map", "Lobby" }
+        local reti = 1
+        for i = 1, #rets do if rets[i] == fopt.ret then reti = i end end
         retBtn.MouseButton1Click:Connect(function()
             reti = reti % #rets + 1
             fopt.ret = rets[reti]
             retBtn.Text = "Return To: " .. fopt.ret
+            farmWrite("dropdowns", "Return To", fopt.ret)
             notify("Return To: " .. fopt.ret, 2)
         end)
         makeToggle(holder, "Coin Aura", function(on)
             auraOn = on
+            farmWrite("toggles", "Coin Aura", on)
             if auraConn then auraConn:Disconnect(); auraConn = nil end
             if not on then return end
             auraConn = RunService.Heartbeat:Connect(function()
                 if auraOn then collectAura() end
             end)
             notify("Coin Aura ON", 2)
-        end)
-        local radBtn = farmBtn(holder, "Aura radius: 8", function() end)
+        end, farmRead("toggles", "Coin Aura", false) == true)
+        local radBtn = farmBtn(holder, "Aura radius: " .. tostring(auraRadius), function() end)
         local rads, ri = { 4, 8, 16, 32, 64 }, 2
+        for i = 1, #rads do if rads[i] == auraRadius then ri = i end end
         radBtn.MouseButton1Click:Connect(function()
             ri = ri % #rads + 1
             auraRadius = rads[ri]
             radBtn.Text = "Aura radius: " .. tostring(auraRadius)
+            farmWrite("sliders", "Aura radius", auraRadius)
         end)
-        makeToggle(holder, "Farm Avoid Murderer", function(on) fopt.avoid = on end)
+        makeToggle(holder, "Farm Avoid Murderer", function(on)
+            fopt.avoid = on
+            farmWrite("toggles", "Farm Avoid Murderer", on)
+        end, fopt.avoid)
         makeToggle(holder, "Auto Grab Gun", function(on)
             gunFarm = on
+            farmWrite("toggles", "Auto Grab Gun", on)
             if not on then return end
             task.spawn(function()
                 while gunFarm do
@@ -2230,22 +2265,34 @@ do
                     task.wait(0.45)
                 end
             end)
-        end)
-        makeToggle(holder, "Auto Reset As Murderer", function(on) fopt.rstM = on end)
-        makeToggle(holder, "Auto Reset As Sheriff", function(on) fopt.rstS = on end)
-        makeToggle(holder, "Reset when bag full", function(on) resetFull = on end)
+        end, farmRead("toggles", "Auto Grab Gun", false) == true)
+        makeToggle(holder, "Auto Reset As Murderer", function(on)
+            fopt.rstM = on
+            farmWrite("toggles", "Auto Reset As Murderer", on)
+        end, fopt.rstM)
+        makeToggle(holder, "Auto Reset As Sheriff", function(on)
+            fopt.rstS = on
+            farmWrite("toggles", "Auto Reset As Sheriff", on)
+        end, fopt.rstS)
+        makeToggle(holder, "Reset when bag full", function(on)
+            resetFull = on
+            farmWrite("toggles", "Reset when bag full", on)
+        end, farmRead("toggles", "Reset when bag full", false) == true)
         makeToggle(holder, "Disable 3D Rendering", function(on)
             noRenderOn = on
+            farmWrite("toggles", "Disable 3D Rendering", on)
             pcall(function() RunService:Set3dRenderingEnabled(not on) end)
-        end)
+        end, farmRead("toggles", "Disable 3D Rendering", false) == true)
         makeToggle(holder, "Auto-Kill All", function(on)
             killAllOn = on
+            farmWrite("toggles", "Auto-Kill All", on)
             if on then notify("Kill All — после 40 монет", 2) end
-        end)
+        end, farmRead("toggles", "Auto-Kill All", false) == true)
         makeToggle(holder, "Auto-Shoot Murd", function(on)
             shootMurdOn = on
+            farmWrite("toggles", "Auto-Shoot Murd", on)
             if on then notify("Shoot Murd — после 40 монет", 2) end
-        end)
+        end, farmRead("toggles", "Auto-Shoot Murd", false) == true)
     end
 end
 
