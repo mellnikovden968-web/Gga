@@ -1745,7 +1745,7 @@ do
         local farming, gunFarm, auraOn, resetFull, killAllOn, shootMurdOn, noRenderOn = false, false, false, false, false, false, false
         local bagIsFull, auraRadius = false, 8
         local noclipConn, auraConn, statusLbl
-        local fopt = { method = "Standard", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false }
+        local fopt = { method = "Standard", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false, ret = "Map" }
         local origDestroyH = workspace.FallenPartsDestroyHeight
         local function setStatus(msg)
             if statusLbl then statusLbl.Text = msg end
@@ -1805,22 +1805,35 @@ do
         local function freezeRoot(r, on)
             if not r then return end
             pcall(function()
-                r.Anchored = on
+                r.Anchored = on and true or false
                 r.AssemblyLinearVelocity = Vector3.zero
                 r.AssemblyAngularVelocity = Vector3.zero
             end)
         end
+        local function returnCFrame()
+            local map = findMapModel and findMapModel()
+            if fopt.ret == "Voting Map" then
+                return lobbyCFrame and lobbyCFrame()
+            end
+            local cf = mapCFrame and mapCFrame(map)
+            if not cf then return nil end
+            if fopt.ret == "Above Map" then
+                return cf + Vector3.new(0, 40, 0)
+            end
+            return cf
+        end
         local function tweenTo(cf)
             local r = localRoot()
             if not r then return end
-            freezeRoot(r, true)
             local dist = (r.Position - cf.Position).Magnitude
-            if dist <= 3.5 then
+            if dist <= 4 then
+                freezeRoot(r, false)
                 r.CFrame = cf
                 local waitD = fopt.dly * 0.004
                 if waitD > 0 then task.wait(waitD) end
                 return
             end
+            freezeRoot(r, true)
             local spd = 28 + fopt.spd * 2.4
             local dur = math.clamp(dist / math.max(spd, 20), 0.02, 0.55)
             local tw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
@@ -1828,15 +1841,11 @@ do
             local t0 = os.clock()
             while farming and os.clock() - t0 < dur + 0.05 do
                 if tw.PlaybackState ~= Enum.PlaybackState.Playing then break end
-                pcall(function()
-                    r.AssemblyLinearVelocity = Vector3.zero
-                    r.AssemblyAngularVelocity = Vector3.zero
-                end)
                 task.wait()
             end
             pcall(function() tw:Cancel() end)
             r.CFrame = cf
-            freezeRoot(r, true)
+            freezeRoot(r, false)
             local waitD = fopt.dly * 0.004
             if waitD > 0 then task.wait(waitD) end
         end
@@ -1861,12 +1870,19 @@ do
             end)
         end
         local function magnetCoins()
+            local char = LocalPlayer.Character
             local root = localRoot()
-            if not root then return 0 end
+            if not char or not root then return 0 end
+            freezeRoot(root, false)
             local parts = getCoinParts()
             for n = 1, #parts do
                 local part = parts[n]
-                if part and part.Parent then touch(root, part) end
+                if part and part.Parent then
+                    touch(root, part)
+                    for _, bp in ipairs(char:GetChildren()) do
+                        if bp:IsA("BasePart") then touch(bp, part) end
+                    end
+                end
             end
             return #parts
         end
@@ -2055,7 +2071,15 @@ do
                     maybeRoleReset()
                     local parts = getCoinParts()
                     if #parts == 0 then
-                        setStatus("Ждём раунд / монеты...")
+                        local home = returnCFrame()
+                        local r = localRoot()
+                        if home and r then
+                            freezeRoot(r, false)
+                            r.CFrame = home
+                            setStatus("Return To " .. fopt.ret)
+                        else
+                            setStatus("Ждём раунд / монеты...")
+                        end
                         task.wait(0.5)
                         continue
                     end
@@ -2066,16 +2090,14 @@ do
                     end
                     local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                     if hum then
-                        hum.PlatformStand = true
+                        hum.PlatformStand = (fopt.method == "Lay")
                         hum.AutoRotate = false
                         pcall(function()
-                            hum:ChangeState(Enum.HumanoidStateType.Physics)
                             hum.WalkSpeed = 0
                             hum.JumpPower = 0
                             hum.JumpHeight = 0
                         end)
                     end
-                    freezeRoot(localRoot(), true)
                     local part = parts[1]
                     local best, bestD = nil, 1e9
                     local r = localRoot()
@@ -2111,6 +2133,14 @@ do
             fopt.method = methods[mi]
             methodBtn.Text = "Method: " .. fopt.method
             notify("Farm method: " .. fopt.method, 2)
+        end)
+        local retBtn = farmBtn(holder, "Return To: Map", function() end)
+        local rets, reti = { "Map", "Above Map", "Voting Map" }, 1
+        retBtn.MouseButton1Click:Connect(function()
+            reti = reti % #rets + 1
+            fopt.ret = rets[reti]
+            retBtn.Text = "Return To: " .. fopt.ret
+            notify("Return To: " .. fopt.ret, 2)
         end)
         makeToggle(holder, "Coin Aura", function(on)
             auraOn = on
