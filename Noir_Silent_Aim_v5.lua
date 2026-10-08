@@ -1395,11 +1395,15 @@ end
 do
     local page = win:FindFirstChild("MapContent")
     local col = page and page:FindFirstChild("NoirColumn1")
+    local farmPage = win:FindFirstChild("FarmContent")
+    local farmCol = farmPage and farmPage:FindFirstChild("NoirColumn1")
     if page and col then
-        local function panel(title, subtitle)
-            local card = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
+        local function panel(title, subtitle, pageName, parentCol)
+            parentCol = parentCol or col
+            pageName = pageName or "map"
+            local card = New("Frame", { Parent = parentCol, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
                 BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
-            table.insert(sectionPanels, { panel = card, page = "map", name = string.lower(title .. " " .. (subtitle or "") .. " teleport map lobby murder sheriff player") })
+            table.insert(sectionPanels, { panel = card, page = pageName, name = string.lower(title .. " " .. (subtitle or "") .. " teleport map lobby murder sheriff player farm tween") })
             corner(card, 18); stroke(card, C.border, .5)
             local tick = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
             corner(tick, 2)
@@ -1739,8 +1743,9 @@ do
             pill.Activated:Connect(fire)
         end
         local farming, gunFarm, auraOn, resetFull, killAllOn, shootMurdOn, noRenderOn = false, false, false, false, false, false, false
-        local collected, bagIsFull, auraRadius = 0, false, 8
-        local noclipConn, auraConn, flyConn, statusLbl, farmPad, bodyPos
+        local bagIsFull, auraRadius = false, 8
+        local noclipConn, auraConn, statusLbl
+        local fopt = { method = "Lay", spd = 30, dly = 10, avoid = false, rstM = false, rstS = false }
         local origDestroyH = workspace.FallenPartsDestroyHeight
         local function setStatus(msg)
             if statusLbl then statusLbl.Text = msg end
@@ -1766,7 +1771,7 @@ do
             local parts, box = {}, getContainer()
             if not box then return parts end
             for _, child in ipairs(box:GetChildren()) do
-                if child.Name == "Coin_Server" or child.Name == "CoinVisual" or child.Name == "Coin" or child:FindFirstChild("TouchInterest") then
+                if child.Name == "Coin_Server" or child.Name == "CoinVisual" or child.Name == "Coin" or child.Name == "Candy" or child:FindFirstChild("TouchInterest") then
                     if child:IsA("BasePart") then
                         parts[#parts + 1] = child
                     else
@@ -1788,72 +1793,38 @@ do
             end
             return parts
         end
-        local function underMapCF()
-            local parts = getCoinParts()
-            if #parts == 0 then return nil end
-            local minY, sx, sz = math.huge, 0, 0
-            for n = 1, #parts do
-                local pos = parts[n].Position
-                if pos.Y < minY then minY = pos.Y end
-                sx += pos.X
-                sz += pos.Z
+        local function poseAt(part)
+            local pos = part.Position
+            local m = fopt.method
+            if m == "Lay" then
+                return CFrame.new(pos.X, pos.Y - 5, pos.Z) * CFrame.Angles(-math.pi / 2, 0, 0)
+            elseif m == "Safe" then
+                return CFrame.new(pos + Vector3.new(0, 7, 0))
             end
-            -- чуть ниже пола карты по монетам, не в войд
-            local y = minY - 8
-            if y < -50 then y = minY - 4 end
-            return CFrame.new(sx / #parts, y, sz / #parts)
+            return CFrame.new(pos + Vector3.new(0, 2.4, 0))
         end
-        local function clearFly()
-            if flyConn then flyConn:Disconnect(); flyConn = nil end
-            if bodyPos then pcall(function() bodyPos:Destroy() end); bodyPos = nil end
-            if farmPad then pcall(function() farmPad:Destroy() end); farmPad = nil end
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then hum.PlatformStand = false end
-            pcall(function() workspace.FallenPartsDestroyHeight = origDestroyH end)
-        end
-        local function startFly()
-            clearFly()
-            local cf = underMapCF()
-            if not cf then return false end
-            pcall(function() workspace.FallenPartsDestroyHeight = -50000 end)
-            farmPad = Instance.new("Part")
-            farmPad.Name = "NoirFarmPad"
-            farmPad.Anchored = true
-            farmPad.CanCollide = true
-            farmPad.Transparency = 1
-            farmPad.Size = Vector3.new(80, 2, 80)
-            farmPad.CFrame = cf * CFrame.new(0, -4, 0)
-            farmPad.Parent = workspace
-            local root = localRoot()
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then hum.PlatformStand = true end
-            if root then
-                bodyPos = Instance.new("BodyPosition")
-                bodyPos.Name = "NoirFarmHold"
-                bodyPos.MaxForce = Vector3.new(4e5, 4e5, 4e5)
-                bodyPos.P = 15000
-                bodyPos.D = 1000
-                bodyPos.Position = cf.Position
-                bodyPos.Parent = root
-                root.CFrame = cf
+        local function tweenTo(cf)
+            local r = localRoot()
+            if not r then return end
+            local dist = (r.Position - cf.Position).Magnitude
+            local spd = 8 + fopt.spd * 1.15
+            if fopt.method == "Safe" then spd = spd * 0.5 end
+            local dur = math.clamp(dist / math.max(spd, 6), 0.05, 2.8)
+            local tw = TweenService:Create(r, TweenInfo.new(dur, Enum.EasingStyle.Linear), { CFrame = cf })
+            tw:Play()
+            local t0 = os.clock()
+            while farming and os.clock() - t0 < dur + 0.12 do
+                if tw.PlaybackState ~= Enum.PlaybackState.Playing then break end
+                task.wait()
             end
-            flyConn = RunService.Heartbeat:Connect(function()
-                if not farming then return end
-                local hold = underMapCF() or cf
-                local r = localRoot()
-                local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                if h then h.PlatformStand = true end
-                if r and hold then
-                    r.CFrame = hold
-                    pcall(function()
-                        r.AssemblyLinearVelocity = Vector3.zero
-                        r.AssemblyAngularVelocity = Vector3.zero
-                    end)
-                    if bodyPos and bodyPos.Parent then bodyPos.Position = hold.Position end
-                    if farmPad then farmPad.CFrame = hold * CFrame.new(0, -4, 0) end
-                end
+            pcall(function() tw:Cancel() end)
+            r.CFrame = cf
+            pcall(function()
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.AssemblyAngularVelocity = Vector3.zero
             end)
-            return true
+            local waitD = fopt.dly * 0.008
+            if waitD > 0 then task.wait(waitD) end
         end
         local function setNoclip(on)
             if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
@@ -1931,6 +1902,20 @@ do
                 end)
             end)
         end
+        local function maybeRoleReset()
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if not hum then return end
+            if fopt.rstM and hasTool("Knife") then hum.Health = 0 end
+            if fopt.rstS and hasTool("Gun") then hum.Health = 0 end
+        end
+        local function murdTooClose()
+            if not fopt.avoid then return false end
+            local murd = findByKnife and findByKnife()
+            local r = localRoot()
+            local hrp = murd and murd.Character and murd.Character:FindFirstChild("HumanoidRootPart")
+            if not r or not hrp then return false end
+            return (r.Position - hrp.Position).Magnitude < 38
+        end
         local function onBagFull()
             bagIsFull = true
             if not farming then return end
@@ -1976,43 +1961,134 @@ do
             b.Activated:Connect(fn)
             return b
         end
+        local function makeFarmSlider(parent, label, minV, maxV, default, cb)
+            local r = New("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 68), BackgroundTransparency = 1 })
+            text(r, label, 16, UDim2.fromOffset(0, 8))
+            local value = New("TextBox", { Parent = r, Position = UDim2.new(1, -72, 0, 5), Size = UDim2.fromOffset(72, 30), BackgroundColor3 = C.surface,
+                BackgroundTransparency = .12, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
+                TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false })
+            corner(value, 9); stroke(value, C.border, .4)
+            local track = New("TextButton", { Parent = r, Position = UDim2.new(0, 0, 1, -18), Size = UDim2.new(1, 0, 0, 6),
+                BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
+            corner(track, 3)
+            local span = math.max(maxV - minV, 1)
+            local fill = New("Frame", { Parent = track, Size = UDim2.fromScale((default - minV) / span, 1), BackgroundColor3 = C.accent, BorderSizePixel = 0 })
+            corner(fill, 3)
+            local knob = New("Frame", { Parent = track, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new((default - minV) / span, 0, .5, 0),
+                Size = UDim2.fromOffset(14, 14), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BorderSizePixel = 0, ZIndex = 2 })
+            corner(knob, 7)
+            local current = default
+            local function set(v)
+                current = math.clamp(math.floor((tonumber(v) or current or default) + .5), minV, maxV)
+                fill.Size = UDim2.fromScale((current - minV) / span, 1)
+                knob.Position = UDim2.new((current - minV) / span, 0, .5, 0)
+                value.Text = tostring(current)
+                cb(current)
+            end
+            set(default)
+            value.FocusLost:Connect(function() set(value.Text) end)
+            local drag = false
+            local function fromInput(i)
+                local w = track.AbsoluteSize.X
+                if w < 1 then return end
+                set(minV + span * math.clamp((i.Position.X - track.AbsolutePosition.X) / w, 0, 1))
+            end
+            track.InputBegan:Connect(function(i)
+                if isPrimaryPress(i) then drag = true; fromInput(i) end
+            end)
+            track.InputEnded:Connect(function(i)
+                if isPrimaryPress(i) then drag = false end
+            end)
+            UIS.InputChanged:Connect(function(i)
+                if drag and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
+                    fromInput(i)
+                end
+            end)
+            UIS.InputEnded:Connect(function(i)
+                if isPrimaryPress(i) then drag = false end
+            end)
+        end
+        local function stopFarmHold()
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then hum.PlatformStand = false; hum.AutoRotate = true end
+            pcall(function() workspace.FallenPartsDestroyHeight = origDestroyH end)
+        end
 
-        local holder = panel("Autofarm", "Полёт под картой · монеты аурой · без TP")
+        local holder = panel("Autofarm", "Tween Speed / Delay как Overdrive", "farm", farmCol or col)
         statusLbl = New("TextLabel", { Parent = holder, Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1,
             Text = "Idle", TextColor3 = C.dim, TextSize = 13, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left })
-        makeToggle(holder, "Auto Farm Coins (under map)", function(on)
+        makeToggle(holder, "Auto Farm", function(on)
             farming = on
             if not on then
                 setNoclip(false)
-                clearFly()
+                stopFarmHold()
                 setStatus("Idle")
                 notify("Autofarm OFF", 2)
                 return
             end
-            notify("Autofarm ON — ждём монеты, потом под карту", 2)
+            notify("Autofarm ON · " .. fopt.method, 2)
+            pcall(function() workspace.FallenPartsDestroyHeight = -50000 end)
             setNoclip(true)
             task.spawn(function()
                 while farming do
                     if bagIsFull then
                         setStatus("Bag full (40)")
+                        maybeRoleReset()
                         task.wait(1)
                         continue
                     end
-                    local cf = underMapCF()
-                    if not cf then
-                        setStatus("Ждём раунд / CoinContainer...")
-                        task.wait(0.6)
+                    maybeRoleReset()
+                    local parts = getCoinParts()
+                    if #parts == 0 then
+                        setStatus("Ждём раунд / монеты...")
+                        task.wait(0.5)
                         continue
                     end
-                    if not flyConn then startFly() end
-                    local n = magnetCoins()
-                    setStatus("Летим под картой · монет " .. tostring(n))
-                    task.wait(0.15)
+                    if murdTooClose() then
+                        setStatus("Avoid Murderer")
+                        task.wait(0.4)
+                        continue
+                    end
+                    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        hum.PlatformStand = (fopt.method == "Lay")
+                        hum.AutoRotate = false
+                    end
+                    local part = parts[1]
+                    local best, bestD = nil, 1e9
+                    local r = localRoot()
+                    if r then
+                        for n = 1, #parts do
+                            local p = parts[n]
+                            if p and p.Parent then
+                                local d = (r.Position - p.Position).Magnitude
+                                if d < bestD then bestD, best = d, p end
+                            end
+                        end
+                        part = best or part
+                    end
+                    setStatus(fopt.method .. " · spd " .. tostring(fopt.spd) .. "% · монет " .. tostring(#parts))
+                    tweenTo(poseAt(part))
+                    local root = localRoot()
+                    if root and part and part.Parent then
+                        touch(root, part)
+                        magnetCoins()
+                    end
                 end
                 setNoclip(false)
-                clearFly()
+                stopFarmHold()
                 setStatus("Idle")
             end)
+        end)
+        makeFarmSlider(holder, "Tween Speed (%)", 1, 100, 30, function(v) fopt.spd = v end)
+        makeFarmSlider(holder, "Tween Delay (%)", 0, 100, 10, function(v) fopt.dly = v end)
+        local methodBtn = farmBtn(holder, "Method: Lay", function() end)
+        local methods, mi = { "Lay", "Standard", "Safe" }, 1
+        methodBtn.MouseButton1Click:Connect(function()
+            mi = mi % #methods + 1
+            fopt.method = methods[mi]
+            methodBtn.Text = "Method: " .. fopt.method
+            notify("Farm method: " .. fopt.method, 2)
         end)
         makeToggle(holder, "Coin Aura", function(on)
             auraOn = on
@@ -2030,6 +2106,7 @@ do
             auraRadius = rads[ri]
             radBtn.Text = "Aura radius: " .. tostring(auraRadius)
         end)
+        makeToggle(holder, "Farm Avoid Murderer", function(on) fopt.avoid = on end)
         makeToggle(holder, "Auto Grab Gun", function(on)
             gunFarm = on
             if not on then return end
@@ -2045,6 +2122,8 @@ do
                 end
             end)
         end)
+        makeToggle(holder, "Auto Reset As Murderer", function(on) fopt.rstM = on end)
+        makeToggle(holder, "Auto Reset As Sheriff", function(on) fopt.rstS = on end)
         makeToggle(holder, "Reset when bag full", function(on) resetFull = on end)
         makeToggle(holder, "Disable 3D Rendering", function(on)
             noRenderOn = on
