@@ -1,4 +1,4 @@
--- NOIR_EVENT_HORIZON_V6_PART_2
+-- NOIR_EVENT_HORIZON_V6_1_PART_2
  
 local __noirVisualContext = {
     tab = tab, players = Players, workspace = Workspace, runService = RunService,
@@ -115,217 +115,221 @@ selfMods:AddToggle("\x45nable JumpPower", function(v) utility.jumpEnabled = v; a
 selfMods:AddSlider("\x4aumpPower", 25, 150, 50, function(v) utility.jumpPower = v; applyCharacterMods() end)
 selfMods:AddToggle("\x41nti AFK", function(v) utility.antiAfk = v end)
 
-local speedGlitchSection = tab:AddSection("\x4dAIN • SPEED GLITCH", "\x42etter ODH movement timing with a Noir event-horizon control")
-do
-    local previousSpeedRuntime
-    pcall(function() previousSpeedRuntime = getgenv().__NoirSpeedGlitchRuntime end)
-    if type(previousSpeedRuntime) == "\x74able" and type(previousSpeedRuntime.Stop) == "\x66unction" then pcall(previousSpeedRuntime.Stop) end
-
-    local speed = {
-        alive = true, uiEnabled = false, enabled = false, onlyWorkSideways = false,
-        sideSpeed = 150, toggleSize = 80, selectedEmote = "\x4doonwalk", selectedEmoteId = "\x379127989560307",
-        customEmoteId = nil, character = nil, humanoid = nil, root = nil, isJumping = false,
-        screenGui = nil, toggleButton = nil, mark = nil, heartbeat = nil, connections = {}, uiConnections = {}, characterConnections = {},
-    }
-    local emotes = {
-        ["\x4doonwalk"] = "\x379127989560307",
-        ["\x48appier Jump"] = "\x315610015346",
-        ["\x42ouncy Twirl"] = "\x314353423348",
-        ["\x46lex Walk"] = "\x315506506103",
-    }
-    local function disconnectList(list)
-        for _, connection in ipairs(list) do pcall(function() connection:Disconnect() end) end
-        table.clear(list)
-    end
-    local function bindCharacter(character)
-        disconnectList(speed.characterConnections)
-        speed.character, speed.humanoid, speed.root, speed.isJumping = character, nil, nil, false
-        if not character then return end
-        task.spawn(function()
-            local humanoid = character:WaitForChild("\x48umanoid", 8)
-            local root = character:WaitForChild("\x48umanoidRootPart", 8)
-            if not speed.alive or LocalPlayer.Character ~= character or not (humanoid and root) then return end
-            speed.humanoid, speed.root = humanoid, root
-            speed.characterConnections[#speed.characterConnections + 1] = humanoid.Jumping:Connect(function()
-                speed.isJumping = true
-            end)
-            speed.characterConnections[#speed.characterConnections + 1] = humanoid.StateChanged:Connect(function(_, state)
-                if state == Enum.HumanoidStateType.Landed then speed.isJumping = false end
-            end)
-        end)
-    end
-    if LocalPlayer.Character then bindCharacter(LocalPlayer.Character) end
-    speed.connections[#speed.connections + 1] = LocalPlayer.CharacterAdded:Connect(bindCharacter)
-
-    local function playEmote(id)
-        if not speed.character then return end
-        local humanoid = speed.character:FindFirstChildOfClass("\x48umanoid")
-        if not humanoid then return end
-        local ok = pcall(function() humanoid:PlayEmoteAndGetAnimTrackById(id) end)
-        if not ok then
-            local animation = Instance.new("\x41nimation")
-            animation.AnimationId = "\x72bxassetid://" .. tostring(id)
-            local loaded, track = pcall(function() return humanoid:LoadAnimation(animation) end)
-            if loaded and track then pcall(function() track:Play() end) end
+__NOIR_GUARD.SetupNoirSpeedGlitch = function()
+    local speedGlitchSection = tab:AddSection("\x4dAIN • SPEED GLITCH", "\x42etter ODH movement timing with a Noir event-horizon control")
+    do
+        local previousSpeedRuntime
+        pcall(function() previousSpeedRuntime = getgenv().__NoirSpeedGlitchRuntime end)
+        if type(previousSpeedRuntime) == "\x74able" and type(previousSpeedRuntime.Stop) == "\x66unction" then pcall(previousSpeedRuntime.Stop) end
+    
+        local speed = {
+            alive = true, uiEnabled = false, enabled = false, onlyWorkSideways = false,
+            sideSpeed = 150, toggleSize = 80, selectedEmote = "\x4doonwalk", selectedEmoteId = "\x379127989560307",
+            customEmoteId = nil, character = nil, humanoid = nil, root = nil, isJumping = false,
+            screenGui = nil, toggleButton = nil, mark = nil, heartbeat = nil, connections = {}, uiConnections = {}, characterConnections = {},
+        }
+        local emotes = {
+            ["\x4doonwalk"] = "\x379127989560307",
+            ["\x48appier Jump"] = "\x315610015346",
+            ["\x42ouncy Twirl"] = "\x314353423348",
+            ["\x46lex Walk"] = "\x315506506103",
+        }
+        local function disconnectList(list)
+            for _, connection in ipairs(list) do pcall(function() connection:Disconnect() end) end
+            table.clear(list)
         end
-    end
-    local function updateButtonVisual()
-        local button = speed.toggleButton
-        if not button then return end
-        button.BackgroundColor3 = speed.enabled and Color3.fromRGB(22,24,29) or Color3.fromRGB(7,8,11)
-        local label = button:FindFirstChild("\x53peedStatus")
-        if label then label.Text = speed.enabled and "\x47LITCH  //  ON" or "\x47LITCH  //  OFF" end
-        local outline = button:FindFirstChild("\x53peedOutline")
-        if outline then outline.Color = speed.enabled and C.accent2 or C.border; outline.Transparency = speed.enabled and .05 or .24 end
-        if speed.mark and speed.mark.image then speed.mark.image.ImageTransparency = speed.enabled and 0 or .08 end
-    end
-    local function toggleMovement(enabled)
-        speed.enabled = enabled == true
-        if speed.heartbeat then speed.heartbeat:Disconnect(); speed.heartbeat = nil end
-        if speed.enabled then
-            speed.heartbeat = RunService.Heartbeat:Connect(function()
-                if not speed.enabled or not speed.character or not speed.humanoid or not speed.root or not speed.isJumping then return end
-                local moveDirection = speed.humanoid.MoveDirection
-                if moveDirection.Magnitude <= 0 then return end
-                local directionToUse
-                if speed.onlyWorkSideways then
-                    local camera = Workspace.CurrentCamera
-                    if not camera then return end
-                    local right = camera.CFrame.RightVector
-                    local flatRight = Vector3.new(right.X, 0, right.Z)
-                    if flatRight.Magnitude <= 0 then return end
-                    flatRight = flatRight.Unit
-                    local sidewaysAmount = flatRight:Dot(moveDirection)
-                    if math.abs(sidewaysAmount) < .35 then return end
-                    directionToUse = flatRight * (sidewaysAmount > 0 and 1 or -1)
-                else
-                    directionToUse = moveDirection.Unit
-                end
-                speed.root.Velocity = directionToUse * speed.sideSpeed + Vector3.new(0, speed.root.Velocity.Y, 0)
+        local function bindCharacter(character)
+            disconnectList(speed.characterConnections)
+            speed.character, speed.humanoid, speed.root, speed.isJumping = character, nil, nil, false
+            if not character then return end
+            task.spawn(function()
+                local humanoid = character:WaitForChild("\x48umanoid", 8)
+                local root = character:WaitForChild("\x48umanoidRootPart", 8)
+                if not speed.alive or LocalPlayer.Character ~= character or not (humanoid and root) then return end
+                speed.humanoid, speed.root = humanoid, root
+                speed.characterConnections[#speed.characterConnections + 1] = humanoid.Jumping:Connect(function()
+                    speed.isJumping = true
+                end)
+                speed.characterConnections[#speed.characterConnections + 1] = humanoid.StateChanged:Connect(function(_, state)
+                    if state == Enum.HumanoidStateType.Landed then speed.isJumping = false end
+                end)
             end)
         end
-        updateButtonVisual()
-    end
-    local function toggleUi(enabled)
-        speed.uiEnabled = enabled == true
-        if not speed.uiEnabled then
-            toggleMovement(false)
-            disconnectList(speed.uiConnections)
-            if speed.screenGui then speed.screenGui:Destroy() end
-            speed.screenGui, speed.toggleButton, speed.mark = nil, nil, nil
-            return
+        if LocalPlayer.Character then bindCharacter(LocalPlayer.Character) end
+        speed.connections[#speed.connections + 1] = LocalPlayer.CharacterAdded:Connect(bindCharacter)
+    
+        local function playEmote(id)
+            if not speed.character then return end
+            local humanoid = speed.character:FindFirstChildOfClass("\x48umanoid")
+            if not humanoid then return end
+            local ok = pcall(function() humanoid:PlayEmoteAndGetAnimTrackById(id) end)
+            if not ok then
+                local animation = Instance.new("\x41nimation")
+                animation.AnimationId = "\x72bxassetid://" .. tostring(id)
+                local loaded, track = pcall(function() return humanoid:LoadAnimation(animation) end)
+                if loaded and track then pcall(function() track:Play() end) end
+            end
         end
-        if speed.toggleButton and speed.toggleButton.Parent then return end
-        disconnectList(speed.uiConnections)
-        if speed.screenGui then speed.screenGui:Destroy(); speed.screenGui = nil end
-        local parent = guiParent
-        if typeof(parent) ~= "\x49nstance" then parent = LocalPlayer:FindFirstChildOfClass("\x50layerGui") or LocalPlayer:WaitForChild("\x50layerGui") end
-        local screen = New("\x53creenGui", { Parent = parent, Name = "\x4eoirSpeedGlitchToggle", ResetOnSpawn = false,
-            IgnoreGuiInset = true, DisplayOrder = 90, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
-        local button = New("\x54extButton", { Parent = screen, Name = "\x53peedGlitch", AnchorPoint = Vector2.new(.5,.5),
-            Position = NoirPersistence.GetPosition("\x73peed_glitch_toggle_v6", UDim2.new(.80,0,.72,0)),
-            Size = UDim2.fromOffset(speed.toggleSize, speed.toggleSize), BackgroundColor3 = Color3.fromRGB(7,8,11),
-            BorderSizePixel = 0, Text = "", AutoButtonColor = false, Active = true, ZIndex = 90 })
-        corner(button, 999)
-        local outline = New("\x55IStroke", { Parent = button, Name = "\x53peedOutline", Color = C.border, Transparency = .24, Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
-        local outlineGradient = New("\x55IGradient", { Parent = outline, Rotation = 35, Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0,C.dim), ColorSequenceKeypoint.new(.24,C.accent2),
-            ColorSequenceKeypoint.new(.55,C.dim), ColorSequenceKeypoint.new(.78,C.accent2), ColorSequenceKeypoint.new(1,C.dim),
-        }) })
-        table.insert(gradientStrokes, outlineGradient)
-        local _, mark = createBlackholeMark(button, UDim2.new(.5,0,.38,0), math.floor(speed.toggleSize * .52), Vector2.new(.5,.5), 92, math.floor(speed.toggleSize * .26))
-        local label = New("\x54extLabel", { Parent = button, Name = "\x53peedStatus", AnchorPoint = Vector2.new(.5,.5),
-            Position = UDim2.new(.5,0,.82,0), Size = UDim2.new(.92,0,0,math.max(13,math.floor(speed.toggleSize*.18))),
-            BackgroundTransparency = 1, Text = "\x47LITCH  //  OFF", TextColor3 = C.text,
-            TextSize = math.clamp(math.floor(speed.toggleSize*.14),8,12), Font = Enum.Font.GothamBold,
-            TextScaled = false, TextWrapped = true, ZIndex = 94 })
-        speed.screenGui, speed.toggleButton, speed.mark = screen, button, mark
-        updateButtonVisual()
-        local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
-        speed.uiConnections[#speed.uiConnections + 1] = button.InputBegan:Connect(function(input)
-            if not isPrimaryPress(input) then return end
-            dragging, moved, dragStart, startPosition = true, false, input.Position, button.Position
-        end)
-        speed.uiConnections[#speed.uiConnections + 1] = button.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
-        end)
-        speed.uiConnections[#speed.uiConnections + 1] = UIS.InputChanged:Connect(function(input)
-            if not dragging or input ~= dragInput then return end
-            local delta = input.Position - dragStart
-            if delta.Magnitude > 7 then moved = true end
-            local camera = Workspace.CurrentCamera
-            local view = camera and camera.ViewportSize or Vector2.new(1280,720)
-            local x = math.clamp(startPosition.X.Scale * view.X + startPosition.X.Offset + delta.X, speed.toggleSize*.5, view.X-speed.toggleSize*.5)
-            local y = math.clamp(startPosition.Y.Scale * view.Y + startPosition.Y.Offset + delta.Y, speed.toggleSize*.5, view.Y-speed.toggleSize*.5)
-            button.Position = UDim2.fromOffset(x,y)
-        end)
-        speed.uiConnections[#speed.uiConnections + 1] = UIS.InputEnded:Connect(function(input)
-            if not dragging or not isPrimaryPress(input) then return end
-            dragging = false
-            NoirPersistence.SetPosition("\x73peed_glitch_toggle_v6", button.Position)
-        end)
-        speed.uiConnections[#speed.uiConnections + 1] = button.Activated:Connect(function()
-            if moved then moved = false; return end
-            toggleMovement(not speed.enabled)
-            if speed.enabled and speed.selectedEmoteId then playEmote(speed.selectedEmoteId) end
-        end)
-    end
-    local function resizeToggleButton(value)
-        speed.toggleSize = math.clamp(math.floor(tonumber(value) or speed.toggleSize), 40, 150)
-        local button = speed.toggleButton
-        if not button then return end
-        button.Size = UDim2.fromOffset(speed.toggleSize, speed.toggleSize)
-        if speed.mark and speed.mark.root then
-            local diameter = math.floor(speed.toggleSize * .52)
-            speed.mark.root.Size = UDim2.fromOffset(diameter, diameter)
-            speed.mark.root.Position = UDim2.new(.5,0,.38,0)
-            local markCorner = speed.mark.root:FindFirstChildOfClass("\x55ICorner")
-            if markCorner then markCorner.CornerRadius = UDim.new(0, math.floor(diameter * .5)) end
+        local function updateButtonVisual()
+            local button = speed.toggleButton
+            if not button then return end
+            button.BackgroundColor3 = speed.enabled and Color3.fromRGB(22,24,29) or Color3.fromRGB(7,8,11)
+            local label = button:FindFirstChild("\x53peedStatus")
+            if label then label.Text = speed.enabled and "\x47LITCH  //  ON" or "\x47LITCH  //  OFF" end
+            local outline = button:FindFirstChild("\x53peedOutline")
+            if outline then outline.Color = speed.enabled and C.accent2 or C.border; outline.Transparency = speed.enabled and .05 or .24 end
+            if speed.mark and speed.mark.image then speed.mark.image.ImageTransparency = speed.enabled and 0 or .08 end
         end
-        local status = button:FindFirstChild("\x53peedStatus")
-        if status then
-            status.Size = UDim2.new(.92,0,0,math.max(13,math.floor(speed.toggleSize*.18)))
-            status.TextSize = math.clamp(math.floor(speed.toggleSize*.14),8,12)
+        local function toggleMovement(enabled)
+            speed.enabled = enabled == true
+            if speed.heartbeat then speed.heartbeat:Disconnect(); speed.heartbeat = nil end
+            if speed.enabled then
+                speed.heartbeat = RunService.Heartbeat:Connect(function()
+                    if not speed.enabled or not speed.character or not speed.humanoid or not speed.root or not speed.isJumping then return end
+                    local moveDirection = speed.humanoid.MoveDirection
+                    if moveDirection.Magnitude <= 0 then return end
+                    local directionToUse
+                    if speed.onlyWorkSideways then
+                        local camera = Workspace.CurrentCamera
+                        if not camera then return end
+                        local right = camera.CFrame.RightVector
+                        local flatRight = Vector3.new(right.X, 0, right.Z)
+                        if flatRight.Magnitude <= 0 then return end
+                        flatRight = flatRight.Unit
+                        local sidewaysAmount = flatRight:Dot(moveDirection)
+                        if math.abs(sidewaysAmount) < .35 then return end
+                        directionToUse = flatRight * (sidewaysAmount > 0 and 1 or -1)
+                    else
+                        directionToUse = moveDirection.Unit
+                    end
+                    speed.root.Velocity = directionToUse * speed.sideSpeed + Vector3.new(0, speed.root.Velocity.Y, 0)
+                end)
+            end
+            updateButtonVisual()
         end
-    end
-    function speed.Stop()
-        speed.alive = false
-        toggleMovement(false)
-        disconnectList(speed.connections)
-        disconnectList(speed.uiConnections)
-        disconnectList(speed.characterConnections)
-        if speed.screenGui then speed.screenGui:Destroy() end
-        speed.screenGui, speed.toggleButton, speed.mark = nil, nil, nil
-    end
-    pcall(function() getgenv().__NoirSpeedGlitchRuntime = speed end)
-    task.spawn(function()
-        while speed.alive and gui.Parent do
-            task.wait(1)
-            if not speed.alive or not gui.Parent then break end
-            if speed.uiEnabled and not (speed.screenGui and speed.screenGui.Parent and speed.toggleButton and speed.toggleButton.Parent) then
+        local function toggleUi(enabled)
+            speed.uiEnabled = enabled == true
+            if not speed.uiEnabled then
+                toggleMovement(false)
                 disconnectList(speed.uiConnections)
                 if speed.screenGui then speed.screenGui:Destroy() end
                 speed.screenGui, speed.toggleButton, speed.mark = nil, nil, nil
-                toggleUi(true)
+                return
+            end
+            if speed.toggleButton and speed.toggleButton.Parent then return end
+            disconnectList(speed.uiConnections)
+            if speed.screenGui then speed.screenGui:Destroy(); speed.screenGui = nil end
+            local parent = guiParent
+            if typeof(parent) ~= "\x49nstance" then parent = LocalPlayer:FindFirstChildOfClass("\x50layerGui") or LocalPlayer:WaitForChild("\x50layerGui") end
+            local screen = New("\x53creenGui", { Parent = parent, Name = "\x4eoirSpeedGlitchToggle", ResetOnSpawn = false,
+                IgnoreGuiInset = true, DisplayOrder = 90, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
+            local button = New("\x54extButton", { Parent = screen, Name = "\x53peedGlitch", AnchorPoint = Vector2.new(.5,.5),
+                Position = NoirPersistence.GetPosition("\x73peed_glitch_toggle_v6", UDim2.new(.80,0,.72,0)),
+                Size = UDim2.fromOffset(speed.toggleSize, speed.toggleSize), BackgroundColor3 = Color3.fromRGB(7,8,11),
+                BorderSizePixel = 0, Text = "", AutoButtonColor = false, Active = true, ZIndex = 90 })
+            corner(button, 999)
+            local outline = New("\x55IStroke", { Parent = button, Name = "\x53peedOutline", Color = C.border, Transparency = .24, Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+            local outlineGradient = New("\x55IGradient", { Parent = outline, Rotation = 35, Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0,C.dim), ColorSequenceKeypoint.new(.24,C.accent2),
+                ColorSequenceKeypoint.new(.55,C.dim), ColorSequenceKeypoint.new(.78,C.accent2), ColorSequenceKeypoint.new(1,C.dim),
+            }) })
+            table.insert(gradientStrokes, outlineGradient)
+            local _, mark = __NOIR_GUARD.blackhole.Create(button, UDim2.new(.5,0,.38,0), math.floor(speed.toggleSize * .52), Vector2.new(.5,.5), 92, math.floor(speed.toggleSize * .26))
+            local label = New("\x54extLabel", { Parent = button, Name = "\x53peedStatus", AnchorPoint = Vector2.new(.5,.5),
+                Position = UDim2.new(.5,0,.82,0), Size = UDim2.new(.92,0,0,math.max(13,math.floor(speed.toggleSize*.18))),
+                BackgroundTransparency = 1, Text = "\x47LITCH  //  OFF", TextColor3 = C.text,
+                TextSize = math.clamp(math.floor(speed.toggleSize*.14),8,12), Font = Enum.Font.GothamBold,
+                TextScaled = false, TextWrapped = true, ZIndex = 94 })
+            speed.screenGui, speed.toggleButton, speed.mark = screen, button, mark
+            updateButtonVisual()
+            local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
+            speed.uiConnections[#speed.uiConnections + 1] = button.InputBegan:Connect(function(input)
+                if not isPrimaryPress(input) then return end
+                dragging, moved, dragStart, startPosition = true, false, input.Position, button.Position
+            end)
+            speed.uiConnections[#speed.uiConnections + 1] = button.InputChanged:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+            end)
+            speed.uiConnections[#speed.uiConnections + 1] = UIS.InputChanged:Connect(function(input)
+                if not dragging or input ~= dragInput then return end
+                local delta = input.Position - dragStart
+                if delta.Magnitude > 7 then moved = true end
+                local camera = Workspace.CurrentCamera
+                local view = camera and camera.ViewportSize or Vector2.new(1280,720)
+                local x = math.clamp(startPosition.X.Scale * view.X + startPosition.X.Offset + delta.X, speed.toggleSize*.5, view.X-speed.toggleSize*.5)
+                local y = math.clamp(startPosition.Y.Scale * view.Y + startPosition.Y.Offset + delta.Y, speed.toggleSize*.5, view.Y-speed.toggleSize*.5)
+                button.Position = UDim2.fromOffset(x,y)
+            end)
+            speed.uiConnections[#speed.uiConnections + 1] = UIS.InputEnded:Connect(function(input)
+                if not dragging or not isPrimaryPress(input) then return end
+                dragging = false
+                NoirPersistence.SetPosition("\x73peed_glitch_toggle_v6", button.Position)
+            end)
+            speed.uiConnections[#speed.uiConnections + 1] = button.Activated:Connect(function()
+                if moved then moved = false; return end
+                toggleMovement(not speed.enabled)
+                if speed.enabled and speed.selectedEmoteId then playEmote(speed.selectedEmoteId) end
+            end)
+        end
+        local function resizeToggleButton(value)
+            speed.toggleSize = math.clamp(math.floor(tonumber(value) or speed.toggleSize), 40, 150)
+            local button = speed.toggleButton
+            if not button then return end
+            button.Size = UDim2.fromOffset(speed.toggleSize, speed.toggleSize)
+            if speed.mark and speed.mark.root then
+                local diameter = math.floor(speed.toggleSize * .52)
+                speed.mark.root.Size = UDim2.fromOffset(diameter, diameter)
+                speed.mark.root.Position = UDim2.new(.5,0,.38,0)
+                local markCorner = speed.mark.root:FindFirstChildOfClass("\x55ICorner")
+                if markCorner then markCorner.CornerRadius = UDim.new(0, math.floor(diameter * .5)) end
+            end
+            local status = button:FindFirstChild("\x53peedStatus")
+            if status then
+                status.Size = UDim2.new(.92,0,0,math.max(13,math.floor(speed.toggleSize*.18)))
+                status.TextSize = math.clamp(math.floor(speed.toggleSize*.14),8,12)
             end
         end
-    end)
-    speedGlitchSection:AddToggle("\x45nable Speed Glitch UI", toggleUi)
-    speedGlitchSection:AddToggle("\x4fnly Work Sideways", function(value) speed.onlyWorkSideways = value == true end)
-    speedGlitchSection:AddSlider("\x53ide Speed", 10, 1000, speed.sideSpeed, function(value) speed.sideSpeed = tonumber(value) or speed.sideSpeed end)
-    speedGlitchSection:AddSlider("\x54oggle Size", 40, 150, speed.toggleSize, resizeToggleButton)
-    speedGlitchSection:AddDropdown("\x53elect Emote", {"\x4doonwalk","\x48appier Jump","\x42ouncy Twirl","\x46lex Walk","\x43ustom"}, function(choice)
-        speed.selectedEmote = choice
-        speed.selectedEmoteId = choice == "\x43ustom" and speed.customEmoteId or emotes[choice]
-    end)
-    speedGlitchSection:AddTextBox("\x43ustom Emote ID", function(value)
-        if value and value ~= "" then
-            speed.customEmoteId = tostring(value)
-            if speed.selectedEmote == "\x43ustom" then speed.selectedEmoteId = speed.customEmoteId end
+        function speed.Stop()
+            speed.alive = false
+            toggleMovement(false)
+            disconnectList(speed.connections)
+            disconnectList(speed.uiConnections)
+            disconnectList(speed.characterConnections)
+            if speed.screenGui then speed.screenGui:Destroy() end
+            speed.screenGui, speed.toggleButton, speed.mark = nil, nil, nil
         end
-    end)
-    speedGlitchSection:AddLabel("\x54ap the floating event-horizon button to toggle the glitch; drag\x20to move it. Position is saved and the UI auto-recovers if remov\x65d.")
+        pcall(function() getgenv().__NoirSpeedGlitchRuntime = speed end)
+        task.spawn(function()
+            while speed.alive and gui.Parent do
+                task.wait(1)
+                if not speed.alive or not gui.Parent then break end
+                if speed.uiEnabled and not (speed.screenGui and speed.screenGui.Parent and speed.toggleButton and speed.toggleButton.Parent) then
+                    disconnectList(speed.uiConnections)
+                    if speed.screenGui then speed.screenGui:Destroy() end
+                    speed.screenGui, speed.toggleButton, speed.mark = nil, nil, nil
+                    toggleUi(true)
+                end
+            end
+        end)
+        speedGlitchSection:AddToggle("\x45nable Speed Glitch UI", toggleUi)
+        speedGlitchSection:AddToggle("\x4fnly Work Sideways", function(value) speed.onlyWorkSideways = value == true end)
+        speedGlitchSection:AddSlider("\x53ide Speed", 10, 1000, speed.sideSpeed, function(value) speed.sideSpeed = tonumber(value) or speed.sideSpeed end)
+        speedGlitchSection:AddSlider("\x54oggle Size", 40, 150, speed.toggleSize, resizeToggleButton)
+        speedGlitchSection:AddDropdown("\x53elect Emote", {"\x4doonwalk","\x48appier Jump","\x42ouncy Twirl","\x46lex Walk","\x43ustom"}, function(choice)
+            speed.selectedEmote = choice
+            speed.selectedEmoteId = choice == "\x43ustom" and speed.customEmoteId or emotes[choice]
+        end)
+        speedGlitchSection:AddTextBox("\x43ustom Emote ID", function(value)
+            if value and value ~= "" then
+                speed.customEmoteId = tostring(value)
+                if speed.selectedEmote == "\x43ustom" then speed.selectedEmoteId = speed.customEmoteId end
+            end
+        end)
+        speedGlitchSection:AddLabel("\x54ap the floating event-horizon button to toggle the glitch; drag\x20to move it. Position is saved and the UI auto-recovers if remov\x65d.")
+    end
 end
+__NOIR_GUARD.SetupNoirSpeedGlitch()
+__NOIR_GUARD.SetupNoirSpeedGlitch = nil
 
 local serverMods = tab:AddSection("\x4dAIN • SERVER", "\x4dM2 round information")
 serverMods:AddToggle("\x53how Round Timer", setRoundTimerVisible)
@@ -810,8 +814,8 @@ task.defer(function()
     RunService.RenderStepped:Wait()
     if not win.Parent then return end
     local targetPosition = win.Position
-    lastWindowPosition = targetPosition
-    local singularityPosition = collapseTargetPosition()
+    __NOIR_GUARD.blackhole.LastWindowPosition = targetPosition
+    local singularityPosition = __NOIR_GUARD.blackhole.CollapseTargetPosition()
     win.Position = singularityPosition
     win.BackgroundTransparency = 1
     win.Rotation = -4.2
@@ -823,7 +827,7 @@ task.defer(function()
     TweenService:Create(winScale, TweenInfo.new(.78, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 end)
 
-notify("\x4eOIR V6  •  EVENT HORIZON ONLINE  •  " .. tostring(#getPlayers()) .. "\x20PLAYERS", 4)
+notify("\x4eOIR V6.1  •  EVENT HORIZON ONLINE  •  " .. tostring(#getPlayers()) .. "\x20PLAYERS", 4)
 
 do
     local function makeWorldPluginTab(base)
