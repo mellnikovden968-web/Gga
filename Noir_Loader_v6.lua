@@ -1,24 +1,19 @@
 --[[
-    NOIR HUB  |  EVENT HORIZON V6.1 BOOT LOADER
+    NOIR HUB  |  EVENT HORIZON BOOT LOADER
     Executors (compatibility list, как ODH):
       Windows: Xeno, Solara, Madium, Real, SirHurt, Potassium, Volt
       Android: Delta, Codex, Arceus X
       iOS: Delta
       Mac: Opiumware, Macsploit
 
-    Noir V6.1: все три release-part файла должны быть загружены в Gga/main.
-    Raw-ссылки и release-marker проверки подключены ниже. Запускай только этот loader.
+    Все три release-part файла должны быть загружены в Gga/main.
+    Raw-ссылки подключены ниже; loader скачивает, объединяет и запускает части без проверки версий.
 ]]
 
 local RAW = {
     "https://raw.githubusercontent.com/mellnikovden968-web/Gga/refs/heads/main/Noir_Part1.lua",
     "https://raw.githubusercontent.com/mellnikovden968-web/Gga/refs/heads/main/Noir_Part2.lua",
     "https://raw.githubusercontent.com/mellnikovden968-web/Gga/refs/heads/main/Noir_Part3.lua",
-}
-local RELEASE_PART_MARKERS = {
-    "NOIR_EVENT_HORIZON_V6_1_PART_1",
-    "NOIR_EVENT_HORIZON_V6_1_PART_2",
-    "NOIR_EVENT_HORIZON_V6_1_PART_3",
 }
 
 -- Executor environment --------------------------------------------------------
@@ -2327,7 +2322,7 @@ if logoAsset ~= "" then
 end
 
 label(card, "NOIR HUB", UDim2.fromOffset(85, 43), UDim2.fromOffset(192, 31), 22, C.text, Enum.Font.GothamBold)
-label(card, "EVENT HORIZON   •   V6.1  /  03 MODULES", UDim2.fromOffset(87, 72), UDim2.fromOffset(220, 18), 9, C.secondary, Enum.Font.GothamMedium)
+label(card, "EVENT HORIZON   •   03 MODULES", UDim2.fromOffset(87, 72), UDim2.fromOffset(220, 18), 9, C.secondary, Enum.Font.GothamMedium)
 
 local statePill = make("Frame", card, {
     Name = "StatePill",
@@ -2611,7 +2606,7 @@ startLoading = function()
             return
         end
     end
-    setStatus("Connecting to GitHub", "Fetching the three Noir V6.1 modules in parallel…", "loading")
+    setStatus("Connecting to GitHub", "Fetching the three Noir modules in parallel…", "loading")
 
     task.spawn(function()
         local chunks = {}
@@ -2635,17 +2630,12 @@ startLoading = function()
                         local reason = fetchError or "empty or invalid response"
                         fail("Download failed", "Module " .. tostring(i) .. " could not be fetched. Check its raw GitHub URL.", "Part " .. tostring(i) .. ": " .. tostring(reason))
                     end
-                elseif not string.find(body, RELEASE_PART_MARKERS[i], 1, true) then
-                    if not failed then
-                        failed = true
-                        fail("Build mismatch", "Part " .. tostring(i) .. " is not marked as Noir V6.1. Upload all three release parts, then retry.", "release marker missing from Part " .. tostring(i))
-                    end
                 else
                     chunks[i] = body
                     completed = completed + 1
                     if not failed then
                         setProgress((completed / #RAW) * 0.72)
-                        setStatus("Downloading modules", "Received " .. tostring(completed) .. " of " .. tostring(#RAW) .. " V6.1 parts…", "loading")
+                        setStatus("Downloading modules", "Received " .. tostring(completed) .. " of " .. tostring(#RAW) .. " modules…", "loading")
                     end
                 end
                 finished = finished + 1
@@ -2660,7 +2650,7 @@ startLoading = function()
         if failed then return end
 
         loaderRecord.status = "compiling"
-        setStatus("Compiling build", "Joining the three verified V6.1 modules into one Noir chunk…", "loading")
+        setStatus("Compiling build", "Joining the three downloaded modules into one Noir chunk…", "loading")
         setProgress(0.84)
         if type(loadFn) ~= "function" then
             fail("Compiler unavailable", "This executor does not expose loadstring.", "loadstring/load is nil on " .. executorName)
@@ -2682,7 +2672,7 @@ startLoading = function()
         if not active or myAttempt ~= attemptId then return end
         loaderRecord.status = "launching"
         loaderRecord.startedAt = os.clock()
-        setStatus("Launching Noir V6.1", "Starting the Event Horizon hub in the current session…", "loading")
+        setStatus("Launching Noir", "Starting the Event Horizon hub in the current session…", "loading")
         setProgress(0.94)
         local runOk, runError = pcall(runChunk)
         runChunk = nil
@@ -2695,7 +2685,7 @@ startLoading = function()
         local hubState = G[HUB_LOCK_KEY]
         if type(hubState) ~= "table" or hubState.state ~= "running" then
             clearStartingHubGuard()
-            fail("Hub startup incomplete", "Noir did not finish its startup guard. Update the three GitHub parts and retry.", "hub did not report running state")
+            fail("Hub startup incomplete", "Noir did not finish starting. Check the downloaded files and retry.", "hub did not report running state")
             return
         end
 
@@ -2703,7 +2693,7 @@ startLoading = function()
         loaderRecord.startedAt = os.clock()
         busy = false
         setProgress(1)
-        setStatus("Noir V6.1 is ready", "The Event Horizon hub has started successfully.", "success")
+        setStatus("Noir is ready", "The Event Horizon hub has started successfully.", "success")
         task.wait(0.42)
         closeLoader()
     end)
