@@ -767,7 +767,7 @@ text(pill, "\x43onnected", 13, UDim2.fromOffset(26, 7))
 local heroCard = New("\x46rame", { Parent = dashboard, Position = UDim2.fromOffset(446, 0), Size = UDim2.new(1, -446, 0, 168), BackgroundColor3 = C.card, BackgroundTransparency = .12, ClipsDescendants = true })
 corner(heroCard, 18); stroke(heroCard, C.border, .38)
 New("\x55IGradient", { Parent = heroCard, Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(22,24,29)), ColorSequenceKeypoint.new(1, Color3.fromRGB(5,6,9)) }), Rotation = 25 })
-__NOIR_GUARD.blackhole.HeroMark = __NOIR_GUARD.blackhole.Create(heroCard, UDim2.new(1, -166, 0, 5), 156, Vector2.zero, 2, 14)
+__NOIR_GUARD.blackhole.HeroMark = __NOIR_GUARD.blackhole.Create(heroCard, UDim2.new(1, -166, 0, 5), 156, Vector2.zero, 2, 14);
 (function()
     local heroTitle = text(heroCard, "\x4eOIR  /  EVENT HORIZON", 21, UDim2.fromOffset(26, 22)); heroTitle.Size = UDim2.fromOffset(248, 32); heroTitle.Font = Enum.Font.GothamBold
     local heroSubtitle = text(heroCard, "\x566.1  •  BLACK-HOLE INTERFACE", 11, UDim2.fromOffset(27, 58), true); heroSubtitle.Size = UDim2.fromOffset(236, 20)
