@@ -3058,16 +3058,20 @@ New("UIGradient", { Parent = win, Color = ColorSequence.new({
 
 -- Animated event-horizon backdrop: the compact 96-frame sheet cycles at 24 Hz
 -- behind every page; a left-weighted shade keeps the copy readable.
-local backdrop = New("ImageLabel", { Parent = win, Name = "EventHorizonBackdrop", Size = UDim2.fromScale(1, 1),
-    BackgroundTransparency = 1, Image = blackholeSpriteAsset, ImageRectSize = Vector2.new(96, 96),
-    ImageRectOffset = Vector2.new(0, 0), ScaleType = Enum.ScaleType.Crop, ImageTransparency = .58,
-    Visible = blackholeSpriteAsset ~= "", ZIndex = 0 })
-local backdropShade = New("Frame", { Parent = win, Name = "BackdropShade", Size = UDim2.fromScale(1, 1),
-    BackgroundColor3 = C.base, BorderSizePixel = 0, ZIndex = 0 })
-New("UIGradient", { Parent = backdropShade, Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, .16), NumberSequenceKeypoint.new(.45, .52), NumberSequenceKeypoint.new(1, .84) }),
-    Color = ColorSequence.new(Color3.fromRGB(3,4,6), Color3.fromRGB(3,4,6)) })
-if blackholeSpriteAsset ~= "" then __NOIR_GUARD.blackhole.Register(backdrop) end
+-- Kept in a do-block: the combined parts already sit near Luau's 200-register
+-- cap for the main chunk, so these locals must free immediately.
+do
+    local backdrop = New("ImageLabel", { Parent = win, Name = "EventHorizonBackdrop", Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1, Image = blackholeSpriteAsset, ImageRectSize = Vector2.new(96, 96),
+        ImageRectOffset = Vector2.new(0, 0), ScaleType = Enum.ScaleType.Crop, ImageTransparency = .58,
+        Visible = blackholeSpriteAsset ~= "", ZIndex = 0 })
+    local backdropShade = New("Frame", { Parent = win, Name = "BackdropShade", Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = C.base, BorderSizePixel = 0, ZIndex = 0 })
+    New("UIGradient", { Parent = backdropShade, Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, .16), NumberSequenceKeypoint.new(.45, .52), NumberSequenceKeypoint.new(1, .84) }),
+        Color = ColorSequence.new(Color3.fromRGB(3,4,6), Color3.fromRGB(3,4,6)) })
+    if blackholeSpriteAsset ~= "" then __NOIR_GUARD.blackhole.Register(backdrop) end
+end
 
 local navButtons, navIcons = {}, {}
 local sidebar = New("Frame", { Parent = win, Size = UDim2.fromOffset(240, 700), BackgroundColor3 = C.surface, BackgroundTransparency = .42 })
@@ -3081,7 +3085,7 @@ local logo = New("TextLabel", { Parent = sidebar, Position = UDim2.fromOffset(84
     BackgroundTransparency = 1, Text = "NOIR", TextColor3 = C.text, TextSize = 32, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left })
 New("UIGradient", { Parent = logo, Color = ColorSequence.new(C.text, C.accent2), Rotation = 0 })
 text(sidebar, "EVENT HORIZON  //  CLIENT", 9, UDim2.fromOffset(86, 75), true)
-local navState = { active = "home" }
+__NOIR_GUARD.navState = { active = "home" }
 do
     local navDefs = {
         { "home",   16898613509, Vector2.new(820, 147), "Home" },
@@ -3169,7 +3173,7 @@ do
         local restY = 108 + (i - 1) * 44
         b.MouseEnter:Connect(function()
             TweenService:Create(b, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.fromOffset(18, restY) }):Play()
-            if navState.active ~= d[1] then
+            if __NOIR_GUARD.navState.active ~= d[1] then
                 TweenService:Create(b, TweenInfo.new(.22), { BackgroundColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = .96 }):Play()
                 TweenService:Create(navStroke, TweenInfo.new(.22), { Transparency = .80 }):Play()
                 TweenService:Create(lbl, TweenInfo.new(.22), { TextColor3 = Color3.fromRGB(232,234,240) }):Play()
@@ -3180,7 +3184,7 @@ do
         end)
         b.MouseLeave:Connect(function()
             TweenService:Create(b, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.fromOffset(16, restY) }):Play()
-            if navState.active ~= d[1] then
+            if __NOIR_GUARD.navState.active ~= d[1] then
                 TweenService:Create(b, TweenInfo.new(.22), { BackgroundColor3 = C.surface, BackgroundTransparency = 1 }):Play()
                 TweenService:Create(navStroke, TweenInfo.new(.22), { Transparency = .88 }):Play()
                 TweenService:Create(lbl, TweenInfo.new(.22), { TextColor3 = C.dim }):Play()
@@ -3622,7 +3626,7 @@ do
             TweenService:Create(newScale, TweenInfo.new(.30, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = 1 }):Play()
         end
         configContent.Visible = false
-        navState.active = page
+        __NOIR_GUARD.navState.active = page
         for name, b in pairs(navButtons) do
             local active = name == page
             TweenService:Create(b, TweenInfo.new(.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = active and C.card or C.surface, BackgroundTransparency = active and .16 or 1 }):Play()
