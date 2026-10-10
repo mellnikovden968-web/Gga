@@ -244,13 +244,13 @@ __NOIR_GUARD.SetupNoirSpeedGlitch = function()
                 ColorSequenceKeypoint.new(.55,C.dim), ColorSequenceKeypoint.new(.78,C.accent2), ColorSequenceKeypoint.new(1,C.dim),
             }) })
             
-            local _, mark = __NOIR_GUARD.blackhole.Create(button, UDim2.new(.5,0,.38,0), math.floor(speed.toggleSize * .52), Vector2.new(.5,.5), 92, math.floor(speed.toggleSize * .26))
+            pcall(function() __NOIR_GUARD.blackhole.StyleFloat(button, nil) end)
             local label = New("TextLabel", { Parent = button, Name = "SpeedStatus", AnchorPoint = Vector2.new(.5,.5),
                 Position = UDim2.new(.5,0,.82,0), Size = UDim2.new(.92,0,0,math.max(13,math.floor(speed.toggleSize*.18))),
                 BackgroundTransparency = 1, Text = "GLITCH  //  OFF", TextColor3 = C.text,
                 TextSize = math.clamp(math.floor(speed.toggleSize*.14),8,12), Font = Enum.Font.GothamBold,
                 TextScaled = false, TextWrapped = true, ZIndex = 94 })
-            speed.screenGui, speed.toggleButton, speed.mark = screen, button, mark
+            speed.screenGui, speed.toggleButton, speed.mark = screen, button, nil
             updateButtonVisual()
             local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
             speed.uiConnections[#speed.uiConnections + 1] = button.InputBegan:Connect(function(input)
@@ -2427,12 +2427,6 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     innerButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     ImageButton.Parent = Bind_GetStorage()
     buttonMaid:GiveTask(ImageButton)
-    local firstMarkPixels = math.max(22, math.floor(buttonSizeY * screen.Y * .27))
-    local firstMarkRoot, firstMark = __NOIR_GUARD.blackhole.Create(ImageButton, __UD2(.5,0,.38,0), firstMarkPixels, __V2(.5,.5), 4, math.max(11, math.floor(firstMarkPixels*.5)), false)
-    firstMarkRoot.Size = __UD2(.52,0,.52,0)
-    local firstMarkCorner = firstMarkRoot:FindFirstChildOfClass("UICorner")
-    if firstMarkCorner then firstMarkCorner.CornerRadius = __UD(1,0) end
-    if firstMark.image then firstMark.image.ImageTransparency = .08 end
 
     local TextLabel = Instance.new("TextLabel", ImageButton)
     TextLabel.Name = "@Text"
@@ -2483,6 +2477,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     sound.SoundId = "rbxassetid://3868133279"
     sound.Volume = muteButtonSounds and 0 or 0.5
     sound.Parent = ImageButton
+    pcall(function() __NOIR_GUARD.blackhole.StyleFloat(ImageButton, sound) end)
 
     Bind_MakeDraggable(ImageButton, buttonMaid, ripple, sound, clickFunc, function(position)
         BindableButtons.SavePosition(id, position)
@@ -3819,12 +3814,6 @@ function WallhopBindableButtons.AddBButton(id, text, onFunc, offFunc)
     local BindValue = Instance.new("BoolValue", ImageButton)
     BindValue.Name = "BindValue"
 
-    local wallhopMarkPixels = math.max(22, math.floor(buttonSizeY * screen.Y * .27))
-    local wallhopMarkRoot, wallhopMark = __NOIR_GUARD.blackhole.Create(ImageButton, UDim2.new(.5,0,.38,0), wallhopMarkPixels, Vector2.new(.5,.5), 4, math.max(11, math.floor(wallhopMarkPixels*.5)), false)
-    wallhopMarkRoot.Size = UDim2.new(.52,0,.52,0)
-    local wallhopMarkCorner = wallhopMarkRoot:FindFirstChildOfClass("UICorner")
-    if wallhopMarkCorner then wallhopMarkCorner.CornerRadius = UDim.new(1,0) end
-    if wallhopMark.image then wallhopMark.image.ImageTransparency = .08 end
     local TextLabel = Instance.new("TextLabel", ImageButton)
     TextLabel.Name = "@Text"
     TextLabel.Size = UDim2.new(0.92, 0, 0.22, 0)
@@ -3871,6 +3860,7 @@ function WallhopBindableButtons.AddBButton(id, text, onFunc, offFunc)
     sound.SoundId = "rbxassetid://3868133279"
     sound.Volume = 0.5
     sound.Parent = ImageButton
+    pcall(function() __NOIR_GUARD.blackhole.StyleFloat(ImageButton, sound) end)
 
     local debounce = false
     local tInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
@@ -5333,12 +5323,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
     innerGradient.Rotation = 180
     innerGradient.Parent = innerStroke
 
-    local markPixels = math.max(22, math.floor(diameter * .27))
-    local markRoot, mark = __NOIR_GUARD.blackhole.Create(ImageButton, ud2(.5,0,.38,0), markPixels, v2(.5,.5), 4, math.max(11, math.floor(markPixels*.5)), false)
-    markRoot.Size = ud2(.52,0,.52,0)
-    local markCorner = markRoot:FindFirstChildOfClass("UICorner")
-    if markCorner then markCorner.CornerRadius = ud(1,0) end
-    if mark.image then mark.image.ImageTransparency = .08 end
+    pcall(function() __NOIR_GUARD.blackhole.StyleFloat(ImageButton, nil, true) end)
     local TextLabel = new("TextLabel", ImageButton)
     TextLabel.Name = "@Text"
     TextLabel.Size = ud2(0.92, 0, 0.22, 0)

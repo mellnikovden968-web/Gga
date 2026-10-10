@@ -3029,6 +3029,51 @@ end
         Register = function(image)
             if typeof(image) == "Instance" then table.insert(blackholeFrames, image) end
         end,
+        StyleFloat = function(button, existingSound, skipScale)
+            if typeof(button) ~= "Instance" then return end
+            local base = button.BackgroundTransparency
+            local snd = existingSound
+            if snd == nil then
+                snd = Instance.new("Sound")
+                snd.Name = "NoirFloatSound"; snd.SoundId = "rbxassetid://3868133279"; snd.Volume = .4; snd.Parent = button
+            end
+            local sc = button:FindFirstChildOfClass("UIScale")
+            if not sc and not skipScale then sc = Instance.new("UIScale"); sc.Parent = button end
+            local qOut = TweenInfo.new(.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+            local qBack = TweenInfo.new(.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+            if not skipScale then
+                button.MouseEnter:Connect(function()
+                    TweenService:Create(button, qOut, { BackgroundTransparency = math.max(0, base - .14) }):Play()
+                    TweenService:Create(sc, qOut, { Scale = 1.07 }):Play()
+                end)
+                button.MouseLeave:Connect(function()
+                    TweenService:Create(button, qOut, { BackgroundTransparency = base }):Play()
+                    TweenService:Create(sc, qOut, { Scale = 1 }):Play()
+                end)
+                button.MouseButton1Up:Connect(function()
+                    TweenService:Create(sc, qBack, { Scale = 1.07 }):Play()
+                end)
+            end
+            button.MouseButton1Down:Connect(function()
+                pcall(function() snd:Play() end)
+                if not skipScale then TweenService:Create(sc, qOut, { Scale = .94 }):Play() end
+            end)
+            task.spawn(function()
+                local grads = {}
+                for _, ch in ipairs(button:GetChildren()) do
+                    if ch:IsA("UIStroke") then
+                        local g = ch:FindFirstChildOfClass("UIGradient")
+                        if g then grads[#grads + 1] = g end
+                    end
+                end
+                local rot = 0
+                while button.Parent do
+                    rot = (rot + 2.2) % 360
+                    for _, g in ipairs(grads) do g.Rotation = rot end
+                    task.wait(1 / 30)
+                end
+            end)
+        end,
         HeroMark = nil,
         LastWindowPosition = nil,
         TransitionBusy = false,
@@ -3040,7 +3085,7 @@ __NOIR_GUARD.gui = gui
 local scale = New("UIScale", { Parent = gui, Scale = 1 })
 function rescale()
     local v = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-    scale.Scale = math.clamp(math.min(v.X / 1240, v.Y / 740, 0.75), 0.24, 1)
+    scale.Scale = math.clamp(math.min(v.X / 1240, v.Y / 740, 0.66), 0.24, 1)
 end
 rescale()
 if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
@@ -3063,19 +3108,19 @@ New("UIGradient", { Parent = win, Color = ColorSequence.new({
 do
     local backdrop = New("ImageLabel", { Parent = win, Name = "EventHorizonBackdrop", Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1, Image = blackholeSpriteAsset, ImageRectSize = Vector2.new(96, 96),
-        ImageRectOffset = Vector2.new(0, 0), ScaleType = Enum.ScaleType.Crop, ImageTransparency = .58,
+        ImageRectOffset = Vector2.new(0, 0), ScaleType = Enum.ScaleType.Crop, ImageTransparency = .40,
         Visible = blackholeSpriteAsset ~= "", ZIndex = 0 })
     local backdropShade = New("Frame", { Parent = win, Name = "BackdropShade", Size = UDim2.fromScale(1, 1),
         BackgroundColor3 = C.base, BorderSizePixel = 0, ZIndex = 0 })
     New("UIGradient", { Parent = backdropShade, Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, .16), NumberSequenceKeypoint.new(.45, .52), NumberSequenceKeypoint.new(1, .84) }),
+        NumberSequenceKeypoint.new(0, .34), NumberSequenceKeypoint.new(.45, .58), NumberSequenceKeypoint.new(1, .78) }),
         Color = ColorSequence.new(Color3.fromRGB(3,4,6), Color3.fromRGB(3,4,6)) })
     if blackholeSpriteAsset ~= "" then __NOIR_GUARD.blackhole.Register(backdrop) end
 end
 
 local navButtons, navIcons = {}, {}
 local sidebar = New("Frame", { Parent = win, Size = UDim2.fromOffset(240, 700), BackgroundColor3 = C.surface, BackgroundTransparency = .42 })
-corner(sidebar, 22); stroke(sidebar, C.border, .68)
+corner(sidebar, 22); stroke(sidebar, C.border, .8)
 local sidebarMark = __NOIR_GUARD.blackhole.Create(sidebar, UDim2.fromOffset(22, 28), 50, Vector2.zero, 5, 25)
 local sidebarInitial = New("TextLabel", { Parent = sidebar, Name = "BrandInitial", Position = UDim2.fromOffset(22, 28), Size = UDim2.fromOffset(50, 50),
     BackgroundTransparency = 1, Text = "N", TextColor3 = C.text, TextSize = 34, Font = Enum.Font.GothamBold,
@@ -3256,6 +3301,15 @@ function styleCircularButton(b, diameter)
     
     local inner = New("UIStroke", { Parent = b, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
     local innerGradient = gradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner
+    task.spawn(function()
+        local rot = 0
+        while b and b.Parent do
+            rot = (rot + 2.2) % 360
+            gradient.Rotation = rot
+            inner.Rotation = rot + 180
+            task.wait(1 / 30)
+        end
+    end)
     
     local sound = Instance.new("Sound")
     sound.Name = "NoirButtonSound"; sound.SoundId = "rbxassetid://3868133279"; sound.Volume = .35; sound.Parent = b
@@ -3357,8 +3411,6 @@ local restore = New("TextButton", { Parent = gui, AnchorPoint = Vector2.new(1, .
     Size = UDim2.fromOffset(62, 62), BackgroundColor3 = C.panel, Text = "", TextColor3 = C.text, TextSize = 30,
     Font = Enum.Font.GothamBold, Visible = false, AutoButtonColor = false })
 styleCircularButton(restore, 62)
-local _, restoreMark = __NOIR_GUARD.blackhole.Create(restore, UDim2.fromScale(.5, .5), 48, Vector2.new(.5, .5), restore.ZIndex + 1, 24)
-if restoreMark.image then restoreMark.image.ImageTransparency = .12 end
 local restoreInitial = New("TextLabel", { Parent = restore, Name = "RestoreInitial", AnchorPoint = Vector2.new(.5, .5),
     Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.82, .82), BackgroundTransparency = 1, Text = "N",
     TextColor3 = C.text, TextSize = 34, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Center,
@@ -3564,7 +3616,7 @@ task.spawn(function()
     while gui.Parent do
         if __NOIR_GUARD.blackhole.SpriteAsset ~= "" and (win.Visible or restore.Visible) then
             __NOIR_GUARD.blackhole.Advance()
-            task.wait(1 / 24)
+            task.wait(1 / 12) -- slower cinematic cadence: frames step 1, 2, 3...
         else
             task.wait(.35)
         end
@@ -3642,6 +3694,7 @@ do
                 end
                 TweenService:Create(data.label, TweenInfo.new(.2), { TextColor3 = active and C.text or C.dim }):Play()
                 TweenService:Create(data.bar, TweenInfo.new(.2), { BackgroundTransparency = active and .16 or 1 }):Play()
+                data.bar.Visible = active
                 if data.barTween then pcall(function() data.barTween:Cancel() end) data.barTween = nil end
                 if data.glowTween then pcall(function() data.glowTween:Cancel() end) data.glowTween = nil end
                 if active then
@@ -7452,12 +7505,7 @@ local function createGrabGunBindButton()
     local innerGradient = outerGradient:Clone()
     innerGradient.Rotation = 180
     innerGradient.Parent = innerStroke
-    local grabSize = math.max(24, math.floor(gunUtilityState.bindButtonSize * (Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize.Y or 720) * .52))
-    local grabMarkRoot, grabMark = __NOIR_GUARD.blackhole.Create(button, UDim2.new(.5,0,.38,0), grabSize, Vector2.new(.5,.5), 7, math.floor(grabSize*.5), false)
-    grabMarkRoot.Size = UDim2.fromScale(.52,.52)
-    local grabCorner = grabMarkRoot:FindFirstChildOfClass("UICorner")
-    if grabCorner then grabCorner.CornerRadius = UDim.new(1,0) end
-    if grabMark.image then grabMark.image.ImageTransparency = .08 end
+    pcall(function() __NOIR_GUARD.blackhole.StyleFloat(button, nil) end)
     local textLabel = Instance.new("TextLabel")
     textLabel.Name = "Text"
     textLabel.AnchorPoint = Vector2.new(.5, .5)
@@ -8547,12 +8595,7 @@ do
             local innerStroke = Instance.new("UIStroke")
             innerStroke.Color, innerStroke.Transparency, innerStroke.Thickness, innerStroke.Parent = Color3.fromRGB(105,105,112), .5, 1, button
             local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = innerStroke
-            local invisibleSize = math.max(22, math.floor(universalState.invisibleBindSize * (Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize.Y or 720) * .27))
-            local invisibleMarkRoot, invisibleMark = __NOIR_GUARD.blackhole.Create(button, UDim2.new(.5,0,.38,0), invisibleSize, Vector2.new(.5,.5), 7, math.max(11, math.floor(invisibleSize*.5)), false)
-            invisibleMarkRoot.Size = UDim2.fromScale(.52,.52)
-            local invisibleMarkCorner = invisibleMarkRoot:FindFirstChildOfClass("UICorner")
-            if invisibleMarkCorner then invisibleMarkCorner.CornerRadius = UDim.new(1,0) end
-            if invisibleMark.image then invisibleMark.image.ImageTransparency = .08 end
+            pcall(function() __NOIR_GUARD.blackhole.StyleFloat(button, nil) end)
             local label = Instance.new("TextLabel")
             label.Name, label.AnchorPoint, label.Position, label.Size = "Text", Vector2.new(.5,.5), UDim2.new(.5,0,.82,0), UDim2.new(.92,0,.22,0)
             label.BackgroundTransparency, label.TextColor3, label.TextSize, label.TextScaled, label.TextWrapped, label.Font, label.ZIndex = 1, Color3.fromRGB(245,245,248), 11, true, true, Enum.Font.GothamBold, 13
