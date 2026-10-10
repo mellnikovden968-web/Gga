@@ -245,6 +245,7 @@ __NOIR_GUARD.SetupNoirSpeedGlitch = function()
             }) })
             
             pcall(function() __NOIR_GUARD.blackhole.StyleFloat(button, nil) end)
+            pcall(function() __NOIR_GUARD.floatIcon(button, "GLITCH") end)
             local label = New("TextLabel", { Parent = button, Name = "SpeedStatus", AnchorPoint = Vector2.new(.5,.5),
                 Position = UDim2.new(.5,0,.82,0), Size = UDim2.new(.92,0,0,math.max(13,math.floor(speed.toggleSize*.18))),
                 BackgroundTransparency = 1, Text = "GLITCH  //  OFF", TextColor3 = C.text,
@@ -2478,6 +2479,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold, customSize)
     sound.Volume = muteButtonSounds and 0 or 0.5
     sound.Parent = ImageButton
     pcall(function() __NOIR_GUARD.blackhole.StyleFloat(ImageButton, sound) end)
+    pcall(function() __NOIR_GUARD.floatIcon(ImageButton, text) end)
 
     Bind_MakeDraggable(ImageButton, buttonMaid, ripple, sound, clickFunc, function(position)
         BindableButtons.SavePosition(id, position)
@@ -3861,6 +3863,7 @@ function WallhopBindableButtons.AddBButton(id, text, onFunc, offFunc)
     sound.Volume = 0.5
     sound.Parent = ImageButton
     pcall(function() __NOIR_GUARD.blackhole.StyleFloat(ImageButton, sound) end)
+    pcall(function() __NOIR_GUARD.floatIcon(ImageButton, text, "WH") end)
 
     local debounce = false
     local tInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
@@ -5324,6 +5327,7 @@ function BindableButtons.AddBButton(id, text, clickFunc, isGold)
     innerGradient.Parent = innerStroke
 
     pcall(function() __NOIR_GUARD.blackhole.StyleFloat(ImageButton, nil, true) end)
+    pcall(function() __NOIR_GUARD.floatIcon(ImageButton, text) end)
     local TextLabel = new("TextLabel", ImageButton)
     TextLabel.Name = "@Text"
     TextLabel.Size = ud2(0.92, 0, 0.22, 0)
