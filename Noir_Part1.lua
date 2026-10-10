@@ -1,3 +1,4 @@
+-- NOIR_EVENT_HORIZON_V6_2_PART_1
 local Players           = game:GetService("Players")
 local UIS               = game:GetService("UserInputService")
 local TweenService      = game:GetService("TweenService")
@@ -179,7 +180,7 @@ local C = {
     base = Color3.fromRGB(3,4,6), surface = Color3.fromRGB(15,17,21), panel = Color3.fromRGB(10,12,16),
     card = Color3.fromRGB(18,20,25), border = Color3.fromRGB(91,98,110), accent = Color3.fromRGB(216,222,232),
     accent2 = Color3.fromRGB(245,247,250), text = Color3.fromRGB(239,242,247), dim = Color3.fromRGB(142,150,162),
-    off = Color3.fromRGB(37,40,47), btn = Color3.fromRGB(25,28,34),
+    off = Color3.fromRGB(37,40,47), btn = Color3.fromRGB(8,9,12),
 }
 function New(class, props)
     local x = Instance.new(class)
@@ -1014,7 +1015,7 @@ do
     end
 end
 local blackholeFrames = {}
-local function createBlackholeMark(parent, position, size, anchorPoint, zIndex, radius)
+local function createBlackholeMark(parent, position, size, anchorPoint, zIndex, radius, animated)
     local z = zIndex or 4
     local root = New("Frame", { Parent = parent, Name = "NoirSingularityMark", AnchorPoint = anchorPoint or Vector2.zero,
         Position = position or UDim2.new(), Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1,
@@ -1046,11 +1047,11 @@ local function createBlackholeMark(parent, position, size, anchorPoint, zIndex, 
         Visible = blackholeSpriteAsset ~= "", ZIndex = z + 4 })
     if blackholeSpriteAsset ~= "" then
         fallback.Visible = false
-    else
+    elseif animated ~= false then
         local idleRing = TweenService:Create(ring, TweenInfo.new(14, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1, false), { Rotation = ring.Rotation + 360 })
         idleRing:Play()
     end
-    table.insert(blackholeFrames, image)
+    if animated ~= false then table.insert(blackholeFrames, image) end
     return root, { root = root, image = image, fallback = fallback, ring = ring, ringStroke = ringStroke, core = core, flare = flare }
 end
 
@@ -1098,7 +1099,11 @@ New("UIGradient", { Parent = win, Color = ColorSequence.new({
 local navButtons, navIcons = {}, {}
 local sidebar = New("Frame", { Parent = win, Size = UDim2.fromOffset(240, 700), BackgroundColor3 = C.surface, BackgroundTransparency = .28 })
 corner(sidebar, 22); stroke(sidebar, C.border, .68)
-__NOIR_GUARD.blackhole.Create(sidebar, UDim2.fromOffset(22, 28), 50, Vector2.zero, 5, 25)
+local sidebarMark = __NOIR_GUARD.blackhole.Create(sidebar, UDim2.fromOffset(22, 28), 50, Vector2.zero, 5, 25)
+local sidebarInitial = New("TextLabel", { Parent = sidebar, Name = "BrandInitial", Position = UDim2.fromOffset(22, 28), Size = UDim2.fromOffset(50, 50),
+    BackgroundTransparency = 1, Text = "N", TextColor3 = C.text, TextSize = 34, Font = Enum.Font.GothamBold,
+    TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center, TextStrokeColor3 = C.base,
+    TextStrokeTransparency = .12, Active = false, ZIndex = 10 })
 local logo = New("TextLabel", { Parent = sidebar, Position = UDim2.fromOffset(84, 32), Size = UDim2.fromOffset(136, 42),
     BackgroundTransparency = 1, Text = "NOIR", TextColor3 = C.text, TextSize = 32, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left })
 New("UIGradient", { Parent = logo, Color = ColorSequence.new(C.text, C.accent2), Rotation = 0 })
@@ -1120,6 +1125,7 @@ do
         local b = New("TextButton", { Parent = sidebar, Position = UDim2.fromOffset(16, 108 + (i - 1) * 44), Size = UDim2.fromOffset(208, 42),
             BackgroundColor3 = C.surface, BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Name = d[4] })
         corner(b, 12)
+        local navStroke = stroke(b, C.border, .88); navStroke.Thickness = 1
         local ic = New("ImageLabel", { Parent = b, Position = UDim2.fromOffset(14, 11), Size = UDim2.fromOffset(24, 24),
             BackgroundTransparency = 1, Image = "rbxassetid://" .. d[2], ImageRectSize = Vector2.new(48, 48), ImageRectOffset = d[3],
             ImageColor3 = C.dim })
@@ -1186,7 +1192,7 @@ do
                 corner(dot, 2); glyphs[#glyphs + 1] = dot
             end
         end
-        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, label = lbl, bar = bar, glyphs = glyphs, rings = rings }
+        navButtons[d[1]] = b; navIcons[d[1]] = { icon = ic, label = lbl, bar = bar, glyphs = glyphs, rings = rings, stroke = navStroke }
     end
 end
 local status = New("Frame", { Parent = sidebar, Position = UDim2.fromOffset(16, 596), Size = UDim2.fromOffset(208, 84), BackgroundColor3 = C.panel, BackgroundTransparency = .18 })
@@ -1350,7 +1356,13 @@ local restore = New("TextButton", { Parent = gui, AnchorPoint = Vector2.new(1, .
     Size = UDim2.fromOffset(62, 62), BackgroundColor3 = C.panel, Text = "", TextColor3 = C.text, TextSize = 30,
     Font = Enum.Font.GothamBold, Visible = false, AutoButtonColor = false })
 styleCircularButton(restore, 62)
-__NOIR_GUARD.blackhole.Create(restore, UDim2.fromScale(.5, .5), 48, Vector2.new(.5, .5), restore.ZIndex + 1, 24)
+local _, restoreMark = __NOIR_GUARD.blackhole.Create(restore, UDim2.fromScale(.5, .5), 48, Vector2.new(.5, .5), restore.ZIndex + 1, 24)
+if restoreMark.image then restoreMark.image.ImageTransparency = .12 end
+local restoreInitial = New("TextLabel", { Parent = restore, Name = "RestoreInitial", AnchorPoint = Vector2.new(.5, .5),
+    Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.82, .82), BackgroundTransparency = 1, Text = "N",
+    TextColor3 = C.text, TextSize = 34, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Center,
+    TextYAlignment = Enum.TextYAlignment.Center, TextStrokeColor3 = C.base, TextStrokeTransparency = .10,
+    Active = false, ZIndex = 27 })
 local restoreDragging, restoreMoved, restoreStart, restorePos = false, false, nil, nil
 restore.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -1618,6 +1630,7 @@ do
             TweenService:Create(b, TweenInfo.new(.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = active and C.card or C.surface, BackgroundTransparency = active and 0 or 1 }):Play()
             local data = navIcons[name]
             if data then
+                if data.stroke then TweenService:Create(data.stroke, TweenInfo.new(.2), { Color = active and C.accent2 or C.border, Transparency = active and .66 or .88 }):Play() end
                 TweenService:Create(data.icon, TweenInfo.new(.2), { ImageColor3 = active and C.accent or C.dim }):Play()
                 if data.glyphs then
                     for _, glyph in ipairs(data.glyphs) do TweenService:Create(glyph, TweenInfo.new(.2), { BackgroundColor3 = active and C.accent or C.dim }):Play() end
@@ -1801,14 +1814,21 @@ function host.CreateTab()
             local state = savedToggle == true
             local r = row(label, 52)
             local pill = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(64, 34),
-                BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
-            corner(pill, 17); stroke(pill, C.border, .55)
+                BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .16, BorderSizePixel = 0, Text = "", AutoButtonColor = false })
+            corner(pill, 17)
+            local pillStroke = stroke(pill, C.border, .30); pillStroke.Thickness = 1.35
             local dot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = Color3.fromRGB(150,155,162) })
             corner(dot, 13)
             local function set(v, persist)
                 state = v == true
-                TweenService:Create(pill, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = state and C.accent or C.off }):Play()
-                TweenService:Create(dot, TweenInfo.new(.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = state and UDim2.fromOffset(34, 4) or UDim2.fromOffset(4, 4), BackgroundColor3 = state and Color3.new(1, 1, 1) or Color3.fromRGB(150,155,162), Size = UDim2.fromOffset(30, 30) }):Play()
+                TweenService:Create(pill, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                    BackgroundColor3 = state and Color3.fromRGB(22,24,29) or Color3.fromRGB(7,8,11),
+                    BackgroundTransparency = state and .04 or .16,
+                }):Play()
+                TweenService:Create(pillStroke, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                    Color = state and C.accent2 or C.border, Transparency = state and .05 or .30,
+                }):Play()
+                TweenService:Create(dot, TweenInfo.new(.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = state and UDim2.fromOffset(34, 4) or UDim2.fromOffset(4, 4), BackgroundColor3 = state and C.accent2 or Color3.fromRGB(150,155,162), Size = UDim2.fromOffset(30, 30) }):Play()
                 task.delay(.20, function() if dot.Parent then TweenService:Create(dot, TweenInfo.new(.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(26, 26) }):Play() end end)
                 callback(state)
                 if persist ~= false then NoirPersistence.data.toggles[storagePrefix .. label] = state; NoirPersistence.Save() end
@@ -1827,10 +1847,22 @@ function host.CreateTab()
         end
         function api:AddButton(label, callback)
             local b = New("TextButton", { Parent = holder, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
-                Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
-            corner(b, 12); stroke(b, C.border, .5)
-            b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(48,52,56) }):Play() end)
-            b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn }):Play() end)
+                BackgroundTransparency = .14, BorderSizePixel = 0, Text = label, TextColor3 = C.text, TextSize = 15,
+                Font = Enum.Font.GothamMedium, AutoButtonColor = false })
+            corner(b, 11)
+            local edge = stroke(b, C.border, .24); edge.Thickness = 1.35
+            local press = New("UIScale", { Parent = b, Scale = 1 })
+            b.MouseEnter:Connect(function()
+                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                TweenService:Create(edge, TweenInfo.new(.18), { Transparency = .05 }):Play()
+            end)
+            b.MouseLeave:Connect(function()
+                TweenService:Create(b, TweenInfo.new(.20), { BackgroundColor3 = C.btn, BackgroundTransparency = .14 }):Play()
+                TweenService:Create(edge, TweenInfo.new(.20), { Transparency = .24 }):Play()
+                TweenService:Create(press, TweenInfo.new(.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+            end)
+            b.MouseButton1Down:Connect(function() TweenService:Create(press, TweenInfo.new(.10, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = .975 }):Play() end)
+            b.MouseButton1Up:Connect(function() TweenService:Create(press, TweenInfo.new(.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = 1 }):Play() end)
             local lastClick = 0
             local function fire()
                 local now = os.clock()
@@ -1891,8 +1923,19 @@ function host.CreateTab()
             local r = row(label, 56)
             local idx = table.find(values, NoirPersistence.data.dropdowns[storagePrefix .. label]) or 1
             local b = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 4), Size = UDim2.fromOffset(190, 42),
-                BackgroundColor3 = C.surface, Text = tostring(values[1] or "None") .. "  ⌄", TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, ZIndex = 5 })
-            corner(b, 10); stroke(b)
+                BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0,
+                Text = tostring(values[1] or "None") .. "  ⌄", TextColor3 = C.text, TextSize = 14, Font = Enum.Font.GothamMedium,
+                AutoButtonColor = false, ZIndex = 5 })
+            corner(b, 10)
+            local dropdownEdge = stroke(b, C.border, .26); dropdownEdge.Thickness = 1.25
+            b.MouseEnter:Connect(function()
+                TweenService:Create(b, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .03 }):Play()
+                TweenService:Create(dropdownEdge, TweenInfo.new(.16), { Transparency = .05 }):Play()
+            end)
+            b.MouseLeave:Connect(function()
+                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12 }):Play()
+                TweenService:Create(dropdownEdge, TweenInfo.new(.18), { Transparency = .26 }):Play()
+            end)
             local popup
             local function close() if popup then popup:Destroy(); popup = nil end end
             local function set(v)
@@ -1909,8 +1952,19 @@ function host.CreateTab()
                 corner(popup, 10); stroke(popup, C.accent, .2)
                 New("UIListLayout", { Parent = popup, SortOrder = Enum.SortOrder.LayoutOrder })
                 for _, v in ipairs(values) do
-                    local item = New("TextButton", { Parent = popup, Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, Text = tostring(v),
-                        TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, ZIndex = 51 })
+                    local item = New("TextButton", { Parent = popup, Size = UDim2.new(1, 0, 0, 38), BackgroundColor3 = Color3.fromRGB(7,8,11),
+                        BackgroundTransparency = .14, BorderSizePixel = 0, Text = tostring(v), TextColor3 = C.text,
+                        TextSize = 14, Font = Enum.Font.GothamMedium, AutoButtonColor = false, ZIndex = 51 })
+                    corner(item, 8)
+                    local itemEdge = stroke(item, C.border, .66); itemEdge.Thickness = 1
+                    item.MouseEnter:Connect(function()
+                        TweenService:Create(item, TweenInfo.new(.12), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                        TweenService:Create(itemEdge, TweenInfo.new(.12), { Transparency = .16 }):Play()
+                    end)
+                    item.MouseLeave:Connect(function()
+                        TweenService:Create(item, TweenInfo.new(.14), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .14 }):Play()
+                        TweenService:Create(itemEdge, TweenInfo.new(.14), { Transparency = .66 }):Play()
+                    end)
                     item.MouseButton1Click:Connect(function() set(v); close() end)
                     item.Activated:Connect(function() set(v); close() end)
                 end
@@ -1966,7 +2020,10 @@ function host.CreateTab()
             end
             local swatch = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(112, 34),
                 BackgroundColor3 = colour, Text = "EDIT COLOR", TextColor3 = C.text, TextSize = 11, Font = Enum.Font.GothamBold, AutoButtonColor = false })
-            corner(swatch, 10); stroke(swatch)
+            corner(swatch, 10)
+            local swatchEdge = stroke(swatch, C.border, .24); swatchEdge.Thickness = 1.25
+            swatch.MouseEnter:Connect(function() TweenService:Create(swatchEdge, TweenInfo.new(.16), { Transparency = .05 }):Play() end)
+            swatch.MouseLeave:Connect(function() TweenService:Create(swatchEdge, TweenInfo.new(.18), { Transparency = .24 }):Play() end)
             local popup, inputChanged, inputEnded, colorDirty = nil, nil, nil, false
             local function storeColor()
                 NoirPersistence.data.colors[colorKey] = { colour.R, colour.G, colour.B }
@@ -2004,8 +2061,18 @@ function host.CreateTab()
                 New("TextLabel", { Parent = dialog, Position = UDim2.fromOffset(22, 43), Size = UDim2.fromOffset(370, 17), BackgroundTransparency = 1,
                     Text = "Choose with the color box, HEX, or RGB values", TextColor3 = C.dim, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 72 })
                 local closeButton = New("TextButton", { Parent = dialog, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -17, 0, 15), Size = UDim2.fromOffset(38, 34),
-                    BackgroundColor3 = C.surface, Text = "×", TextColor3 = C.text, TextSize = 24, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 73 })
-                corner(closeButton, 10); stroke(closeButton, C.border, .45)
+                    BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0,
+                    Text = "×", TextColor3 = C.text, TextSize = 24, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 73 })
+                corner(closeButton, 10)
+                local closeEdge = stroke(closeButton, C.border, .24); closeEdge.Thickness = 1.2
+                closeButton.MouseEnter:Connect(function()
+                    TweenService:Create(closeButton, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                    TweenService:Create(closeEdge, TweenInfo.new(.16), { Transparency = .05 }):Play()
+                end)
+                closeButton.MouseLeave:Connect(function()
+                    TweenService:Create(closeButton, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12 }):Play()
+                    TweenService:Create(closeEdge, TweenInfo.new(.18), { Transparency = .24 }):Play()
+                end)
                 local currentCard = New("Frame", { Parent = dialog, Position = UDim2.fromOffset(20, 80), Size = UDim2.fromOffset(220, 346), BackgroundColor3 = C.surface, BorderSizePixel = 0, ZIndex = 72 })
                 corner(currentCard, 14); stroke(currentCard, C.border, .35)
                 New("TextLabel", { Parent = currentCard, Position = UDim2.fromOffset(17, 16), Size = UDim2.fromOffset(170, 22), BackgroundTransparency = 1,
@@ -2130,8 +2197,18 @@ function host.CreateTab()
             local savedKey = NoirPersistence.data.keybinds[storagePrefix .. label] or default
             local r = row(label, 52)
             local btn = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(130, 34),
-                BackgroundColor3 = C.surface, Text = tostring(savedKey), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, AutoButtonColor = false })
-            corner(btn, 10); stroke(btn)
+                BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0,
+                Text = tostring(savedKey), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, AutoButtonColor = false })
+            corner(btn, 10)
+            local keyEdge = stroke(btn, C.border, .24); keyEdge.Thickness = 1.25
+            btn.MouseEnter:Connect(function()
+                TweenService:Create(btn, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                TweenService:Create(keyEdge, TweenInfo.new(.16), { Transparency = .05 }):Play()
+            end)
+            btn.MouseLeave:Connect(function()
+                TweenService:Create(btn, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12 }):Play()
+                TweenService:Create(keyEdge, TweenInfo.new(.18), { Transparency = .24 }):Play()
+            end)
             local listening, currentKey, conn = false, savedKey, nil
             btn.MouseButton1Click:Connect(function()
                 listening = true; btn.Text = "Press a key..."
@@ -2436,10 +2513,17 @@ do
         end
         local function makeBtn(parent, label, callback)
             local b = New("TextButton", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
-                Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
-            corner(b, 12); stroke(b, C.border, .5)
-            b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(48, 52, 56) }):Play() end)
-            b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn }):Play() end)
+                BackgroundTransparency = .14, BorderSizePixel = 0, Text = label, TextColor3 = C.text, TextSize = 15,
+                Font = Enum.Font.GothamMedium, AutoButtonColor = false })
+            corner(b, 11); local edge = stroke(b, C.border, .24); edge.Thickness = 1.35
+            b.MouseEnter:Connect(function()
+                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                TweenService:Create(edge, TweenInfo.new(.18), { Transparency = .05 }):Play()
+            end)
+            b.MouseLeave:Connect(function()
+                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn, BackgroundTransparency = .14 }):Play()
+                TweenService:Create(edge, TweenInfo.new(.18), { Transparency = .24 }):Play()
+            end)
             local last = 0
             local function fire()
                 local now = os.clock()
@@ -2666,8 +2750,18 @@ do
         local ddRow = New("Frame", { Parent = listHolder, Size = UDim2.new(1, 0, 0, 56), BackgroundTransparency = 1 })
         text(ddRow, "▸ Player", 16, UDim2.fromOffset(0, 10))
         local ddBtn = New("TextButton", { Parent = ddRow, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 4), Size = UDim2.fromOffset(190, 42),
-            BackgroundColor3 = C.surface, Text = "None  ⌄", TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, AutoButtonColor = false, ZIndex = 5 })
-        corner(ddBtn, 10); stroke(ddBtn)
+            BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0,
+            Text = "None  ⌄", TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, AutoButtonColor = false, ZIndex = 5 })
+        corner(ddBtn, 10)
+        local playerDropEdge = stroke(ddBtn, C.border, .24); playerDropEdge.Thickness = 1.25
+        ddBtn.MouseEnter:Connect(function()
+            TweenService:Create(ddBtn, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+            TweenService:Create(playerDropEdge, TweenInfo.new(.16), { Transparency = .05 }):Play()
+        end)
+        ddBtn.MouseLeave:Connect(function()
+            TweenService:Create(ddBtn, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12 }):Play()
+            TweenService:Create(playerDropEdge, TweenInfo.new(.18), { Transparency = .24 }):Play()
+        end)
         local popup
         local function closePopup() if popup then popup:Destroy(); popup = nil end end
         local function playerNames()
@@ -2693,8 +2787,19 @@ do
             corner(popup, 10); stroke(popup, C.accent, .2)
             New("UIListLayout", { Parent = popup, SortOrder = Enum.SortOrder.LayoutOrder })
             for _, name in ipairs(names) do
-                local item = New("TextButton", { Parent = popup, Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, Text = tostring(name),
-                    TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, ZIndex = 51, AutoButtonColor = false })
+                local item = New("TextButton", { Parent = popup, Size = UDim2.new(1, 0, 0, 38), BackgroundColor3 = Color3.fromRGB(7,8,11),
+                    BackgroundTransparency = .14, BorderSizePixel = 0, Text = tostring(name), TextColor3 = C.text,
+                    TextSize = 14, Font = Enum.Font.Gotham, ZIndex = 51, AutoButtonColor = false })
+                corner(item, 8)
+                local itemEdge = stroke(item, C.border, .66); itemEdge.Thickness = 1
+                item.MouseEnter:Connect(function()
+                    TweenService:Create(item, TweenInfo.new(.12), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                    TweenService:Create(itemEdge, TweenInfo.new(.12), { Transparency = .16 }):Play()
+                end)
+                item.MouseLeave:Connect(function()
+                    TweenService:Create(item, TweenInfo.new(.14), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .14 }):Play()
+                    TweenService:Create(itemEdge, TweenInfo.new(.14), { Transparency = .66 }):Play()
+                end)
                 local function pick()
                     ddBtn.Text = tostring(name) .. "  ⌄"
                     closePopup()
@@ -2739,16 +2844,23 @@ do
                 local r = New("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1 })
                 text(r, label, 16, UDim2.fromOffset(0, 10))
                 local pill = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(64, 34),
-                    BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
-                corner(pill, 17); stroke(pill, C.border, .55)
+                    BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .16, BorderSizePixel = 0, Text = "", AutoButtonColor = false })
+                corner(pill, 17)
+                local pillEdge = stroke(pill, C.border, .30); pillEdge.Thickness = 1.35
                 local dot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = Color3.fromRGB(150, 155, 162) })
                 corner(dot, 13)
                 local function apply(v)
                     state = v == true
-                    TweenService:Create(pill, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = state and C.accent or C.off }):Play()
+                    TweenService:Create(pill, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                        BackgroundColor3 = state and Color3.fromRGB(22,24,29) or Color3.fromRGB(7,8,11),
+                        BackgroundTransparency = state and .04 or .16,
+                    }):Play()
+                    TweenService:Create(pillEdge, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                        Color = state and C.accent2 or C.border, Transparency = state and .05 or .30,
+                    }):Play()
                     TweenService:Create(dot, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
                         Position = state and UDim2.fromOffset(34, 4) or UDim2.fromOffset(4, 4),
-                        BackgroundColor3 = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 155, 162)
+                        BackgroundColor3 = state and C.accent2 or Color3.fromRGB(150, 155, 162)
                     }):Play()
                     callback(state)
                 end
@@ -3034,8 +3146,11 @@ do
             end)
             local function farmBtn(parent, label, fn)
                 local b = New("TextButton", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
-                    Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
-                corner(b, 12); stroke(b, C.border, .5)
+                    BackgroundTransparency = .14, BorderSizePixel = 0, Text = label, TextColor3 = C.text, TextSize = 15,
+                    Font = Enum.Font.GothamMedium, AutoButtonColor = false })
+                corner(b, 11); local edge = stroke(b, C.border, .24); edge.Thickness = 1.35
+                b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play() end)
+                b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn, BackgroundTransparency = .14 }):Play() end)
                 b.MouseButton1Click:Connect(fn)
                 b.Activated:Connect(fn)
                 return b
@@ -3048,8 +3163,9 @@ do
                     TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false })
                 corner(value, 9); stroke(value, C.border, .4)
                 local track = New("TextButton", { Parent = r, Position = UDim2.new(0, 0, 1, -18), Size = UDim2.new(1, 0, 0, 6),
-                    BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
+                    BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0, Text = "", AutoButtonColor = false })
                 corner(track, 3)
+                local trackEdge = stroke(track, C.border, .54); trackEdge.Thickness = 1
                 local span = math.max(maxV - minV, 1)
                 local fill = New("Frame", { Parent = track, Size = UDim2.fromScale((default - minV) / span, 1), BackgroundColor3 = C.accent, BorderSizePixel = 0 })
                 corner(fill, 3)
@@ -4303,7 +4419,14 @@ task.defer(function()
         local outerGradient = New("UIGradient", { Parent = outer, Color = metal })
         local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
         local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner
-        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76), BackgroundTransparency = 1, Text = "Kill\nSheriff", TextColor3 = C.text, TextSize = 9, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 9 })
+        local sheriffMarkRoot, sheriffMark = __NOIR_GUARD.blackhole.Create(button, UDim2.new(.5,0,.38,0), 25, Vector2.new(.5,.5), 10, 12, false)
+        sheriffMarkRoot.Size = UDim2.fromScale(.52,.52)
+        local sheriffMarkCorner = sheriffMarkRoot:FindFirstChildOfClass("UICorner")
+        if sheriffMarkCorner then sheriffMarkCorner.CornerRadius = UDim.new(1,0) end
+        if sheriffMark.image then sheriffMark.image.ImageTransparency = .08 end
+        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5,0,.82,0), Size = UDim2.new(.92,0,.22,0),
+            BackgroundTransparency = 1, Text = "SHERIFF", TextColor3 = C.text, TextSize = 10, TextScaled = true, TextWrapped = true,
+            Font = Enum.Font.GothamBold, ZIndex = 16 })
         local pressScale = New("UIScale", { Parent = button, Scale = 1 })
         runtime.gui, runtime.button = gui, button
         updateBindShape()
@@ -4633,7 +4756,8 @@ function createShootButton()
     button.TextColor3 = Color3.fromRGB(245, 245, 248)
     button.TextSize = 17
     button.TextWrapped = true
-    button.Font = Enum.Font.Gotham
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.Font = Enum.Font.GothamBold
     button.ClipsDescendants = false
     button.AutoButtonColor = false
     button.ZIndex = 5
@@ -4656,6 +4780,12 @@ function createShootButton()
     innerStroke.Color = Color3.fromRGB(105, 105, 112); innerStroke.Transparency = 0.5; innerStroke.Thickness = 1
     innerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; innerStroke.Parent = button
     local innerGradient = gradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = innerStroke
+    local shootMarkRoot, shootMark = __NOIR_GUARD.blackhole.Create(button, UDim2.fromOffset(12,12), 42, Vector2.zero, 7, 21, false)
+    if shootMark.image then shootMark.image.ImageTransparency = .08 end
+    local shootTextPadding = Instance.new("UIPadding")
+    shootTextPadding.PaddingLeft = UDim.new(0, 60)
+    shootTextPadding.PaddingRight = UDim.new(0, 14)
+    shootTextPadding.Parent = button
     
     local traceA = Instance.new("Frame"); traceA.AnchorPoint = Vector2.new(.5, .5); traceA.Position = UDim2.fromScale(0, .08)
     traceA.Size = UDim2.fromOffset(8, 8); traceA.BackgroundColor3 = Color3.new(1, 1, 1); traceA.BorderSizePixel = 0; traceA.ZIndex = 10; traceA.Parent = button
@@ -5246,18 +5376,25 @@ local function createGrabGunBindButton()
     local innerGradient = outerGradient:Clone()
     innerGradient.Rotation = 180
     innerGradient.Parent = innerStroke
+    local grabSize = math.max(24, math.floor(gunUtilityState.bindButtonSize * (Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize.Y or 720) * .52))
+    local grabMarkRoot, grabMark = __NOIR_GUARD.blackhole.Create(button, UDim2.new(.5,0,.38,0), grabSize, Vector2.new(.5,.5), 7, math.floor(grabSize*.5), false)
+    grabMarkRoot.Size = UDim2.fromScale(.52,.52)
+    local grabCorner = grabMarkRoot:FindFirstChildOfClass("UICorner")
+    if grabCorner then grabCorner.CornerRadius = UDim.new(1,0) end
+    if grabMark.image then grabMark.image.ImageTransparency = .08 end
     local textLabel = Instance.new("TextLabel")
     textLabel.Name = "Text"
     textLabel.AnchorPoint = Vector2.new(.5, .5)
-    textLabel.Position = UDim2.fromScale(.5, .5)
-    textLabel.Size = UDim2.fromScale(.76, .76)
+    textLabel.Position = UDim2.new(.5,0,.82,0)
+    textLabel.Size = UDim2.new(.92,0,.22,0)
     textLabel.BackgroundTransparency = 1
-    textLabel.Text = "Grab Gun"
+    textLabel.Text = "GRAB GUN"
     textLabel.TextColor3 = Color3.fromRGB(245, 245, 248)
-    textLabel.TextSize = 17
+    textLabel.TextSize = 12
+    textLabel.TextScaled = true
     textLabel.TextWrapped = true
-    textLabel.Font = Enum.Font.Gotham
-    textLabel.ZIndex = 6
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.ZIndex = 12
     textLabel.Parent = button
 
     local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
@@ -6000,9 +6137,9 @@ task.defer(function()
         local button = aim.bindButton
         if not button then return end
         local label = button:FindFirstChild("Text")
-        if label then label.Text = "Aimlock" end
-        if aim.bindOuterGradient then aim.bindOuterGradient.Color = aim.enabled and aimActiveGradient or aimMetallicGradient end
-        if aim.bindInnerGradient then aim.bindInnerGradient.Color = aim.enabled and aimActiveGradient or aimMetallicGradient end
+        if label then label.Text = aim.enabled and "AIMLOCK  //  ON" or "AIMLOCK  //  OFF" end
+        if aim.bindOuterGradient then aim.bindOuterGradient.Color = aimMetallicGradient end
+        if aim.bindInnerGradient then aim.bindInnerGradient.Color = aimMetallicGradient end
     end
     local function setAimlock(enabled)
         aim.enabled = enabled == true
@@ -6043,8 +6180,14 @@ task.defer(function()
         
         local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
         local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner; 
-        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76),
-            BackgroundTransparency = 1, Text = "Aimlock", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 12, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 9 })
+        local aimMarkRoot, aimMark = __NOIR_GUARD.blackhole.Create(button, UDim2.new(.5,0,.38,0), math.max(22, math.floor(initialPixels*.27)), Vector2.new(.5,.5), 9, math.max(11, math.floor(initialPixels*.135)), false)
+        aimMarkRoot.Size = UDim2.fromScale(.52,.52)
+        local aimMarkCorner = aimMarkRoot:FindFirstChildOfClass("UICorner")
+        if aimMarkCorner then aimMarkCorner.CornerRadius = UDim.new(1,0) end
+        if aimMark.image then aimMark.image.ImageTransparency = .08 end
+        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5,0,.82,0), Size = UDim2.new(.92,0,.22,0),
+            BackgroundTransparency = 1, Text = "AIMLOCK  //  OFF", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 11,
+            TextScaled = true, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 15 })
         local pressScale = New("UIScale", { Parent = button, Scale = 1 })
         aim.bindOuterGradient, aim.bindInnerGradient, aim.bindPressScale = outerGradient, innerGradient, pressScale
         local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
@@ -6268,7 +6411,7 @@ do
             local button = universalState.invisibleBindButton
             if not button then return end
             local label = button:FindFirstChild("Text")
-            if label then label.Text = universalState.invisible and "Invisible\nON" or "Invisible\nOFF" end
+            if label then label.Text = universalState.invisible and "INVI  //  ON" or "INVI  //  OFF" end
         end
 
         local function setInvisible(enabled)
@@ -6328,9 +6471,15 @@ do
             local innerStroke = Instance.new("UIStroke")
             innerStroke.Color, innerStroke.Transparency, innerStroke.Thickness, innerStroke.Parent = Color3.fromRGB(105,105,112), .5, 1, button
             local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = innerStroke
+            local invisibleSize = math.max(22, math.floor(universalState.invisibleBindSize * (Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize.Y or 720) * .27))
+            local invisibleMarkRoot, invisibleMark = __NOIR_GUARD.blackhole.Create(button, UDim2.new(.5,0,.38,0), invisibleSize, Vector2.new(.5,.5), 7, math.max(11, math.floor(invisibleSize*.5)), false)
+            invisibleMarkRoot.Size = UDim2.fromScale(.52,.52)
+            local invisibleMarkCorner = invisibleMarkRoot:FindFirstChildOfClass("UICorner")
+            if invisibleMarkCorner then invisibleMarkCorner.CornerRadius = UDim.new(1,0) end
+            if invisibleMark.image then invisibleMark.image.ImageTransparency = .08 end
             local label = Instance.new("TextLabel")
-            label.Name, label.AnchorPoint, label.Position, label.Size = "Text", Vector2.new(.5,.5), UDim2.fromScale(.5,.5), UDim2.fromScale(.76,.76)
-            label.BackgroundTransparency, label.TextColor3, label.TextSize, label.TextWrapped, label.Font, label.ZIndex = 1, Color3.fromRGB(245,245,248), 14, true, Enum.Font.Gotham, 6
+            label.Name, label.AnchorPoint, label.Position, label.Size = "Text", Vector2.new(.5,.5), UDim2.new(.5,0,.82,0), UDim2.new(.92,0,.22,0)
+            label.BackgroundTransparency, label.TextColor3, label.TextSize, label.TextScaled, label.TextWrapped, label.Font, label.ZIndex = 1, Color3.fromRGB(245,245,248), 11, true, true, Enum.Font.GothamBold, 13
             label.Parent = button
 
             local dragging, moved, dragStart, startPosition, dragInput = false, false, nil, nil, nil
@@ -6510,9 +6659,9 @@ task.defer(function()
     local function updateDesyncBindText()
         local button = desyncState.bindButton
         local label = button and button:FindFirstChild("Text")
-        if label then label.Text = "Desync" end
-        if desyncState.bindOuterGradient then desyncState.bindOuterGradient.Color = desyncState.enabled and rubyGradient or monochromeGradient end
-        if desyncState.bindInnerGradient then desyncState.bindInnerGradient.Color = desyncState.enabled and rubyGradient or monochromeGradient end
+        if label then label.Text = desyncState.enabled and "DESYNC  //  ON" or "DESYNC  //  OFF" end
+        if desyncState.bindOuterGradient then desyncState.bindOuterGradient.Color = monochromeGradient end
+        if desyncState.bindInnerGradient then desyncState.bindInnerGradient.Color = monochromeGradient end
     end
     local function setDesync(enabled)
         desyncState.enabled = enabled == true
@@ -6574,8 +6723,15 @@ task.defer(function()
         local inner = New("UIStroke", { Parent = button, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
         local innerGradient = outerGradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner; 
         desyncState.bindOuterGradient, desyncState.bindInnerGradient = outerGradient, innerGradient
-        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(.76, .76),
-            BackgroundTransparency = 1, Text = "Desync\nOFF", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 14, TextWrapped = true, Font = Enum.Font.Gotham, ZIndex = 8 })
+        local desyncMarkPixels = math.max(22, math.floor(desyncState.bindSize * (Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize.Y or 720) * .27))
+        local desyncMarkRoot, desyncMark = __NOIR_GUARD.blackhole.Create(button, UDim2.new(.5,0,.38,0), desyncMarkPixels, Vector2.new(.5,.5), 9, math.max(11, math.floor(desyncMarkPixels*.5)), false)
+        desyncMarkRoot.Size = UDim2.fromScale(.52,.52)
+        local desyncMarkCorner = desyncMarkRoot:FindFirstChildOfClass("UICorner")
+        if desyncMarkCorner then desyncMarkCorner.CornerRadius = UDim.new(1,0) end
+        if desyncMark.image then desyncMark.image.ImageTransparency = .08 end
+        local label = New("TextLabel", { Parent = button, Name = "Text", AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5,0,.82,0), Size = UDim2.new(.92,0,.22,0),
+            BackgroundTransparency = 1, Text = "DESYNC  //  OFF", TextColor3 = Color3.fromRGB(245, 245, 248), TextSize = 11,
+            TextScaled = true, TextWrapped = true, Font = Enum.Font.GothamBold, ZIndex = 15 })
         local pressScale = New("UIScale", { Parent = button, Scale = 1 })
         local dragging, moved, startInput, startPosition, dragInput = false, false, nil, nil, nil
         desyncState.bindConnections[#desyncState.bindConnections + 1] = button.InputBegan:Connect(function(input)
