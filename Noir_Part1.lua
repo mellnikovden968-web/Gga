@@ -296,7 +296,7 @@ local function createBlackholeMark(parent, position, size, anchorPoint, zIndex, 
         ClipsDescendants = true, Visible = blackholeSpriteAsset ~= "", ZIndex = z + 4 })
     New("UICorner", { Parent = image, CornerRadius = UDim.new(0, radius or math.floor((size or 0) * .5)) })
     fallback.Visible = false
-    root.Visible = blackholeSpriteAsset ~= 
+    root.Visible = blackholeSpriteAsset ~= ""
     if animated ~= false then table.insert(blackholeFrames, image) end
     return root, { root = root, image = image, fallback = fallback, ring = ring, ringStroke = ringStroke, core = core, flare = flare }
 end
