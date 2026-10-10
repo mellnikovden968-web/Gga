@@ -1,4 +1,4 @@
--- NOIR_EVENT_HORIZON_V6_2_PART_1
+-- NOIR_EVENT_HORIZON_V6_4_PART_1
 local Players           = game:GetService("Players")
 local UIS               = game:GetService("UserInputService")
 local TweenService      = game:GetService("TweenService")
@@ -1044,7 +1044,8 @@ local function createBlackholeMark(parent, position, size, anchorPoint, zIndex, 
     local image = New("ImageLabel", { Parent = root, Name = "AccretionMaterial", Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1, Image = blackholeSpriteAsset, ImageRectSize = Vector2.new(96, 96),
         ImageRectOffset = Vector2.new(0, 0), ScaleType = Enum.ScaleType.Crop, ImageTransparency = .02,
-        Visible = blackholeSpriteAsset ~= "", ZIndex = z + 4 })
+        ClipsDescendants = true, Visible = blackholeSpriteAsset ~= "", ZIndex = z + 4 })
+    New("UICorner", { Parent = image, CornerRadius = UDim.new(0, radius or math.floor((size or 0) * .5)) })
     if blackholeSpriteAsset ~= "" then
         fallback.Visible = false
     elseif animated ~= false then
@@ -1080,14 +1081,14 @@ __NOIR_GUARD.gui = gui
 local scale = New("UIScale", { Parent = gui, Scale = 1 })
 function rescale()
     local v = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-    scale.Scale = math.clamp(math.min(v.X / 1240, v.Y / 740, 0.82), 0.24, 1)
+    scale.Scale = math.clamp(math.min(v.X / 1240, v.Y / 740, 0.75), 0.24, 1)
 end
 rescale()
 if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
 
 local win = New("Frame", { Parent = gui, Name = "Window", AnchorPoint = Vector2.new(.5, .5),
     Position = NoirPersistence.GetPosition("window", UDim2.fromScale(.5, .5)), Size = UDim2.fromOffset(1180, 700),
-    BackgroundColor3 = C.base, BackgroundTransparency = .04, ClipsDescendants = true, Visible = false })
+    BackgroundColor3 = C.base, BackgroundTransparency = .18, ClipsDescendants = true, Visible = false })
 local winScale = New("UIScale", { Parent = win, Scale = 1 })
 corner(win, 22)
 local winStroke = stroke(win, C.border, .5); winStroke.Thickness = 1.5
@@ -1097,7 +1098,7 @@ New("UIGradient", { Parent = win, Color = ColorSequence.new({
     ColorSequenceKeypoint.new(1, Color3.fromRGB(3,4,6)) }), Rotation = 25 })
 
 local navButtons, navIcons = {}, {}
-local sidebar = New("Frame", { Parent = win, Size = UDim2.fromOffset(240, 700), BackgroundColor3 = C.surface, BackgroundTransparency = .28 })
+local sidebar = New("Frame", { Parent = win, Size = UDim2.fromOffset(240, 700), BackgroundColor3 = C.surface, BackgroundTransparency = .42 })
 corner(sidebar, 22); stroke(sidebar, C.border, .68)
 local sidebarMark = __NOIR_GUARD.blackhole.Create(sidebar, UDim2.fromOffset(22, 28), 50, Vector2.zero, 5, 25)
 local sidebarInitial = New("TextLabel", { Parent = sidebar, Name = "BrandInitial", Position = UDim2.fromOffset(22, 28), Size = UDim2.fromOffset(50, 50),
@@ -1200,7 +1201,7 @@ corner(status, 16); stroke(status, C.border, .6)
 local statusDot = New("Frame", { Parent = status, Position = UDim2.fromOffset(16, 21), Size = UDim2.fromOffset(8, 8), BackgroundColor3 = C.accent })
 corner(statusDot, 4)
 text(status, "Connected", 13, UDim2.fromOffset(30, 15))
-text(status, "Noir Client • v6.2", 15, UDim2.fromOffset(16, 45))
+text(status, "Noir Client • v6.4", 15, UDim2.fromOffset(16, 45))
 
 local header = New("Frame", { Parent = win, Position = UDim2.fromOffset(240, 0), Size = UDim2.new(1, -240, 0, 96), BackgroundTransparency = 1 })
 text(header, "NOIR HUB", 24, UDim2.fromOffset(28, 24))
@@ -1238,7 +1239,7 @@ corner(icon, 13); stroke(icon, C.border, .45)
 if creatorImage == "" then local fb = text(icon, "N", 22, UDim2.fromOffset(0, 8)); fb.TextXAlignment = Enum.TextXAlignment.Center end
 function styleCircularButton(b, diameter)
     b.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-    b.BackgroundTransparency = .28
+    b.BackgroundTransparency = .42
     b.BorderSizePixel = 0
     b.AutoButtonColor = false
     b.ClipsDescendants = false
@@ -1260,10 +1261,10 @@ function styleCircularButton(b, diameter)
     sound.Name = "NoirButtonSound"; sound.SoundId = "rbxassetid://3868133279"; sound.Volume = .35; sound.Parent = b
     local baseTextSize = b.TextSize
     b.MouseEnter:Connect(function()
-        TweenService:Create(b, TweenInfo.new(.18), { BackgroundTransparency = .12, TextSize = baseTextSize + 1 }):Play()
+        TweenService:Create(b, TweenInfo.new(.18), { BackgroundTransparency = .30, TextSize = baseTextSize + 1 }):Play()
     end)
     b.MouseLeave:Connect(function()
-        TweenService:Create(b, TweenInfo.new(.22), { BackgroundTransparency = .28, TextSize = baseTextSize }):Play()
+        TweenService:Create(b, TweenInfo.new(.22), { BackgroundTransparency = .42, TextSize = baseTextSize }):Play()
     end)
     b.MouseButton1Down:Connect(function()
         sound:Play()
@@ -1426,7 +1427,7 @@ function __NOIR_GUARD.blackhole.ReopenWindow()
     win.Rotation = 4.2
     winScale.Scale = .06
     TweenService:Create(win, TweenInfo.new(.50, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-        Position = __NOIR_GUARD.blackhole.LastWindowPosition, BackgroundTransparency = .04, Rotation = 0,
+        Position = __NOIR_GUARD.blackhole.LastWindowPosition, BackgroundTransparency = .18, Rotation = 0,
     }):Play()
     TweenService:Create(winScale, TweenInfo.new(.52, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = 1 }):Play()
     task.delay(.54, function()
@@ -1501,7 +1502,7 @@ end
 end
 
 local dashboard = New("Frame", { Parent = win, Position = content.Position, Size = content.Size, BackgroundTransparency = 1 })
-local profile = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 0), Size = UDim2.fromOffset(430, 168), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
+local profile = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 0), Size = UDim2.fromOffset(430, 168), BackgroundColor3 = C.panel, BackgroundTransparency = .36 })
 corner(profile, 18); stroke(profile, C.border, .5)
 local avatar = New("ImageLabel", { Parent = profile, Position = UDim2.fromOffset(22, 24), Size = UDim2.fromOffset(120, 120), BackgroundColor3 = C.surface })
 corner(avatar, 20); stroke(avatar, C.border, .45)
@@ -1516,26 +1517,26 @@ corner(pill, 15); stroke(pill, C.accent, .35)
 local pillDot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(12, 11), Size = UDim2.fromOffset(8, 8), BackgroundColor3 = C.accent }); corner(pillDot, 4)
 TweenService:Create(pillDot, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { BackgroundTransparency = .58 }):Play()
 text(pill, "Connected", 13, UDim2.fromOffset(26, 7))
-local heroCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(446, 0), Size = UDim2.new(1, -446, 0, 168), BackgroundColor3 = C.card, BackgroundTransparency = .12, ClipsDescendants = true })
+local heroCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(446, 0), Size = UDim2.new(1, -446, 0, 168), BackgroundColor3 = C.card, BackgroundTransparency = .30, ClipsDescendants = true })
 corner(heroCard, 18); stroke(heroCard, C.border, .38)
 New("UIGradient", { Parent = heroCard, Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(22,24,29)), ColorSequenceKeypoint.new(1, Color3.fromRGB(5,6,9)) }), Rotation = 25 })
 __NOIR_GUARD.blackhole.HeroMark = __NOIR_GUARD.blackhole.Create(heroCard, UDim2.new(1, -166, 0, 5), 156, Vector2.zero, 2, 78);
 (function()
     local heroTitle = text(heroCard, "NOIR  /  EVENT HORIZON", 21, UDim2.fromOffset(26, 22)); heroTitle.Size = UDim2.fromOffset(248, 32); heroTitle.Font = Enum.Font.GothamBold
-    local heroSubtitle = text(heroCard, "V6.2  •  BLACK-HOLE INTERFACE", 11, UDim2.fromOffset(27, 58), true); heroSubtitle.Size = UDim2.fromOffset(236, 20)
+    local heroSubtitle = text(heroCard, "V6.4  •  BLACK-HOLE INTERFACE", 11, UDim2.fromOffset(27, 58), true); heroSubtitle.Size = UDim2.fromOffset(236, 20)
     local heroDetail = text(heroCard, "AIM  /  ESP  /  WORLD SYSTEMS", 10, UDim2.fromOffset(27, 83), true); heroDetail.Size = UDim2.fromOffset(234, 18)
 end)()
 local statText = text(heroCard, "", 12, UDim2.fromOffset(27, 111), true); statText.Size = UDim2.fromOffset(235, 20)
 New("Frame", { Parent = heroCard, Position = UDim2.fromOffset(27, 103), Size = UDim2.fromOffset(226, 1), BackgroundColor3 = C.border, BackgroundTransparency = .42, BorderSizePixel = 0 })
-local fpsCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
+local fpsCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(0, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .36 })
 corner(fpsCard, 18); stroke(fpsCard, C.border, .5)
 text(fpsCard, "FPS", 14, UDim2.fromOffset(22, 20), true)
 local fpsText = text(fpsCard, "60", 42, UDim2.fromOffset(22, 50)); fpsText.TextColor3 = C.text
-local pingCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(303, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
+local pingCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(303, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .36 })
 corner(pingCard, 18); stroke(pingCard, C.border, .5)
 text(pingCard, "NETWORK LATENCY", 14, UDim2.fromOffset(22, 20), true)
 local pingText = text(pingCard, "-- ms", 42, UDim2.fromOffset(22, 50)); pingText.TextColor3 = C.text
-local playerCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(606, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .25 })
+local playerCard = New("Frame", { Parent = dashboard, Position = UDim2.fromOffset(606, 184), Size = UDim2.fromOffset(286, 132), BackgroundColor3 = C.panel, BackgroundTransparency = .36 })
 corner(playerCard, 18); stroke(playerCard, C.border, .5)
 text(playerCard, "PLAYERS", 14, UDim2.fromOffset(22, 20), true)
 local playerText = text(playerCard, "0", 42, UDim2.fromOffset(22, 50)); playerText.TextColor3 = C.text
@@ -1627,7 +1628,7 @@ do
         configContent.Visible = false
         for name, b in pairs(navButtons) do
             local active = name == page
-            TweenService:Create(b, TweenInfo.new(.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = active and C.card or C.surface, BackgroundTransparency = active and 0 or 1 }):Play()
+            TweenService:Create(b, TweenInfo.new(.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = active and C.card or C.surface, BackgroundTransparency = active and .16 or 1 }):Play()
             local data = navIcons[name]
             if data then
                 if data.stroke then TweenService:Create(data.stroke, TweenInfo.new(.2), { Color = active and C.accent2 or C.border, Transparency = active and .66 or .88 }):Play() end
@@ -1639,7 +1640,7 @@ do
                     for _, ring in ipairs(data.rings) do TweenService:Create(ring, TweenInfo.new(.2), { Color = active and C.accent or C.dim }):Play() end
                 end
                 TweenService:Create(data.label, TweenInfo.new(.2), { TextColor3 = active and C.text or C.dim }):Play()
-                TweenService:Create(data.bar, TweenInfo.new(.2), { BackgroundTransparency = active and 0 or 1 }):Play()
+                TweenService:Create(data.bar, TweenInfo.new(.2), { BackgroundTransparency = active and .16 or 1 }):Play()
             end
         end
     end
@@ -1785,7 +1786,7 @@ function host.CreateTab()
         elseif isMisc then miscSectionCount += 1; col = miscCols[(miscSectionCount - 1) % 2 + 1]; page = "misc"
         else sectionCount += 1; col = cols[(sectionCount - 1) % 2 + 1] end
         local panel = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
-            BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
+            BackgroundColor3 = C.panel, BackgroundTransparency = .36, ClipsDescendants = true })
         corner(panel, 18); stroke(panel, C.border, .5)
         local tick = New("Frame", { Parent = panel, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
         corner(tick, 2)
@@ -1814,7 +1815,7 @@ function host.CreateTab()
             local state = savedToggle == true
             local r = row(label, 52)
             local pill = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(64, 34),
-                BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .16, BorderSizePixel = 0, Text = "", AutoButtonColor = false })
+                BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .32, BorderSizePixel = 0, Text = "", AutoButtonColor = false })
             corner(pill, 17)
             local pillStroke = stroke(pill, C.border, .30); pillStroke.Thickness = 1.35
             local dot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = Color3.fromRGB(150,155,162) })
@@ -1823,7 +1824,7 @@ function host.CreateTab()
                 state = v == true
                 TweenService:Create(pill, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
                     BackgroundColor3 = state and Color3.fromRGB(22,24,29) or Color3.fromRGB(7,8,11),
-                    BackgroundTransparency = state and .04 or .16,
+                    BackgroundTransparency = state and .18 or .32,
                 }):Play()
                 TweenService:Create(pillStroke, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
                     Color = state and C.accent2 or C.border, Transparency = state and .05 or .30,
@@ -1847,17 +1848,17 @@ function host.CreateTab()
         end
         function api:AddButton(label, callback)
             local b = New("TextButton", { Parent = holder, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
-                BackgroundTransparency = .14, BorderSizePixel = 0, Text = label, TextColor3 = C.text, TextSize = 15,
+                BackgroundTransparency = .32, BorderSizePixel = 0, Text = label, TextColor3 = C.text, TextSize = 15,
                 Font = Enum.Font.GothamMedium, AutoButtonColor = false })
             corner(b, 11)
             local edge = stroke(b, C.border, .24); edge.Thickness = 1.35
             local press = New("UIScale", { Parent = b, Scale = 1 })
             b.MouseEnter:Connect(function()
-                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .18 }):Play()
                 TweenService:Create(edge, TweenInfo.new(.18), { Transparency = .05 }):Play()
             end)
             b.MouseLeave:Connect(function()
-                TweenService:Create(b, TweenInfo.new(.20), { BackgroundColor3 = C.btn, BackgroundTransparency = .14 }):Play()
+                TweenService:Create(b, TweenInfo.new(.20), { BackgroundColor3 = C.btn, BackgroundTransparency = .32 }):Play()
                 TweenService:Create(edge, TweenInfo.new(.20), { Transparency = .24 }):Play()
                 TweenService:Create(press, TweenInfo.new(.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Scale = 1 }):Play()
             end)
@@ -1883,7 +1884,7 @@ function host.CreateTab()
             default = tonumber(savedSlider) or default
             local r = row(label, 68)
             local value = New("TextBox", { Parent = r, Position = UDim2.new(1, -72, 0, 5), Size = UDim2.fromOffset(72, 30), BackgroundColor3 = C.surface,
-                BackgroundTransparency = .12, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
+                BackgroundTransparency = .30, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
                 TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false })
             corner(value, 9); stroke(value, C.border, .4)
             local track = New("Frame", { Parent = r, Position = UDim2.new(0, 0, 1, -18), Size = UDim2.new(1, 0, 0, 6), BackgroundColor3 = C.off })
@@ -1923,17 +1924,17 @@ function host.CreateTab()
             local r = row(label, 56)
             local idx = table.find(values, NoirPersistence.data.dropdowns[storagePrefix .. label]) or 1
             local b = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 4), Size = UDim2.fromOffset(190, 42),
-                BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0,
+                BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .30, BorderSizePixel = 0,
                 Text = tostring(values[1] or "None") .. "  ⌄", TextColor3 = C.text, TextSize = 14, Font = Enum.Font.GothamMedium,
                 AutoButtonColor = false, ZIndex = 5 })
             corner(b, 10)
             local dropdownEdge = stroke(b, C.border, .26); dropdownEdge.Thickness = 1.25
             b.MouseEnter:Connect(function()
-                TweenService:Create(b, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .03 }):Play()
+                TweenService:Create(b, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .18 }):Play()
                 TweenService:Create(dropdownEdge, TweenInfo.new(.16), { Transparency = .05 }):Play()
             end)
             b.MouseLeave:Connect(function()
-                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12 }):Play()
+                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .30 }):Play()
                 TweenService:Create(dropdownEdge, TweenInfo.new(.18), { Transparency = .26 }):Play()
             end)
             local popup
@@ -1953,16 +1954,16 @@ function host.CreateTab()
                 New("UIListLayout", { Parent = popup, SortOrder = Enum.SortOrder.LayoutOrder })
                 for _, v in ipairs(values) do
                     local item = New("TextButton", { Parent = popup, Size = UDim2.new(1, 0, 0, 38), BackgroundColor3 = Color3.fromRGB(7,8,11),
-                        BackgroundTransparency = .14, BorderSizePixel = 0, Text = tostring(v), TextColor3 = C.text,
+                        BackgroundTransparency = .32, BorderSizePixel = 0, Text = tostring(v), TextColor3 = C.text,
                         TextSize = 14, Font = Enum.Font.GothamMedium, AutoButtonColor = false, ZIndex = 51 })
                     corner(item, 8)
                     local itemEdge = stroke(item, C.border, .66); itemEdge.Thickness = 1
                     item.MouseEnter:Connect(function()
-                        TweenService:Create(item, TweenInfo.new(.12), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                        TweenService:Create(item, TweenInfo.new(.12), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .18 }):Play()
                         TweenService:Create(itemEdge, TweenInfo.new(.12), { Transparency = .16 }):Play()
                     end)
                     item.MouseLeave:Connect(function()
-                        TweenService:Create(item, TweenInfo.new(.14), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .14 }):Play()
+                        TweenService:Create(item, TweenInfo.new(.14), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .32 }):Play()
                         TweenService:Create(itemEdge, TweenInfo.new(.14), { Transparency = .66 }):Play()
                     end)
                     item.MouseButton1Click:Connect(function() set(v); close() end)
@@ -2061,16 +2062,16 @@ function host.CreateTab()
                 New("TextLabel", { Parent = dialog, Position = UDim2.fromOffset(22, 43), Size = UDim2.fromOffset(370, 17), BackgroundTransparency = 1,
                     Text = "Choose with the color box, HEX, or RGB values", TextColor3 = C.dim, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 72 })
                 local closeButton = New("TextButton", { Parent = dialog, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -17, 0, 15), Size = UDim2.fromOffset(38, 34),
-                    BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0,
+                    BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .30, BorderSizePixel = 0,
                     Text = "×", TextColor3 = C.text, TextSize = 24, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 73 })
                 corner(closeButton, 10)
                 local closeEdge = stroke(closeButton, C.border, .24); closeEdge.Thickness = 1.2
                 closeButton.MouseEnter:Connect(function()
-                    TweenService:Create(closeButton, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                    TweenService:Create(closeButton, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .18 }):Play()
                     TweenService:Create(closeEdge, TweenInfo.new(.16), { Transparency = .05 }):Play()
                 end)
                 closeButton.MouseLeave:Connect(function()
-                    TweenService:Create(closeButton, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12 }):Play()
+                    TweenService:Create(closeButton, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .30 }):Play()
                     TweenService:Create(closeEdge, TweenInfo.new(.18), { Transparency = .24 }):Play()
                 end)
                 local currentCard = New("Frame", { Parent = dialog, Position = UDim2.fromOffset(20, 80), Size = UDim2.fromOffset(220, 346), BackgroundColor3 = C.surface, BorderSizePixel = 0, ZIndex = 72 })
@@ -2197,16 +2198,16 @@ function host.CreateTab()
             local savedKey = NoirPersistence.data.keybinds[storagePrefix .. label] or default
             local r = row(label, 52)
             local btn = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(130, 34),
-                BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0,
+                BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .30, BorderSizePixel = 0,
                 Text = tostring(savedKey), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, AutoButtonColor = false })
             corner(btn, 10)
             local keyEdge = stroke(btn, C.border, .24); keyEdge.Thickness = 1.25
             btn.MouseEnter:Connect(function()
-                TweenService:Create(btn, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                TweenService:Create(btn, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .18 }):Play()
                 TweenService:Create(keyEdge, TweenInfo.new(.16), { Transparency = .05 }):Play()
             end)
             btn.MouseLeave:Connect(function()
-                TweenService:Create(btn, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12 }):Play()
+                TweenService:Create(btn, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .30 }):Play()
                 TweenService:Create(keyEdge, TweenInfo.new(.18), { Transparency = .24 }):Play()
             end)
             local listening, currentKey, conn = false, savedKey, nil
@@ -2498,7 +2499,7 @@ do
             parentCol = parentCol or col
             pageName = pageName or "map"
             local card = New("Frame", { Parent = parentCol, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
-                BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
+                BackgroundColor3 = C.panel, BackgroundTransparency = .36, ClipsDescendants = true })
             table.insert(sectionPanels, { panel = card, page = pageName, name = string.lower(title .. " " .. (subtitle or "") .. " teleport map lobby murder sheriff player farm tween") })
             corner(card, 18); stroke(card, C.border, .5)
             local tick = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
@@ -2513,15 +2514,15 @@ do
         end
         local function makeBtn(parent, label, callback)
             local b = New("TextButton", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
-                BackgroundTransparency = .14, BorderSizePixel = 0, Text = label, TextColor3 = C.text, TextSize = 15,
+                BackgroundTransparency = .32, BorderSizePixel = 0, Text = label, TextColor3 = C.text, TextSize = 15,
                 Font = Enum.Font.GothamMedium, AutoButtonColor = false })
             corner(b, 11); local edge = stroke(b, C.border, .24); edge.Thickness = 1.35
             b.MouseEnter:Connect(function()
-                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .18 }):Play()
                 TweenService:Create(edge, TweenInfo.new(.18), { Transparency = .05 }):Play()
             end)
             b.MouseLeave:Connect(function()
-                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn, BackgroundTransparency = .14 }):Play()
+                TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn, BackgroundTransparency = .32 }):Play()
                 TweenService:Create(edge, TweenInfo.new(.18), { Transparency = .24 }):Play()
             end)
             local last = 0
@@ -2750,16 +2751,16 @@ do
         local ddRow = New("Frame", { Parent = listHolder, Size = UDim2.new(1, 0, 0, 56), BackgroundTransparency = 1 })
         text(ddRow, "▸ Player", 16, UDim2.fromOffset(0, 10))
         local ddBtn = New("TextButton", { Parent = ddRow, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 4), Size = UDim2.fromOffset(190, 42),
-            BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0,
+            BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .30, BorderSizePixel = 0,
             Text = "None  ⌄", TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham, AutoButtonColor = false, ZIndex = 5 })
         corner(ddBtn, 10)
         local playerDropEdge = stroke(ddBtn, C.border, .24); playerDropEdge.Thickness = 1.25
         ddBtn.MouseEnter:Connect(function()
-            TweenService:Create(ddBtn, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+            TweenService:Create(ddBtn, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .18 }):Play()
             TweenService:Create(playerDropEdge, TweenInfo.new(.16), { Transparency = .05 }):Play()
         end)
         ddBtn.MouseLeave:Connect(function()
-            TweenService:Create(ddBtn, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12 }):Play()
+            TweenService:Create(ddBtn, TweenInfo.new(.18), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .30 }):Play()
             TweenService:Create(playerDropEdge, TweenInfo.new(.18), { Transparency = .24 }):Play()
         end)
         local popup
@@ -2788,16 +2789,16 @@ do
             New("UIListLayout", { Parent = popup, SortOrder = Enum.SortOrder.LayoutOrder })
             for _, name in ipairs(names) do
                 local item = New("TextButton", { Parent = popup, Size = UDim2.new(1, 0, 0, 38), BackgroundColor3 = Color3.fromRGB(7,8,11),
-                    BackgroundTransparency = .14, BorderSizePixel = 0, Text = tostring(name), TextColor3 = C.text,
+                    BackgroundTransparency = .32, BorderSizePixel = 0, Text = tostring(name), TextColor3 = C.text,
                     TextSize = 14, Font = Enum.Font.Gotham, ZIndex = 51, AutoButtonColor = false })
                 corner(item, 8)
                 local itemEdge = stroke(item, C.border, .66); itemEdge.Thickness = 1
                 item.MouseEnter:Connect(function()
-                    TweenService:Create(item, TweenInfo.new(.12), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play()
+                    TweenService:Create(item, TweenInfo.new(.12), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .18 }):Play()
                     TweenService:Create(itemEdge, TweenInfo.new(.12), { Transparency = .16 }):Play()
                 end)
                 item.MouseLeave:Connect(function()
-                    TweenService:Create(item, TweenInfo.new(.14), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .14 }):Play()
+                    TweenService:Create(item, TweenInfo.new(.14), { BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .32 }):Play()
                     TweenService:Create(itemEdge, TweenInfo.new(.14), { Transparency = .66 }):Play()
                 end)
                 local function pick()
@@ -2826,7 +2827,7 @@ do
         if page and col then
             local function panel(title, subtitle)
                 local card = New("Frame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
-                    BackgroundColor3 = C.panel, BackgroundTransparency = .25, ClipsDescendants = true })
+                    BackgroundColor3 = C.panel, BackgroundTransparency = .36, ClipsDescendants = true })
                 table.insert(sectionPanels, { panel = card, page = "farm", name = string.lower(title .. " " .. (subtitle or "") .. " autofarm farm coins coin") })
                 corner(card, 18); stroke(card, C.border, .5)
                 local tick = New("Frame", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
@@ -2844,7 +2845,7 @@ do
                 local r = New("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1 })
                 text(r, label, 16, UDim2.fromOffset(0, 10))
                 local pill = New("TextButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 8), Size = UDim2.fromOffset(64, 34),
-                    BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .16, BorderSizePixel = 0, Text = "", AutoButtonColor = false })
+                    BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .32, BorderSizePixel = 0, Text = "", AutoButtonColor = false })
                 corner(pill, 17)
                 local pillEdge = stroke(pill, C.border, .30); pillEdge.Thickness = 1.35
                 local dot = New("Frame", { Parent = pill, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = Color3.fromRGB(150, 155, 162) })
@@ -2853,7 +2854,7 @@ do
                     state = v == true
                     TweenService:Create(pill, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
                         BackgroundColor3 = state and Color3.fromRGB(22,24,29) or Color3.fromRGB(7,8,11),
-                        BackgroundTransparency = state and .04 or .16,
+                        BackgroundTransparency = state and .18 or .32,
                     }):Play()
                     TweenService:Create(pillEdge, TweenInfo.new(.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
                         Color = state and C.accent2 or C.border, Transparency = state and .05 or .30,
@@ -3146,11 +3147,11 @@ do
             end)
             local function farmBtn(parent, label, fn)
                 local b = New("TextButton", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
-                    BackgroundTransparency = .14, BorderSizePixel = 0, Text = label, TextColor3 = C.text, TextSize = 15,
+                    BackgroundTransparency = .32, BorderSizePixel = 0, Text = label, TextColor3 = C.text, TextSize = 15,
                     Font = Enum.Font.GothamMedium, AutoButtonColor = false })
                 corner(b, 11); local edge = stroke(b, C.border, .24); edge.Thickness = 1.35
-                b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .04 }):Play() end)
-                b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn, BackgroundTransparency = .14 }):Play() end)
+                b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.16), { BackgroundColor3 = Color3.fromRGB(22,24,29), BackgroundTransparency = .18 }):Play() end)
+                b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = C.btn, BackgroundTransparency = .32 }):Play() end)
                 b.MouseButton1Click:Connect(fn)
                 b.Activated:Connect(fn)
                 return b
@@ -3159,11 +3160,11 @@ do
                 local r = New("Frame", { Parent = parent, Size = UDim2.new(1, 0, 0, 68), BackgroundTransparency = 1 })
                 text(r, label, 16, UDim2.fromOffset(0, 8))
                 local value = New("TextBox", { Parent = r, Position = UDim2.new(1, -72, 0, 5), Size = UDim2.fromOffset(72, 30), BackgroundColor3 = C.surface,
-                    BackgroundTransparency = .12, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
+                    BackgroundTransparency = .30, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
                     TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false })
                 corner(value, 9); stroke(value, C.border, .4)
                 local track = New("TextButton", { Parent = r, Position = UDim2.new(0, 0, 1, -18), Size = UDim2.new(1, 0, 0, 6),
-                    BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .12, BorderSizePixel = 0, Text = "", AutoButtonColor = false })
+                    BackgroundColor3 = Color3.fromRGB(7,8,11), BackgroundTransparency = .30, BorderSizePixel = 0, Text = "", AutoButtonColor = false })
                 corner(track, 3)
                 local trackEdge = stroke(track, C.border, .54); trackEdge.Thickness = 1
                 local span = math.max(maxV - minV, 1)
@@ -4411,7 +4412,7 @@ task.defer(function()
         if typeof(parent) ~= "Instance" then return end
         local gui = New("ScreenGui", { Parent = parent, Name = "NoirKnifeSheriffBind", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 84, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
         local button = New("ImageButton", { Parent = gui, Name = "KillSheriff", AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("knife_sheriff_bind_v1", UDim2.new(.68, 0, .73, 0)), Size = UDim2.fromOffset(48, 48),
-            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0, AutoButtonColor = false, Image = "", ClipsDescendants = false, ZIndex = 8 })
+            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .42, BorderSizePixel = 0, AutoButtonColor = false, Image = "", ClipsDescendants = false, ZIndex = 8 })
         local shape = New("UICorner", { Parent = button, Name = "NoirShape", CornerRadius = UDim.new(1, 0) })
         local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
         local metal = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 40)), ColorSequenceKeypoint.new(.22, Color3.fromRGB(250, 250, 252)), ColorSequenceKeypoint.new(.48, Color3.fromRGB(70, 70, 78)), ColorSequenceKeypoint.new(.72, Color3.fromRGB(255, 255, 255)), ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 45, 52)) })
@@ -4750,16 +4751,12 @@ function createShootButton()
     button.Position = NoirPersistence.GetPosition("shoot_v2", UDim2.new(1, -132, 1, -124))
     button.Size = UDim2.new(0, 194, 0, 66)
     button.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-    button.BackgroundTransparency = 0.28
+    button.BackgroundTransparency = 0.42
     button.BorderSizePixel = 0
-    button.Text = "Shoot Murder"
-    button.TextColor3 = Color3.fromRGB(245, 245, 248)
-    button.TextSize = 17
-    button.TextWrapped = true
-    button.TextXAlignment = Enum.TextXAlignment.Left
-    button.Font = Enum.Font.GothamBold
-    button.ClipsDescendants = false
+    button.Text = ""
     button.AutoButtonColor = false
+    button.ClipsDescendants = false
+    button.Font = Enum.Font.GothamBold
     button.ZIndex = 5
     button.Parent = shootGui
     shootButton = button
@@ -4780,15 +4777,42 @@ function createShootButton()
     innerStroke.Color = Color3.fromRGB(105, 105, 112); innerStroke.Transparency = 0.5; innerStroke.Thickness = 1
     innerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; innerStroke.Parent = button
     local innerGradient = gradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = innerStroke
-    local shootMarkRoot, shootMark = __NOIR_GUARD.blackhole.Create(button, UDim2.fromOffset(12,12), 42, Vector2.zero, 7, 21, false)
-    if shootMark.image then shootMark.image.ImageTransparency = .08 end
-    local shootTextPadding = Instance.new("UIPadding")
-    shootTextPadding.PaddingLeft = UDim.new(0, 60)
-    shootTextPadding.PaddingRight = UDim.new(0, 14)
-    shootTextPadding.Parent = button
+    local shootMarkRoot, shootMark = __NOIR_GUARD.blackhole.Create(button, UDim2.fromScale(0,0), 194, Vector2.zero, 6, 16, false)
+    shootMarkRoot.Name = "ShootBlackholeBackground"
+    shootMarkRoot.Size = UDim2.fromScale(1,1)
+    if shootMark.image then
+        shootMark.image.ScaleType = Enum.ScaleType.Stretch
+        shootMark.image.ImageTransparency = .28
+        shootMark.image.ZIndex = 10
+    end
+    local shootShade = Instance.new("Frame")
+    shootShade.Name = "ShootBlackholeShade"
+    shootShade.Size = UDim2.fromScale(1,1)
+    shootShade.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    shootShade.BackgroundTransparency = .48
+    shootShade.BorderSizePixel = 0
+    shootShade.ZIndex = 11
+    shootShade.Parent = button
+    Instance.new("UICorner", shootShade).CornerRadius = UDim.new(0,16)
+    local shootLabel = Instance.new("TextLabel")
+    shootLabel.Name = "ShootMurderLabel"
+    shootLabel.AnchorPoint = Vector2.new(.5,.5)
+    shootLabel.Position = UDim2.fromScale(.5,.5)
+    shootLabel.Size = UDim2.new(1,-20,1,-8)
+    shootLabel.BackgroundTransparency = 1
+    shootLabel.Text = "Shoot Murder"
+    shootLabel.TextColor3 = Color3.fromRGB(245,245,248)
+    shootLabel.TextSize = 17
+    shootLabel.TextWrapped = true
+    shootLabel.TextXAlignment = Enum.TextXAlignment.Center
+    shootLabel.Font = Enum.Font.GothamBold
+    shootLabel.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+    shootLabel.TextStrokeTransparency = .30
+    shootLabel.ZIndex = 12
+    shootLabel.Parent = button
     
     local traceA = Instance.new("Frame"); traceA.AnchorPoint = Vector2.new(.5, .5); traceA.Position = UDim2.fromScale(0, .08)
-    traceA.Size = UDim2.fromOffset(8, 8); traceA.BackgroundColor3 = Color3.new(1, 1, 1); traceA.BorderSizePixel = 0; traceA.ZIndex = 10; traceA.Parent = button
+    traceA.Size = UDim2.fromOffset(8, 8); traceA.BackgroundColor3 = Color3.new(1, 1, 1); traceA.BorderSizePixel = 0; traceA.ZIndex = 13; traceA.Parent = button
     local traceB = traceA:Clone(); traceB.Position = UDim2.fromScale(1, .92); traceB.Parent = button
     Instance.new("UICorner", traceA).CornerRadius = UDim.new(1, 0)
     Instance.new("UICorner", traceB).CornerRadius = UDim.new(1, 0)
@@ -4801,8 +4825,9 @@ function createShootButton()
     button.InputBegan:Connect(function(input)
         if isPrimaryPress(input) then
             dragging = not config.lockShootButton; moved = false; dragStart = input.Position; startPosition = button.Position
-            TweenService:Create(button, pressTween, { Size = pressedSize, TextSize = 18, BackgroundColor3 = Color3.fromRGB(27,27,31) }):Play()
-            button.Text = "T A R G E T   L O C K"
+            TweenService:Create(button, pressTween, { Size = pressedSize, BackgroundColor3 = Color3.fromRGB(27,27,31), BackgroundTransparency = .34 }):Play()
+            TweenService:Create(shootLabel, pressTween, { TextSize = 18 }):Play()
+            shootLabel.Text = "T A R G E T   L O C K"
             traceA.Visible = true; traceB.Visible = true
             traceA.Position = UDim2.fromScale(0, .08); traceB.Position = UDim2.fromScale(1, .92)
             TweenService:Create(traceA, TweenInfo.new(.50, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.fromScale(1, .08) }):Play()
@@ -4825,8 +4850,9 @@ function createShootButton()
         if isPrimaryPress(input) then
             dragging = false
             NoirPersistence.SetPosition("shoot_v2", button.Position)
-            TweenService:Create(button, TweenInfo.new(.62, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = normalSize, TextSize = 17, BackgroundColor3 = Color3.fromRGB(8,8,10), BackgroundTransparency = .28 }):Play()
-            button.Text = "Shoot Murder"
+            TweenService:Create(button, TweenInfo.new(.62, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = normalSize, BackgroundColor3 = Color3.fromRGB(8,8,10), BackgroundTransparency = .42 }):Play()
+            TweenService:Create(shootLabel, TweenInfo.new(.62, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { TextSize = 17 }):Play()
+            shootLabel.Text = "Shoot Murder"
             traceA.Visible = false; traceB.Visible = false
         end
     end)
@@ -4890,7 +4916,7 @@ function setRoundTimerVisible(value)
     roundTimerGui.Position = UDim2.new(.5, 0, 0, 18)
     roundTimerGui.Size = UDim2.fromOffset(220, 50)
     roundTimerGui.BackgroundColor3 = C.panel
-    roundTimerGui.BackgroundTransparency = .12
+    roundTimerGui.BackgroundTransparency = .30
     roundTimerGui.TextColor3 = C.text
     roundTimerGui.Text = "WAITING"
     roundTimerGui.TextSize = 20
@@ -5339,7 +5365,7 @@ local function createGrabGunBindButton()
     button.AnchorPoint = Vector2.new(.5, .5)
     button.Position = NoirPersistence.GetPosition("grab_gun_bind_v1", UDim2.new(.10, 0, .88, 0))
     button.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-    button.BackgroundTransparency = .28
+    button.BackgroundTransparency = .42
     button.BorderSizePixel = 0
     button.Image = ""
     button.AutoButtonColor = false
@@ -6171,7 +6197,7 @@ task.defer(function()
          
         local initialPixels = bindButtonPixels()
         local button = New("ImageButton", { Name = "AimlockButton", Parent = overlay, AnchorPoint = Vector2.new(.5, .5), Position = NoirPersistence.GetPosition("aimlock_bind_v1", UDim2.new(.83, 0, .70, 0)),
-            Size = UDim2.fromOffset(initialPixels, initialPixels), BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0, AutoButtonColor = false,
+            Size = UDim2.fromOffset(initialPixels, initialPixels), BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .42, BorderSizePixel = 0, AutoButtonColor = false,
             Image = "", ClipsDescendants = false, ZIndex = 8 })
         corner(button, 999)
         local aspect = New("UIAspectRatioConstraint", { Parent = button, AspectRatio = 1, AspectType = Enum.AspectType.ScaleWithParentSize })
@@ -6712,7 +6738,7 @@ task.defer(function()
         local bindGui = New("ScreenGui", { Parent = parent, Name = "NoirDesyncBindButton", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 83, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
         local button = New("ImageButton", { Parent = bindGui, Name = "Desync", AnchorPoint = Vector2.new(.5, .5),
             Position = NoirPersistence.GetPosition("desync_bind_v1", UDim2.new(.35, 0, .88, 0)), Size = UDim2.fromScale(desyncState.bindSize, desyncState.bindSize),
-            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .28, BorderSizePixel = 0,
+            BackgroundColor3 = Color3.fromRGB(8, 8, 10), BackgroundTransparency = .42, BorderSizePixel = 0,
             Image = "", AutoButtonColor = false, ClipsDescendants = false, ZIndex = 7 })
          
         corner(button, 999)
