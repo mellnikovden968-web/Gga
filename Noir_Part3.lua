@@ -1,4 +1,3 @@
--- NOIR_EVENT_HORIZON_V6_PART_3
 getgenv().__NoirSkinContext = {
     win = win, template = visualContent, C = C, New = New, corner = corner, stroke = stroke, text = text,
     notify = notify, persistence = NoirPersistence, localPlayer = LocalPlayer, players = Players,
