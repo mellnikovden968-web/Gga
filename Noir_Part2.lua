@@ -1,4 +1,3 @@
--- NOIR_EVENT_HORIZON_V6_4_PART_2
  
 local __noirVisualContext = {
     tab = tab, players = Players, workspace = Workspace, runService = RunService,
