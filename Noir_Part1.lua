@@ -252,8 +252,8 @@ task.spawn(function()
             for i = #blackholeSpinList, 1, -1 do
                 local s = blackholeSpinList[i]
                 if s.a and s.a.Parent then
-                    s.a.Rotation = rot
-                    if s.b then s.b.Rotation = rot + 180 end
+                    if s.a:IsA("UIGradient") then s.a.Rotation = rot end
+                    if s.b and s.b:IsA("UIGradient") then s.b.Rotation = rot + 180 end
                 else
                     table.remove(blackholeSpinList, i)
                 end
@@ -368,7 +368,7 @@ __NOIR_GUARD.gui = gui
 local scale = New("UIScale", { Parent = gui, Scale = 1 })
 function rescale()
     local v = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-    scale.Scale = math.clamp(math.min(v.X / 1240, v.Y / 740) * 0.8, 0.24, 0.66)
+    scale.Scale = math.clamp(math.min(v.X / 1240, v.Y / 740) * 0.92, 0.24, 0.74)
 end
 rescale()
 if workspace.CurrentCamera then workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale) end
@@ -417,83 +417,29 @@ text(sidebar, "EVENT HORIZON  //  CLIENT", 9, UDim2.fromOffset(86, 75), true)
 __NOIR_GUARD.navState = { active = "home" }
 __NOIR_GUARD.floatIcon = function(button, key, fallbackKind)
     if typeof(button) ~= "Instance" then return end
-    local kinds = { Sh = "gun", Mur = "knife", Sel = "target", All = "people", Nrst = "pin", TF = "bolt", BJ = "bomb", GBJ = "bomb", GLITCH = "bolt", GRAB = "gun", INVI = "ghost", WH = "wall" }
-    local kind = kinds[key] or fallbackKind or "bolt"
+    -- Lucide 48px atlas cells { assetId, offsetX, offsetY } (same sheets as the sidebar nav)
+    local ICONS = {
+        Sh = { 16898613777, 869, 0 }, Mur = { 16898613777, 710, 967 }, Sel = { 16898613044, 453, 869 },
+        All = { 16898613869, 967, 98 }, Nrst = { 16898613613, 820, 257 }, TF = { 16898613869, 918, 906 },
+        BJ = { 16898612819, 257, 869 }, GBJ = { 16898612819, 257, 869 }, GLITCH = { 16898613869, 918, 906 },
+        GRAB = { 16898613509, 514, 820 }, INVI = { 16898613353, 869, 906 }, WH = { 16898613699, 869, 355 },
+    }
+    local data = ICONS[key] or ICONS[fallbackKind or ""] or ICONS.TF
     local old = button:FindFirstChild("@Icon")
     if old then old:Destroy() end
-    local holder = Instance.new("Frame")
-    holder.Name = "@Icon"
-    holder.AnchorPoint = Vector2.new(.5, .5)
-    holder.Position = UDim2.new(.5, 0, .40, 0)
-    holder.Size = UDim2.new(.58, 0, .58, 0)
-    holder.BackgroundTransparency = 1
-    holder.ZIndex = 12
-    holder.Parent = button
-    local INK = Color3.fromRGB(240, 243, 248)
-    local DARK = Color3.fromRGB(18, 20, 24)
-    local GOLD = Color3.fromRGB(255, 206, 72)
-    local function P(px, py, sx, sy, rot, pill, color)
-        local f = Instance.new("Frame")
-        f.AnchorPoint = Vector2.new(.5, .5)
-        f.Position = UDim2.new(px, 0, py, 0)
-        f.Size = UDim2.new(sx, 0, sy, 0)
-        f.Rotation = rot or 0
-        f.BackgroundColor3 = color or INK
-        f.BorderSizePixel = 0
-        f.ZIndex = 12
-        f.Parent = holder
-        if pill then Instance.new("UICorner", f).CornerRadius = UDim.new(1, 0) end
-        return f
-    end
-    if kind == "gun" then
-        P(.46, .34, .78, .20, 0, true)
-        P(.30, .16, .10, .16, 0, true)
-        P(.66, .64, .20, .44, 18, true)
-        P(.42, .60, .16, .22, 0, true)
-    elseif kind == "knife" then
-        P(.40, .40, .58, .18, 45, true)
-        P(.72, .72, .30, .22, 45, true, Color3.fromRGB(150, 156, 166))
-    elseif kind == "target" then
-        local ring = P(.5, .5, .74, .74, 0, true)
-        ring.BackgroundTransparency = 1
-        local st = Instance.new("UIStroke", ring)
-        st.Thickness = 2
-        st.Color = INK
-        P(.5, .5, .18, .18, 0, true, GOLD)
-        P(.5, .06, .10, .20, 0, true)
-        P(.5, .94, .10, .20, 0, true)
-        P(.06, .5, .20, .10, 0, true)
-        P(.94, .5, .20, .10, 0, true)
-    elseif kind == "people" then
-        P(.36, .26, .28, .28, 0, true)
-        P(.36, .70, .48, .36, 0, true)
-        P(.70, .30, .22, .22, 0, true, Color3.fromRGB(190, 196, 206))
-        P(.72, .70, .40, .32, 0, true, Color3.fromRGB(190, 196, 206))
-    elseif kind == "pin" then
-        P(.5, .34, .46, .46, 0, true)
-        P(.5, .70, .22, .30, 45, true)
-        P(.5, .34, .16, .16, 0, true, DARK)
-    elseif kind == "bolt" then
-        P(.58, .26, .46, .20, -18, true)
-        P(.48, .50, .46, .20, -18, true)
-        P(.38, .74, .46, .20, -18, true, GOLD)
-    elseif kind == "bomb" then
-        P(.44, .60, .62, .62, 0, true)
-        P(.64, .26, .20, .16, 40, true, Color3.fromRGB(150, 156, 166))
-        P(.80, .12, .14, .14, 0, true, GOLD)
-    elseif kind == "ghost" then
-        P(.5, .40, .64, .62, 0, true)
-        P(.30, .78, .16, .22, 0, true)
-        P(.50, .84, .16, .22, 0, true)
-        P(.70, .78, .16, .22, 0, true)
-        P(.40, .38, .10, .14, 0, true, DARK)
-        P(.60, .38, .10, .14, 0, true, DARK)
-    elseif kind == "wall" then
-        P(.24, .5, .16, .84, 0, true, Color3.fromRGB(150, 156, 166))
-        P(.62, .58, .14, .56, 0, true)
-        P(.50, .30, .30, .12, 40, true)
-        P(.74, .30, .30, .12, -40, true)
-    end
+    local img = Instance.new("ImageLabel")
+    img.Name = "@Icon"
+    img.AnchorPoint = Vector2.new(.5, .5)
+    img.Position = UDim2.new(.5, 0, .40, 0)
+    img.Size = UDim2.new(.52, 0, .52, 0)
+    img.BackgroundTransparency = 1
+    img.Image = "rbxassetid://" .. tostring(data[1])
+    img.ImageRectSize = Vector2.new(48, 48)
+    img.ImageRectOffset = Vector2.new(data[2], data[3])
+    img.ImageColor3 = Color3.fromRGB(240, 243, 248)
+    img.ScaleType = Enum.ScaleType.Fit
+    img.ZIndex = 12
+    img.Parent = button
 end
 do
     local navDefs = {
@@ -665,7 +611,7 @@ function styleCircularButton(b, diameter)
     
     local inner = New("UIStroke", { Parent = b, Color = Color3.fromRGB(105, 105, 112), Transparency = .5, Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
     local innerGradient = gradient:Clone(); innerGradient.Rotation = 180; innerGradient.Parent = inner
-    if __NOIR_GUARD.blackhole.Spin then __NOIR_GUARD.blackhole.Spin(gradient, inner) end
+    if __NOIR_GUARD.blackhole.Spin then __NOIR_GUARD.blackhole.Spin(gradient, innerGradient) end
     
     local sound = Instance.new("Sound")
     sound.Name = "NoirButtonSound"; sound.SoundId = "rbxassetid://3868133279"; sound.Volume = .35; sound.Parent = b
@@ -811,8 +757,7 @@ function __NOIR_GUARD.blackhole.CollapseWindow()
     if __NOIR_GUARD.blackhole.TransitionBusy or not win.Visible then return end
     __NOIR_GUARD.blackhole.TransitionBusy = true
     __NOIR_GUARD.blackhole.LastWindowPosition = win.Position
-    sidebar.Visible = false
-    content.Visible = false
+    if __NOIR_GUARD.setChromeVisible then __NOIR_GUARD.setChromeVisible(false) end
     local destination = __NOIR_GUARD.blackhole.CollapseTargetPosition()
     TweenService:Create(win, TweenInfo.new(.48, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
         Position = destination, BackgroundTransparency = 1, Rotation = 4.2,
@@ -832,8 +777,7 @@ function __NOIR_GUARD.blackhole.ReopenWindow()
     local collapsedPosition = win.Position
     restore.Visible = false
     win.Visible = true
-    sidebar.Visible = true
-    content.Visible = true
+    if __NOIR_GUARD.setChromeVisible then __NOIR_GUARD.setChromeVisible(true) end
     win.Position = collapsedPosition
     win.BackgroundTransparency = 1
     win.Rotation = 4.2
@@ -854,7 +798,11 @@ local content = New("ScrollingFrame", { Parent = win, Position = UDim2.fromOffse
     BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
     CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.None,
     ScrollingDirection = Enum.ScrollingDirection.Y, ScrollingEnabled = false, Active = false,
-    ElasticBehavior = Enum.ElasticBehavior.Never, VerticalScrollBarInset = Enum.ScrollBarInset.Always })
+    ElasticBehavior = Enum.ScrollBarInset.Always })
+__NOIR_GUARD.setChromeVisible = function(v)
+    sidebar.Visible = v
+    content.Visible = v
+end
 local cols, configContent, configCols, visualContent, visualCols, mainContent, mainCols, worldContent, worldCols, emotesContent, emotesCols, miscContent, miscCols
 
 do
