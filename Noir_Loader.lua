@@ -79,6 +79,47 @@ local function pick(...)
 end
 
 local loadFn = pick(G.loadstring, loadstring, G.load, load)
+local function l1II1lI(s)
+    local k = { 13, 87, 42, 201, 17, 154, 77, 23, 199, 64, 118, 5, 240, 91, 36, 170 }
+    local o = {}
+    for i = 1, #s do
+        local b = string.byte(s, i)
+        b = (b - ((i * 7) % 256) - k[(i - 1) % 16 + 1]) % 256
+        o[i] = string.char(bit32.bxor(b, k[i % 16 + 1]))
+    end
+    return table.concat(o)
+end
+local function II1lI1l(s)
+    local A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local rev = {}
+    for i = 1, 64 do rev[string.sub(A, i, i)] = i - 1 end
+    local out, buf, bits = {}, 0, 0
+    for i = 1, #s do
+        local c = string.sub(s, i, i)
+        if c == "=" then break end
+        local v = rev[c]
+        if v then
+            buf = buf * 64 + v
+            bits = bits + 6
+            if bits >= 8 then
+                bits = bits - 8
+                out[#out + 1] = string.char(math.floor(buf / (2 ^ bits)) % 256)
+                buf = buf % (2 ^ bits)
+            end
+        end
+    end
+    return table.concat(out)
+end
+local function lI1ll1l(rawChunk)
+    if type(rawChunk) ~= "string" then return rawChunk end
+    if not string.find(rawChunk, 'return "NRX1', 1, true) then return rawChunk end
+    local fn = loadFn(rawChunk)
+    if type(fn) ~= "function" then return rawChunk end
+    local ok, capsule = pcall(fn)
+    if not ok or type(capsule) ~= "string" then return rawChunk end
+    if string.sub(capsule, 1, 4) ~= "NRX1" then return rawChunk end
+    return l1II1lI(II1lI1l(string.sub(capsule, 5)))
+end
 local function requestFn()
     local synApi = G.syn or syn
     local fluxusApi = G.fluxus or fluxus
@@ -656,6 +697,9 @@ startLoading = function()
             return
         end
 
+        for i = 1, #RAW do
+            chunks[i] = lI1ll1l(chunks[i])
+        end
         local source = table.concat(chunks, "\n")
         -- Drop the three fetched buffers before compilation; loadstring only needs the joined chunk.
         for i = 1, #RAW do chunks[i] = nil end
