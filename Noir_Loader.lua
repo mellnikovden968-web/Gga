@@ -10,6 +10,16 @@
     Raw-ссылки уже подключены ниже. Запускай только этот файл.
 ]]
 
+if type(NoirGenv) ~= "function" then
+    NoirGenv = function()
+        if type(getgenv) == "function" then
+            local ok, t = pcall(getgenv)
+            if ok and type(t) == "table" then return t end
+        end
+        return _G
+    end
+end
+
 local RAW = {
     "https://raw.githubusercontent.com/mellnikovden968-web/Gga/refs/heads/main/Noir_Part1.lua",
     "https://raw.githubusercontent.com/mellnikovden968-web/Gga/refs/heads/main/Noir_Part2.lua",
@@ -19,7 +29,7 @@ local RAW = {
 -- Executor environment --------------------------------------------------------
 local function getEnvironment()
     local ok, result = pcall(function()
-        if type(getgenv) == "function" then return getgenv() end
+        if type(getgenv) == "function" then return NoirGenv() end
     end)
     if ok and type(result) == "table" then return result end
 
@@ -31,6 +41,41 @@ local function getEnvironment()
 end
 
 local G = getEnvironment()
+
+-- Compatibility shims: executors with missing globals (low sUNC) --------------
+if type(bit32) ~= "table" or type(bit32.bxor) ~= "function" then
+    local function bxor(a, b)
+        a, b = math.floor(tonumber(a) or 0) % 256, math.floor(tonumber(b) or 0) % 256
+        local result, bit = 0, 1
+        while a > 0 or b > 0 do
+            local ra, rb = a % 2, b % 2
+            if ra ~= rb then result = result + bit end
+            a, b, bit = (a - ra) / 2, (b - rb) / 2, bit * 2
+        end
+        return result
+    end
+    bit32 = { bxor = bxor }
+end
+if type(task) ~= "table" then
+    task = {
+        wait = function(seconds) return wait(seconds) end,
+        spawn = function(callback, ...)
+            local thread = coroutine.create(callback)
+            coroutine.resume(thread, ...)
+            return thread
+        end,
+        defer = function(callback, ...)
+            local args, count = { ... }, select("#", ...)
+            return task.spawn(function() wait() callback(unpack(args, 1, count)) end)
+        end,
+        delay = function(seconds, callback, ...)
+            local args, count = { ... }, select("#", ...)
+            return delay(seconds or 0, function() callback(unpack(args, 1, count)) end)
+        end,
+        cancel = function() end,
+    }
+end
+
 local HUB_LOCK_KEY = "__NoirHubRuntimeLock"
 local LOADER_LOCK_KEY = "__NoirLoaderRuntimeLock"
 
@@ -79,47 +124,6 @@ local function pick(...)
 end
 
 local loadFn = pick(G.loadstring, loadstring, G.load, load)
-local function l1II1lI(s)
-    local k = { 13, 87, 42, 201, 17, 154, 77, 23, 199, 64, 118, 5, 240, 91, 36, 170 }
-    local o = {}
-    for i = 1, #s do
-        local b = string.byte(s, i)
-        b = (b - ((i * 7) % 256) - k[(i - 1) % 16 + 1]) % 256
-        o[i] = string.char(bit32.bxor(b, k[i % 16 + 1]))
-    end
-    return table.concat(o)
-end
-local function II1lI1l(s)
-    local A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-    local rev = {}
-    for i = 1, 64 do rev[string.sub(A, i, i)] = i - 1 end
-    local out, buf, bits = {}, 0, 0
-    for i = 1, #s do
-        local c = string.sub(s, i, i)
-        if c == "=" then break end
-        local v = rev[c]
-        if v then
-            buf = buf * 64 + v
-            bits = bits + 6
-            if bits >= 8 then
-                bits = bits - 8
-                out[#out + 1] = string.char(math.floor(buf / (2 ^ bits)) % 256)
-                buf = buf % (2 ^ bits)
-            end
-        end
-    end
-    return table.concat(out)
-end
-local function lI1ll1l(rawChunk)
-    if type(rawChunk) ~= "string" then return rawChunk end
-    if not string.find(rawChunk, 'return "NRX1', 1, true) then return rawChunk end
-    local fn = loadFn(rawChunk)
-    if type(fn) ~= "function" then return rawChunk end
-    local ok, capsule = pcall(fn)
-    if not ok or type(capsule) ~= "string" then return rawChunk end
-    if string.sub(capsule, 1, 4) ~= "NRX1" then return rawChunk end
-    return l1II1lI(II1lI1l(string.sub(capsule, 5)))
-end
 local function requestFn()
     local synApi = G.syn or syn
     local fluxusApi = G.fluxus or fluxus
@@ -697,9 +701,6 @@ startLoading = function()
             return
         end
 
-        for i = 1, #RAW do
-            chunks[i] = lI1ll1l(chunks[i])
-        end
         local source = table.concat(chunks, "\n")
         -- Drop the three fetched buffers before compilation; loadstring only needs the joined chunk.
         for i = 1, #RAW do chunks[i] = nil end
