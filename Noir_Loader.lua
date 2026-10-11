@@ -42,6 +42,48 @@ end
 
 local G = getEnvironment()
 
+-- Noir part decoder: GitHub may host obfuscated parts (return "NRX1...").
+-- Clean sources pass through untouched.
+local function noirB64(s)
+    local A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local rev = {}
+    for i = 1, 64 do rev[string.sub(A, i, i)] = i - 1 end
+    local out, buf, bits = {}, 0, 0
+    for i = 1, #s do
+        local c = string.sub(s, i, i)
+        if c == "=" then break end
+        local v = rev[c]
+        if v then
+            buf = buf * 64 + v
+            bits = bits + 6
+            if bits >= 8 then
+                bits = bits - 8
+                out[#out + 1] = string.char(math.floor(buf / 2 ^ bits) % 256)
+                buf = buf % (2 ^ bits)
+            end
+        end
+    end
+    return table.concat(out)
+end
+local function noirUnshuffle(s)
+    local k = { 13, 87, 42, 201, 17, 154, 77, 23, 199, 64, 118, 5, 240, 91, 36, 170 }
+    local o = {}
+    for i = 1, #s do
+        local b = string.byte(s, i)
+        b = (b - ((i * 7) % 256) - k[(i - 1) % 16 + 1]) % 256
+        o[i] = string.char(bit32.bxor(b, k[i % 16 + 1]))
+    end
+    return table.concat(o)
+end
+local function noirDecode(body)
+    local m = type(body) == "string" and body:match("NRX1([A-Za-z0-9+/=]+)") or nil
+    if m then
+        local ok, src = pcall(function() return noirUnshuffle(noirB64(m)) end)
+        if ok and type(src) == "string" and #src > 64 then return src end
+    end
+    return body
+end
+
 -- Compatibility shims: executors with missing globals (low sUNC) --------------
 if type(bit32) ~= "table" or type(bit32.bxor) ~= "function" then
     local function bxor(a, b)
@@ -675,7 +717,7 @@ startLoading = function()
                         fail("Download failed", "Module " .. tostring(i) .. " could not be fetched. Check its raw GitHub URL.", "Part " .. tostring(i) .. ": " .. tostring(reason))
                     end
                 else
-                    chunks[i] = body
+                    chunks[i] = noirDecode(body)
                     completed = completed + 1
                     if not failed then
                         setProgress((completed / #RAW) * 0.72)
