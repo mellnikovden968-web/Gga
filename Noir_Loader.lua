@@ -48,7 +48,7 @@ local function noirB64(s)
     local A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     local rev = {}
     for i = 1, 64 do rev[string.sub(A, i, i)] = i - 1 end
-    local out, buf, bits = {}, 0, 0
+    local out, segs, buf, bits, n = {}, {}, 0, 0, 0
     for i = 1, #s do
         local c = string.sub(s, i, i)
         if c == "=" then break end
@@ -58,30 +58,53 @@ local function noirB64(s)
             bits = bits + 6
             if bits >= 8 then
                 bits = bits - 8
-                out[#out + 1] = string.char(math.floor(buf / 2 ^ bits) % 256)
+                n = n + 1
+                out[n] = string.char(math.floor(buf / 2 ^ bits) % 256)
                 buf = buf % (2 ^ bits)
+                if n % 8192 == 0 then
+                    segs[#segs + 1] = table.concat(out)
+                    out = {}
+                    n = 0
+                end
             end
         end
     end
-    return table.concat(out)
+    segs[#segs + 1] = table.concat(out)
+    return table.concat(segs)
 end
 local function noirUnshuffle(s)
     local k = { 13, 87, 42, 201, 17, 154, 77, 23, 199, 64, 118, 5, 240, 91, 36, 170 }
-    local o = {}
+    local o, segs, n = {}, {}, 0
     for i = 1, #s do
         local b = string.byte(s, i)
         b = (b - ((i * 7) % 256) - k[(i - 1) % 16 + 1]) % 256
-        o[i] = string.char(bit32.bxor(b, k[i % 16 + 1]))
+        n = n + 1
+        o[n] = string.char(bit32.bxor(b, k[i % 16 + 1]))
+        if n % 8192 == 0 then
+            segs[#segs + 1] = table.concat(o)
+            o = {}
+            n = 0
+        end
     end
-    return table.concat(o)
+    segs[#segs + 1] = table.concat(o)
+    return table.concat(segs)
 end
+-- v2: no giant pattern match over the whole ~1MB body — weak Android VMs
+-- (Arceus X) choke on it and silently return nil, which used to leak raw
+-- blobs into the compiler ("Expected <eof>, got 'return'"). Plain find+sub
+-- only. Returns nil when the body is not a Noir blob or cannot be unpacked.
 local function noirDecode(body)
-    local m = type(body) == "string" and body:match("NRX1([A-Za-z0-9+/=]+)") or nil
-    if m then
-        local ok, src = pcall(function() return noirUnshuffle(noirB64(m)) end)
-        if ok and type(src) == "string" and #src > 64 then return src end
-    end
-    return body
+    if type(body) ~= "string" then return nil end
+    local s0 = string.find(body, "NRX1", 1, true)
+    if not s0 then return nil end
+    local blob = string.sub(body, s0 + 4)
+    local cut = string.find(blob, "\n", 1, true)
+    if cut then blob = string.sub(blob, 1, cut - 1) end
+    cut = string.find(blob, "\r", 1, true)
+    if cut then blob = string.sub(blob, 1, cut - 1) end
+    local ok, src = pcall(function() return noirUnshuffle(noirB64(blob)) end)
+    if ok and type(src) == "string" and #src > 64 then return src end
+    return nil
 end
 
 -- Compatibility shims: executors with missing globals (low sUNC) --------------
@@ -717,11 +740,21 @@ startLoading = function()
                         fail("Download failed", "Module " .. tostring(i) .. " could not be fetched. Check its raw GitHub URL.", "Part " .. tostring(i) .. ": " .. tostring(reason))
                     end
                 else
-                    chunks[i] = noirDecode(body)
-                    completed = completed + 1
-                    if not failed then
-                        setProgress((completed / #RAW) * 0.72)
-                        setStatus("Downloading modules", "Received " .. tostring(completed) .. " of " .. tostring(#RAW) .. " parts…", "loading")
+                    local decoded = noirDecode(body)
+                    if decoded == nil and string.find(body, "NRX1", 1, true) then
+                        if not failed then
+                            failed = true
+                            fail("Decode failed",
+                                "This executor could not unpack the Noir module. Retry, or switch executor.",
+                                "noirDecode returned nil on part " .. tostring(i) .. " (" .. tostring(executorName) .. ")")
+                        end
+                    else
+                        chunks[i] = decoded or body -- clean sources pass through
+                        completed = completed + 1
+                        if not failed then
+                            setProgress((completed / #RAW) * 0.72)
+                            setStatus("Downloading modules", "Received " .. tostring(completed) .. " of " .. tostring(#RAW) .. " parts…", "loading")
+                        end
                     end
                 end
                 finished = finished + 1
@@ -744,28 +777,49 @@ startLoading = function()
         end
 
         local source = table.concat(chunks, "\n")
-        -- Drop the three fetched buffers before compilation; loadstring only needs the joined chunk.
-        for i = 1, #RAW do chunks[i] = nil end
-        chunks = nil
         local compileOk, runChunk, compileError = pcall(loadFn, source)
-        source = nil
+        local preLaunched = false
         if not compileOk or type(runChunk) ~= "function" then
-            local detail = compileError or runChunk or "compiler returned no function or error"
-            fail("Compile failed", shorten(detail, 112), "compile failed: " .. tostring(detail))
-            return
+            -- Fallback for picky executors: compile & run parts one by one.
+            local seqError
+            for i = 1, #RAW do
+                local ok2, fn2, err2 = pcall(loadFn, chunks[i])
+                if ok2 and type(fn2) == "function" then
+                    local runOk2, runErr2 = pcall(fn2)
+                    if not runOk2 then
+                        seqError = "part " .. tostring(i) .. " run: " .. tostring(runErr2)
+                        break
+                    end
+                else
+                    seqError = "part " .. tostring(i) .. " compile: " .. tostring(err2 or fn2)
+                    break
+                end
+            end
+            if seqError then
+                local detail = compileError or runChunk or "compiler returned no function or error"
+                fail("Compile failed", shorten(detail, 112),
+                    "joined: " .. tostring(detail) .. " | seq: " .. seqError)
+                return
+            end
+            preLaunched = true
         end
+        -- Drop the fetched buffers; loadstring only needs what already ran.
+        source = nil
+        chunks = nil
 
         if not active or myAttempt ~= attemptId then return end
         loaderRecord.status = "launching"
         loaderRecord.startedAt = os.clock()
         setStatus("Launching Noir", "Starting the hub in the current session…", "loading")
         setProgress(0.94)
-        local runOk, runError = pcall(runChunk)
-        runChunk = nil
-        if not runOk then
-            clearStartingHubGuard()
-            fail("Startup failed", shorten(runError, 112), "runtime failed: " .. tostring(runError))
-            return
+        if not preLaunched then
+            local runOk, runError = pcall(runChunk)
+            runChunk = nil
+            if not runOk then
+                clearStartingHubGuard()
+                fail("Startup failed", shorten(runError, 112), "runtime failed: " .. tostring(runError))
+                return
+            end
         end
 
         local hubState = G[HUB_LOCK_KEY]
