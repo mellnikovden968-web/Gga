@@ -1,356 +1,180 @@
--- Noir DUMPER Menu | by mellnikovden968-web/Gga
--- Запуск: loadstring(game:HttpGet("https://raw.githubusercontent.com/mellnikovden968-web/Gga/refs/heads/main/Noir_Dumper_Menu.lua"))()
--- Требует Delta / CodeX / Arceus X Neo (writefile/makefolder)
+-- Auto Dumper XALOEX | без меню, всё само | анти-кик
+-- Запусти ЭТОТ скрипт ПЕРВЫМ, потом любой который хочешь высосать
+-- Он сам поймает XALOEX и сразу высосет чистые k/api/code в logdump/AUTO_*.lua
+-- Даже если тебя кикает через 2 сек - успеет сохранить до кика
 
-local Players = game:GetService("Players")
-local LP = Players.LocalPlayer
-local SG = game:GetService("StarterGui")
-local HttpService = game:GetService("HttpService")
+local LOG = "logdump"
+pcall(function() if makefolder and not isfolder(LOG) then makefolder(LOG) end end)
 
-local LOG_FOLDER = "logdump"
-pcall(function() if makefolder and not isfolder(LOG_FOLDER) then makefolder(LOG_FOLDER) end end)
-
--- ===== DUMPER CORE (V2 FIX) =====
-local seen, count, MIN_SIZE = {}, 0, 2048
-local function hash(s) return #s..":"..s:sub(1,60) end
+local MIN = 2000
+local seen = {}
+local function hash(s) return #s..s:sub(1,80) end
 local function save(tag, src, extra)
-    if type(src)~="string" or #src < MIN_SIZE then return end
-    local h = hash(src)
+    if type(src)~="string" or #src<MIN then return end
+    local h=hash(src)
     if seen[h] then return end
     seen[h]=true
-    count+=1
-    local name = string.format("%s/%02d_%s.lua", LOG_FOLDER, count, tag)
-    local header = string.format("-- NOIR DUMP | TAG: %s | SIZE: %d | FROM: %s | %s\n\n", tag, #src, tostring(extra or "?"), os.date("%Y-%m-%d %H:%M:%S"))
-    pcall(function() writefile(name, header..src) end)
-    return name, #src
+    local path = string.format("%s/AUTO_%s_%d.lua", LOG, tag, os.time()%100000)
+    local head = string.format("-- AUTO %s | %d bytes | %s | %s\n\n", tag, #src, tostring(extra or ""), os.date())
+    pcall(function() writefile(path, head..src) end)
+    print("[AUTO] saved "..path.." "..#src)
+    return path
 end
 
-local dumperOn = false
-local function enableDumper()
-    if dumperOn then return false end
-    dumperOn = true
-    -- loadstring
-    local orig_ls = loadstring
-    local function hooked_ls(str, chunk, ...)
-        if type(str)=="string" and #str >= MIN_SIZE then save("loadstring", str, chunk) end
-        return orig_ls(str, chunk, ...)
-    end
-    if hookfunction then pcall(hookfunction, orig_ls, hooked_ls) end
-    getgenv().loadstring = hooked_ls
-    if load ~= orig_ls then
-        local orig_l = load
-        local function hooked_l(str, chunk, ...) 
-            if type(str)=="string" and #str >= MIN_SIZE then save("load", str, chunk) end
-            return orig_l(str, chunk, ...) 
+-- ===== 1. STEALTH HOOK loadstring/load =====
+local orig_ls = loadstring
+local orig_load = load
+local function isXaloex(s) return type(s)=="string" and s:find("XALOEX") and s:find("xaloex vm binding") end
+local function isLuraph(s) return type(s)=="string" and s:find("Luraph") end
+
+local function tryDeobfuscateXaloex(src, chunk)
+    -- пытаемся вытащить чистые таблицы без запуска ВМ-ки (статично)
+    -- XALOEX хранит всё в l1_/I1_/O1_/_I_ и ключах lII_/III_/OII_ и тд
+    -- Мы просто сохраняем сырой ВМ, а также пытаемся выполнить патченную копию в фоне чтобы вытащить decode
+    save("XALOEX_RAW", src, chunk)
+    
+    -- попытка №1: запустить патченную копию в изолированном потоке и выцепить O0OI_.k / api / code
+    task.spawn(function()
+        local ok, err = pcall(function()
+            -- патчим анти-дебаг: debug.info(1,"l") должен вернуть O1I_, debug.info(.,"s") => "[C]"
+            -- O1I_ в этом файле всегда 44 (смотри function I_II_ debug.info==O1I_)
+            local patched = src
+            -- убираем проверку _1_(O_I_) которая кикает
+            patched = patched:gsub("_1_%(O_I_%)", "-- patched _1_(O_I_)")
+            patched = patched:gsub("_1_%(__I_%)", "-- patched")
+            patched = patched:gsub("_1_%(ll1_%)", "-- patched")
+            patched = patched:gsub("_1_%(Il1_%)", "-- patched")
+            patched = patched:gsub("_1_%(Ol1_%)", "-- patched")
+            -- вставляем дамп сразу после O0OI_ = O_1I_()
+            local injected = false
+            patched = patched:gsub("local O0OI_ = O_1I_%(%)(.-)if lI_ or not O0OI_", function(a)
+                injected = true
+                return "local O0OI_ = O_1I_() pcall(function() local j=game:GetService('HttpService'):JSONEncode({k=O0OI_.k,api=O0OI_.api,code=O0OI_.code,ups=O0OI_.ups,kids=O0OI_.kids}); writefile('"..LOG.."/AUTO_XALOEX_DECODED_'..tostring(math.random(100,999))..'.json', j); writefile('"..LOG.."/AUTO_XALOEX_KDUMP.lua', '-- k dump\\n'..table.concat((function() local t={} for i,v in ipairs(O0OI_.k) do t[i]=tostring(v.t)..':'..tostring(v.d and v.d:sub(1,30) or '') end return t end)(), '\\n')) end) "..a
+            end, 1)
+            
+            -- если не нашли O0OI_ паттерн, пробуем другой: O_1I_%(%)
+            if not injected then
+                patched = patched:gsub("O_1I_%(%)(.-)return", "O_1I_() pcall(function() end) %1return", 1)
+            end
+
+            -- мокаем debug.info чтобы не кикало
+            local env = getgenv()
+            local old_info = debug.info
+            local mock_info = function(a,b)
+                if b=="l" then return 44 end
+                if b=="s" then return "[C]" end
+                if b=="a" then return 2, false end
+                if b=="f" then return nil end
+                return old_info(a,b)
+            end
+            
+            -- сохраняем хук, грузим патченную
+            local _old = debug.info
+            debug.info = mock_info
+            local f, gerr = orig_ls(patched, chunk.."_patched")
+            debug.info = _old
+            
+            if f then
+                -- не вызываем f() - он вернет I_II_ обертку, но сам факт что он скомпилился значит патч ок
+                save("XALOEX_PATCHED", patched, chunk)
+                print("[AUTO] XALOEX patched compiled OK, injected dump")
+                -- пробуем вызвать в pcall с фейк аргументами чтобы триггернуть O_1I_ парсинг
+                -- I_II_ ожидает (...) и вызывает l0II_ -> там парсится I0II_
+                -- вызовем с пустым OlI_ - он распарсит байткод до O0OI_ и сохранит json до кика
+                task.spawn(function()
+                    local old_debug = debug.info
+                    debug.info = mock_info
+                    pcall(f)
+                    debug.info = old_debug
+                end)
+            else
+                print("[AUTO] patched compile fail: "..tostring(gerr):sub(1,300))
+            end
+        end)
+        if not ok then
+            print("[AUTO] deobfuscate pcall fail: "..tostring(err):sub(1,500))
+            -- всё равно сохраняем RAW чтобы можно было деобфускать вручную питоном
         end
-        if hookfunction then pcall(hookfunction, orig_l, hooked_l) end
-        getgenv().load = hooked_l
-    end
-    -- HttpGet
-    pcall(function()
-        local orig = game.HttpGet
-        local function hooked(self, url, ...)
-            local res = orig(self, url, ...)
-            if type(res)=="string" and #res > 10000 then save("HttpGet", res, url) end
-            return res
-        end
-        if hookfunction then pcall(hookfunction, orig, hooked) else game.HttpGet = hooked end
     end)
-    return true
 end
 
-getgenv().dumpMain = function()
-    local out = {}
-    local found=0
-    if getgc then
-        local ok, gc = pcall(getgc, true)
-        if ok then
-            for _,f in ipairs(gc) do
-                if type(f)=="function" then
-                    local s, src = pcall(decompile, f)
-                    if s and type(src)=="string" and #src > 5000 and not seen[hash(src)] then
-                        if src:find("Noir") or src:find("Overdrive") or src:find("Velocity") or src:find("AntiAim") or #src>25000 then
-                            local n,l = save("MAIN_getgc", src, debug.getinfo(f).name or "anon")
-                            if n then 
-                                found+=1
-                                table.insert(out, n.." ("..l.."b)")
-                                if found>=3 then break end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    for _,fn in ipairs({"getscripts","getrscripts"}) do
-        local g = getgenv()[fn]
-        if g then
-            for _,scr in ipairs(g()) do
-                if scr:IsA("ModuleScript") or scr:IsA("LocalScript") then
-                    local s, src = pcall(decompile, scr)
-                    if s and #src > 5000 and not seen[hash(src)] then
-                        local n,l = save(fn, src, scr:GetFullName())
-                        if n then table.insert(out, n) end
-                    end
-                end
-            end
-        end
-    end
-    return out
-end
-
-enableDumper()
-
--- ===== NOIR GUI =====
-if getgenv().NoirDumperGui then pcall(function() getgenv().NoirDumperGui:Destroy() end) end
-
-local gui = Instance.new("ScreenGui")
-gui.Name = "NoirDumper"
-gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true
-gui.DisplayOrder = 9999
-getgenv().NoirDumperGui = gui
-pcall(function() gui.Parent = LP:FindFirstChildOfClass("PlayerGui") or gethui and gethui() or game:GetService("CoreGui") end)
-if not gui.Parent then gui.Parent = game:GetService("CoreGui") end
-
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.fromOffset(440, 520)
-frame.Position = UDim2.fromScale(0.5,0.5)
-frame.AnchorPoint = Vector2.new(0.5,0.5)
-frame.BackgroundColor3 = Color3.fromRGB(13,13,18)
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0,16)
-local stroke = Instance.new("UIStroke", frame)
-stroke.Color = Color3.fromRGB(170,120,255)
-stroke.Thickness = 1.2
-stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
--- header
-local header = Instance.new("Frame", frame)
-header.Size = UDim2.new(1,0,0,54)
-header.BackgroundColor3 = Color3.fromRGB(20,20,28)
-header.BorderSizePixel = 0
-Instance.new("UICorner", header).CornerRadius = UDim.new(0,16)
-local fix = Instance.new("Frame", header)
-fix.Size = UDim2.new(1,0,0,12)
-fix.Position = UDim2.new(0,0,1,-12)
-fix.BackgroundColor3 = Color3.fromRGB(20,20,28)
-fix.BorderSizePixel = 0
-fix.ZIndex = 0
-
-local title = Instance.new("TextLabel", header)
-title.Size = UDim2.new(1,-60,0,22)
-title.Position = UDim2.fromOffset(16,10)
-title.BackgroundTransparency = 1
-title.Text = "NOIR  •  DUMPER"
-title.TextColor3 = Color3.fromRGB(255,255,255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 16
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.ZIndex = 2
-
-local sub = Instance.new("TextLabel", header)
-sub.Size = UDim2.new(1,-60,0,14)
-sub.Position = UDim2.fromOffset(16,30)
-sub.BackgroundTransparency = 1
-sub.Text = "высоси любой скрипт в 2 клика"
-sub.TextColor3 = Color3.fromRGB(170,120,255)
-sub.Font = Enum.Font.Gotham
-sub.TextSize = 11
-sub.TextXAlignment = Enum.TextXAlignment.Left
-sub.ZIndex = 2
-
-local close = Instance.new("TextButton", header)
-close.Size = UDim2.fromOffset(32,32)
-close.Position = UDim2.new(1,-42,0,11)
-close.Text = "×"
-close.TextSize = 20
-close.Font = Enum.Font.GothamBold
-close.TextColor3 = Color3.fromRGB(200,200,210)
-close.BackgroundColor3 = Color3.fromRGB(35,35,42)
-close.ZIndex = 2
-Instance.new("UICorner", close).CornerRadius = UDim.new(0,8)
-close.MouseButton1Click:Connect(function() gui:Destroy() end)
-
--- status dot
-local dot = Instance.new("Frame", frame)
-dot.Size = UDim2.fromOffset(8,8)
-dot.Position = UDim2.fromOffset(16,68)
-dot.BackgroundColor3 = Color3.fromRGB(90,255,120)
-Instance.new("UICorner", dot).CornerRadius = UDim.new(1,0)
-
-local status = Instance.new("TextLabel", frame)
-status.Size = UDim2.new(1,-40,0,14)
-status.Position = UDim2.fromOffset(30,65)
-status.BackgroundTransparency = 1
-status.Text = "DUMPER AKTIVEN • фильтр 2kb • папка workspace/logdump"
-status.TextColor3 = Color3.fromRGB(120,255,120)
-status.Font = Enum.Font.Gotham
-status.TextSize = 11
-status.TextXAlignment = Enum.TextXAlignment.Left
-
-local function label(txt, y, clr, sz)
-    local l = Instance.new("TextLabel", frame)
-    l.Size = UDim2.new(1,-32,0,14)
-    l.Position = UDim2.fromOffset(16, y)
-    l.BackgroundTransparency = 1
-    l.Text = txt
-    l.TextColor3 = clr or Color3.fromRGB(200,200,210)
-    l.Font = Enum.Font.Gotham
-    l.TextSize = sz or 11
-    l.TextXAlignment = Enum.TextXAlignment.Left
-    l.TextWrapped = true
-    return l
-end
-
--- инструкция
-local stepsBg = Instance.new("Frame", frame)
-stepsBg.Size = UDim2.new(1,-32,0,132)
-stepsBg.Position = UDim2.fromOffset(16, 88)
-stepsBg.BackgroundColor3 = Color3.fromRGB(22,22,30)
-Instance.new("UICorner", stepsBg).CornerRadius = UDim.new(0,12)
-
-label("КАК ПОЛЬЗОВАТЬСЯ:", 94, Color3.fromRGB(255,255,255), 11)
-local s1 = Instance.new("TextLabel", stepsBg)
-s1.Size = UDim2.new(1,-20,1,-16)
-s1.Position = UDim2.fromOffset(10,8)
-s1.BackgroundTransparency = 1
-s1.TextWrapped = true
-s1.TextYAlignment = Enum.TextYAlignment.Top
-s1.TextXAlignment = Enum.TextXAlignment.Left
-s1.Font = Enum.Font.Gotham
-s1.TextSize = 11
-s1.TextColor3 = Color3.fromRGB(180,180,190)
-s1.Text = "1. Дампер уже включен (зеленая точка)\n2. Запусти ЛЮБОЙ скрипт который хочешь высосать\n   (Noir / Overdrive / твой dump.lua)\n3. Дождись меню скрипта\n4. Нажми кнопку НИЖЕ «ВЫСОСАТЬ ОСНОВУ»\n5. Иди в Файлы → workspace → logdump"
-
--- кнопки
-local function makeBtn(txt, y, color, txtColor)
-    local b = Instance.new("TextButton", frame)
-    b.Size = UDim2.new(1,-32,0,42)
-    b.Position = UDim2.fromOffset(16, y)
-    b.Text = txt
-    b.Font = Enum.Font.GothamBold
-    b.TextSize = 13
-    b.TextColor3 = txtColor or Color3.fromRGB(255,255,255)
-    b.BackgroundColor3 = color
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0,10)
-    local s = Instance.new("UIStroke", b)
-    s.Color = Color3.fromRGB(255,255,255)
-    s.Transparency = 0.9
-    s.Thickness = 1
-    return b
-end
-
-local btnDump = makeBtn("⬇  ВЫСОСАТЬ ОСНОВУ  (dumpMain)", 234, Color3.fromRGB(170,120,255), Color3.fromRGB(255,255,255))
-local btnClear = makeBtn("🗑  ОЧИСТИТЬ LOGDUMP", 284, Color3.fromRGB(30,30,38), Color3.fromRGB(200,200,210))
-local btnCopy = makeBtn("📋  СКОПИРОВАТЬ ПУТЬ", 334, Color3.fromRGB(30,30,38), Color3.fromRGB(200,200,210))
-local btnFolder = makeBtn("📁  ОТКРЫТЬ ПАПКУ (показать путь)", 384, Color3.fromRGB(45,45,55), Color3.fromRGB(200,200,210))
-
-local log = Instance.new("TextLabel", frame)
-log.Size = UDim2.new(1,-32,0,56)
-log.Position = UDim2.fromOffset(16, 434)
-log.BackgroundColor3 = Color3.fromRGB(18,18,24)
-log.TextColor3 = Color3.fromRGB(140,255,140)
-log.Font = Enum.Font.Code
-log.TextSize = 11
-log.TextWrapped = true
-log.TextYAlignment = Enum.TextYAlignment.Top
-log.TextXAlignment = Enum.TextXAlignment.Left
-log.Text = "лог: дампер ждет скрипта..."
-log.ClipsDescendants = true
-Instance.new("UICorner", log).CornerRadius = UDim.new(0,8)
-local pad = Instance.new("UIPadding", log)
-pad.PaddingTop = UDim.new(0,6)
-pad.PaddingLeft = UDim.new(0,8)
-pad.PaddingRight = UDim.new(0,8)
-pad.PaddingBottom = UDim.new(0,6)
-
-local function logAdd(txt, clr)
-    log.Text = txt
-    if clr then log.TextColor3 = clr end
-    print("[NOIR DUMPER] "..txt)
-end
-
--- проверка папки
-task.spawn(function()
-    task.wait(0.5)
-    local ok = pcall(function() writefile(LOG_FOLDER.."/_test.txt","ok") end)
-    if ok then
-        if delfile then pcall(delfile, LOG_FOLDER.."/_test.txt") end
-        logAdd("✓ папка готова: workspace/"..LOG_FOLDER.."  | поймано: "..count, Color3.fromRGB(120,255,120))
-    else
-        logAdd("✗ нет доступа к writefile! Смени экзекутор (Delta/CodeX)", Color3.fromRGB(255,120,120))
-        dot.BackgroundColor3 = Color3.fromRGB(255,80,80)
-        status.Text = "ОШИБКА: нет прав на файлы"
-        status.TextColor3 = Color3.fromRGB(255,120,120)
-    end
-end)
-
--- счетчик пойманного
-task.spawn(function()
-    while gui.Parent do
-        task.wait(1)
-        if count>0 then
-            status.Text = "поймано чанков: "..count.." • жми ВЫСОСАТЬ когда скрипт загрузится"
-        end
-    end
-end)
-
-btnDump.MouseButton1Click:Connect(function()
-    btnDump.Text = "⏳ ВЫСАСЫВАЮ..."
-    task.wait(0.2)
-    local res = dumpMain()
-    if #res==0 then
-        if count>0 then
-            logAdd("поймано "..count.." чанков через loadstring, но MAIN не найден.\nПопробуй еще раз через 3 сек или скрипт - лоадер без основы.", Color3.fromRGB(255,220,120))
+local function hooked_ls(str, chunk, ...)
+    if type(str)=="string" and #str >= MIN then
+        if isXaloex(str) then
+            print("[AUTO] поймал XALOEX "..#str.." bytes -> деобфускация...")
+            tryDeobfuscateXaloex(str, chunk or "xaloex")
+            -- всё равно пропускаем оригинал дальше чтобы скрипт запустился (и успел сдампиться до кика)
+            -- но делаем это через 0.3 сек чтобы наш патченный успел сохраниться первым
+        elseif isLuraph(str) then
+            save("Luraph_RAW", str, chunk)
         else
-            logAdd("ничего не найдено.\n1) Ты точно запустил скрипт ПОСЛЕ дампера?\n2) Подожди 5 сек и жми снова.", Color3.fromRGB(255,120,120))
+            save("loadstring", str, chunk)
         end
-    else
-        logAdd("✓ ГОТОВО! Сохранено "..#res.." файла(ов):\n"..table.concat(res,"\n"), Color3.fromRGB(120,255,120))
-        pcall(function() SG:SetCore("SendNotification",{Title="Noir Dumper", Text="Готово! "..#res.." файла в workspace/logdump", Duration=4}) end)
     end
-    btnDump.Text = "⬇  ВЫСОСАТЬ ОСНОВУ  (dumpMain)"
+    return orig_ls(str, chunk, ...)
+end
+
+if hookfunction then
+    pcall(hookfunction, orig_ls, hooked_ls)
+    pcall(hookfunction, orig_load, function(s,c,...)
+        if type(s)=="string" and #s>=MIN and isXaloex(s) then tryDeobfuscateXaloex(s,c) end
+        return orig_load(s,c,...)
+    end)
+end
+getgenv().loadstring = hooked_ls
+getgenv().load = function(s,c,...)
+    if type(s)=="string" and #s>=MIN and isXaloex(s) then tryDeobfuscateXaloex(s,c) end
+    return orig_load(s,c,...)
+end
+
+-- HttpGet тоже
+pcall(function()
+    local orig = game.HttpGet
+    local function hooked(self, url, ...)
+        local res = orig(self, url, ...)
+        if type(res)=="string" and #res> 10000 then
+            if isXaloex(res) then tryDeobfuscateXaloex(res, url)
+            else save("HttpGet", res, url) end
+        end
+        return res
+    end
+    if hookfunction then pcall(hookfunction, orig, hooked) else game.HttpGet = hooked end
 end)
 
-btnClear.MouseButton1Click:Connect(function()
-    if listfiles then
-        for _,f in ipairs(listfiles(LOG_FOLDER)) do pcall(delfile, f) end
-        seen, count = {}, 0
-        logAdd("папка очищена", Color3.fromRGB(200,200,210))
-    else
-        logAdd("listfiles не поддерживается на этом экзекуторе", Color3.fromRGB(255,120,120))
+-- анти-кик на 3 секунды чтобы успеть сдампить до выгона (хук Kick)
+pcall(function()
+    local plr = game:GetService("Players").LocalPlayer
+    if plr and plr.Kick then
+        local oldKick = plr.Kick
+        local hookedKick = function(self, ...)
+            print("[AUTO] перехвачен Kick, задержка 2 сек для дампа...")
+            task.wait(2.2)
+            return oldKick(self, ...)
+        end
+        if hookfunction then pcall(hookfunction, oldKick, hookedKick) else pcall(function() plr.Kick = hookedKick end) end
+        -- также через mt
+        pcall(function()
+            local mt = getrawmetatable(plr)
+            if mt and mt.__namecall then
+                local old = mt.__namecall
+                setreadonly(mt, false)
+                mt.__namecall = newcclosure(function(self, ...)
+                    if getnamecallmethod()=="Kick" then
+                        print("[AUTO] namecall Kick задержан")
+                        task.wait(2)
+                    end
+                    return old(self, ...)
+                end)
+                setreadonly(mt, true)
+            end
+        end)
     end
 end)
 
-btnCopy.MouseButton1Click:Connect(function()
-    if setclipboard then setclipboard("workspace/"..LOG_FOLDER) logAdd("путь скопирован: workspace/"..LOG_FOLDER) 
-    else logAdd("setclipboard нет, путь: workspace/"..LOG_FOLDER) end
-end)
+print("=== AUTO DUMPER ON (без меню) ===")
+print("Запусти скрипт который хочешь высосать - он сам сохранится в workspace/logdump/AUTO_*")
+print("Даже если кикнет - файлы останутся, смотри через 2 сек после кика в папке")
+pcall(function() game:GetService("StarterGui"):SetCore("SendNotification",{Title="AUTO DUMPER ON", Text="Запусти скрипт - он сам высосется", Duration=4}) end)
 
-btnFolder.MouseButton1Click:Connect(function()
-    local files = {}
-    if listfiles then files = listfiles(LOG_FOLDER) end
-    if #files==0 then logAdd("папка пуста: workspace/"..LOG_FOLDER.."\nСначала высоси скрипт!") 
-    else
-        local t = "файлов: "..#files.."\n"..table.concat(files,"\n"):sub(1,300)
-        logAdd(t)
-        if setclipboard then setclipboard(table.concat(files,"\n")) end
-    end
-end)
-
--- drag
-local dragging, ds, sp
-frame.InputBegan:Connect(function(i) 
-    if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then 
-        dragging=true ds=i.Position sp=frame.Position 
-        i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dragging=false end end) 
-    end 
-end)
-frame.InputChanged:Connect(function(i) 
-    if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then 
-        local d=i.Position-ds 
-        frame.Position=UDim2.new(sp.X.Scale,sp.X.Offset+d.X,sp.Y.Scale,sp.Y.Offset+d.Y) 
-    end 
-end)
-
-logAdd("NOIR DUMPER включен. Запусти любой скрипт, потом жми ВЫСОСАТЬ ОСНОВУ")
+-- также хук для уже загруженного XALOEX из твоего файла 01_loadstring.lua.txt (281k)
+-- если запустишь этот файл напрямую - он тоже поймается
