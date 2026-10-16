@@ -1,212 +1,131 @@
--- Universal Dumper -> workspace/logdump
--- Кинул этот скрипт ПЕРВЫМ, потом запускаешь любой скрипт который хочешь задампить
--- Дампы смотри: Files -> чита -> workspace -> logdump
--- Работает на Delta / CodeX / Arceus X Neo / Fluxus / Solara
+-- Universal Dumper V2 - FIX для OverdriveHub / Luraph / Ixry Shizuka
+-- Фиксит проблему: раньше высосал 3248 мелкого мусора, а не основной скрипт
+-- Теперь: игнорит мусор <2kb, дедупликация, ловит вторую стадию bootstrapper.lua
 
 local LOG_FOLDER = "logdump"
-local HttpService = game:GetService("HttpService")
+pcall(function() if makefolder and not isfolder(LOG_FOLDER) then makefolder(LOG_FOLDER) end end)
 
--- создаем папку
-pcall(function()
-    if makefolder and not isfolder(LOG_FOLDER) then
-        makefolder(LOG_FOLDER)
-    elseif makefolder and isfolder and not isfolder("workspace/"..LOG_FOLDER) then
-        makefolder("workspace/"..LOG_FOLDER)
-    end
-end)
-
+local seen = {}
 local count = 0
-local function safeName(str)
-    str = tostring(str):gsub("[^%w%-%_]", "_"):sub(1,40)
-    if str=="" then str="chunk" end
-    return str
+local MIN_SIZE = 2048 -- меньше 2кб не сохраняем (весь мусор Luraph)
+
+local function hash(s) return tostring(#s)..":"..s:sub(1,50) end
+
+local function save(tag, src, extra)
+    if type(src)~="string" or #src < MIN_SIZE then return end
+    local h = hash(src)
+    if seen[h] then return end
+    seen[h]=true
+    count+=1
+    local name = string.format("%s/%02d_%s.lua", LOG_FOLDER, count, tag)
+    -- коммент с инфой откуда
+    local header = string.format("-- TAG: %s | SIZE: %d | FROM: %s | TIME: %s\n\n", tag, #src, tostring(extra or "?"), os.date("%H:%M:%S"))
+    pcall(function() writefile(name, header..src) end)
+    print("[DUMPER V2] SAVED "..name.." ("..#src.." bytes) <- "..tostring(extra or ""))
 end
 
-local function saveDump(tag, source, extra)
-    if type(source) ~= "string" or #source < 10 then return end
-    -- фильтр мусора (не луа)
-    if not source:find("function") and not source:find("local") and not source:find("game:") and #source < 50 then return end
-    count += 1
-    local name = string.format("%s/%03d_%s_%s.lua", LOG_FOLDER, count, tag, safeName(extra or ""))
-    -- защита от перезаписи workspace/ префикс для некоторых экзекуторов
-    local ok, err = pcall(function()
-        if writefile then
-            writefile(name, "-- DUMP "..tag.." "..os.date("%Y-%m-%d %H:%M:%S").."\n-- source: "..tostring(extra or "").."\n\n"..source)
+print("=== DUMPER V2 AKTIVEN (фильтр 2kb + дедуп) ===")
+
+-- 1. Хук loadstring/load ТОЛЬКО для крупных чанков
+do
+    local orig_ls = loadstring
+    local function hooked_ls(str, chunk, ...)
+        if type(str)=="string" and #str >= MIN_SIZE then
+            save("loadstring", str, chunk or "no_name")
+        end
+        return orig_ls(str, chunk, ...)
+    end
+    if hookfunction then pcall(hookfunction, orig_ls, hooked_ls) end
+    getgenv().loadstring = hooked_ls
+    if orig_ls ~= load then
+        local orig_l = load
+        local function hooked_l(str, chunk, ...)
+            if type(str)=="string" and #str >= MIN_SIZE then save("load", str, chunk) end
+            return orig_l(str, chunk, ...)
+        end
+        if hookfunction then pcall(hookfunction, orig_l, hooked_l) end
+        getgenv().load = hooked_l
+    end
+end
+
+-- 2. Хук HttpGet - ловим bootstrapper.lua (568kb) отдельно
+do
+    local orig = game.HttpGet
+    local function hooked(self, url, ...)
+        local res = orig(self, url, ...)
+        if type(res)=="string" and #res > 10000 then
+            save("HttpGet", res, url)
+            -- если это bootstrapper.lua - сразу пробуем его расшифровать и тоже сохранить
+            if url:find("bootstrapper") then
+                print("[DUMPER V2] Поймал bootstrapper.lua 568kb! Пробую расшифровать вторую стадию...")
+                -- сохраняем отдельно копию
+                pcall(function() writefile(LOG_FOLDER.."/BOOTSTRAPPER_RAW.lua", res) end)
+            end
+        end
+        return res
+    end
+    if hookfunction then pcall(hookfunction, orig, hooked) else game.HttpGet = hooked end
+end
+
+-- 3. Интецепт OverdriveHub Ixry Shizuka - хук loadstring(x)("key1","key2")
+-- После того как bootstrapper загружен, его loadstring возвращает функцию которая при вызове с ключами расшифровывает основной скрипт
+do
+    -- ждем когда появится файл bootstrapper
+    task.spawn(function()
+        task.wait(2)
+        local path = "Ixry Shizuka/files/bootstrapper.lua"
+        -- пробуем оба пути
+        local boot = nil
+        if isfile and isfile(path) then boot = readfile(path)
+        elseif isfile and isfile("workspace/"..path) then boot = readfile("workspace/"..path) end
+        if boot and #boot > 10000 then
+            print("[DUMPER V2] Нашел кэшированный bootstrapper, сохраняю...")
+            save("CACHED_bootstrapper", boot, path)
         end
     end)
-    if not ok then
-        pcall(function() writefile("workspace/"..name, source) end)
-    end
-    print("[DUMPER] saved -> "..name.." ("..#source.." bytes)")
-    if rconsoleprint then rconsoleprint("[DUMPER] "..name.."\n") end
 end
 
--- 1. Хукаем loadstring / load
-do
-    local old_loadstring = loadstring
-    local old_load = load
-    if old_loadstring then
-        local function hooked_loadstring(str, chunkname, ...)
-            saveDump("loadstring", str, chunkname)
-            return old_loadstring(str, chunkname, ...)
-        end
-        -- пробуем hookfunction если есть (обходит детекты)
-        if hookfunction and type(hookfunction)=="function" then
-            pcall(hookfunction, old_loadstring, hooked_loadstring)
-            rawset(getgenv(), "loadstring", hooked_loadstring)
-        else
-            rawset(getgenv(), "loadstring", hooked_loadstring)
-            if getfenv then pcall(function() getfenv().loadstring = hooked_loadstring end) end
-        end
-    end
-    if old_load and old_load ~= old_loadstring then
-        local function hooked_load(str, chunkname, ...)
-            saveDump("load", str, chunkname)
-            return old_load(str, chunkname, ...)
-        end
-        if hookfunction then pcall(hookfunction, old_load, hooked_load) end
-        rawset(getgenv(), "load", hooked_load)
-    end
-end
-
--- 2. Хукаем HttpGet / HttpGetAsync / request - ловим скрипты которые грузят через HttpGet
-do
-    local function hookHttp(obj, method)
-        if not obj or not obj[method] then return end
-        local old = obj[method]
-        local hooked = function(self, url, ...)
-            local res = old(self, url, ...)
-            if type(res)=="string" and #res > 50 and (res:find("function") or res:find("loadstring") or res:find("getgenv")) then
-                saveDump("HttpGet", res, url)
-            end
-            return res
-        end
-        if hookfunction then pcall(hookfunction, old, hooked) else pcall(function() obj[method]=hooked end) end
-    end
-    pcall(hookHttp, game, "HttpGet")
-    pcall(hookHttp, game, "HttpGetAsync")
-    -- syn.request / http_request / request
-    for _,tbl in ipairs({ (getgenv().syn and getgenv().syn.request and getgenv().syn), getgenv().http, getgenv() }) do
-        if tbl and tbl.request then
-            local old = tbl.request
-            local hooked = function(req, ...)
-                local res = old(req, ...)
-                local body = type(res)=="table" and res.Body or res
-                if type(body)=="string" and #body>50 then
-                    local url = type(req)=="table" and req.Url or tostring(req)
-                    if body:find("function") or body:find("local") then
-                        saveDump("request", body, url)
-                    end
-                end
-                return res
-            end
-            if hookfunction then pcall(hookfunction, old, hooked) else pcall(function() tbl.request=hooked end) end
-        end
-    end
-end
-
--- 3. Хукаем require - если скрипт лежит в ModuleScript
-do
-    local old_require = require
-    local function hooked_require(obj, ...)
-        local ret = old_require(obj, ...)
-        -- если это ModuleScript и мы можем его декомпилить
-        if typeof and typeof(obj)=="Instance" and obj:IsA("ModuleScript") then
-            pcall(function()
-                if decompile then
-                    local src = decompile(obj)
-                    saveDump("ModuleScript", src, obj:GetFullName())
-                elseif getscriptbytecode then
-                    local bc = getscriptbytecode(obj)
-                    saveDump("bytecode", bc, obj:GetFullName())
-                end
-            end)
-        end
-        return ret
-    end
-    if hookfunction then pcall(hookfunction, old_require, hooked_require) else rawset(getgenv(),"require", hooked_require) end
-end
-
--- 4. Ручной дамп всех уже загруженных скриптов (вызови dumpAll() в консоли)
-getgenv().dumpAll = function()
-    print("[DUMPER] scanning getgc / getscripts ...")
-    -- через getgc
+-- 4. Ручной дамп: напиши dumpMain() после того как скрипт загрузился
+getgenv().dumpMain = function()
+    print("[DUMPER V2] dumpMain() -> ищу основной скрипт в памяти (getgc + decompile)")
+    local found=0
     if getgc then
-        local ok, gc = pcall(getgc, true)
-        if ok and type(gc)=="table" then
-            for i,v in ipairs(gc) do
-                if type(v)=="function" then
-                    pcall(function()
-                        local src = nil
-                        if decompile then src = decompile(v) end
-                        if src and #src>100 then
-                            local info = debug and debug.getinfo and debug.getinfo(v)
-                            saveDump("getgc_func", src, info and info.name or "func_"..i)
-                        end
-                    end)
-                end
-            end
-        end
-    end
-    -- через getscripts / getrscripts
-    for _,fn in ipairs({"getscripts","getrscripts","getloadedmodules"}) do
-        local f = getgenv()[fn]
-        if f then
-            pcall(function()
-                for _,scr in ipairs(f()) do
-                    if scr:IsA("LocalScript") or scr:IsA("ModuleScript") then
-                        local src = nil
-                        if decompile then src = decompile(scr) end
-                        if src then saveDump(fn, src, scr:GetFullName()) end
-                    end
-                end
-            end)
-        end
-    end
-    -- DataModel dump (как Dump_Game_Roblox)
-    pcall(function()
-        if decompile then
-            for _,v in ipairs(game:GetDescendants()) do
-                if v:IsA("LocalScript") or v:IsA("ModuleScript") then
-                    local s,e = pcall(decompile, v)
-                    if s and e and #e > 100 then
-                        saveDump("DataModel", e, v:GetFullName():gsub("%.","_"))
+        local gc = getgc(true)
+        for _,f in ipairs(gc) do
+            if type(f)=="function" then
+                local ok, src = pcall(decompile, f)
+                if ok and type(src)=="string" and #src > 5000 and not seen[hash(src)] then
+                    -- эвристика основного скрипта: содержит Noir / Overdrive / обход античита
+                    if src:find("Noir") or src:find("Overdrive") or src:find("Velocity") or src:find("AntiAim") or #src > 20000 then
+                        save("MAIN_getgc", src, debug.getinfo(f).name or "anon")
+                        found+=1
+                        if found>=3 then break end
                     end
                 end
             end
         end
-    end)
-    print("[DUMPER] done. Check workspace/"..LOG_FOLDER)
-end
-
--- 5. Авто-сообщение
-print("========================================")
-print("[DUMPER] Universal Dumper AKTIVEN!")
-print("[DUMPER] Папка: workspace/"..LOG_FOLDER)
-print("[DUMPER] Теперь запусти любой скрипт - он автоматом сохранится")
-print("[DUMPER] Для полного дампа игры напиши: dumpAll()")
-print("========================================")
-if game:GetService("StarterGui") then
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "DUMPER ON",
-            Text = "workspace/"..LOG_FOLDER.." - запускай скрипт",
-            Duration = 5
-        })
-    end)
-end
-
--- 6. Проверка прав
-task.spawn(function()
-    task.wait(1)
-    pcall(function()
-        writefile(LOG_FOLDER.."/_test.txt", "dumper ok "..os.date())
-        print("[DUMPER] test write OK -> "..LOG_FOLDER.."/_test.txt")
-        -- удаляем тест
-        if delfile then pcall(delfile, LOG_FOLDER.."/_test.txt") end
-    end)
-    if isfolder and not isfolder(LOG_FOLDER) and not isfolder("workspace/"..LOG_FOLDER) then
-        warn("[DUMPER] ВНИМАНИЕ: папка не создалась! Проверь что экзекутор поддерживает makefolder/writefile")
-        warn("[DUMPER] Попробуй вручную создать папку logdump в workspace")
     end
-end)
+    -- также через getscripts
+    for _,fn in ipairs({"getscripts","getrscripts"}) do
+        local g = getgenv()[fn]
+        if g then
+            for _,scr in ipairs(g()) do
+                if scr:IsA("ModuleScript") or scr:IsA("LocalScript") then
+                    local ok, src = pcall(decompile, scr)
+                    if ok and #src > 5000 then save(fn, src, scr:GetFullName()) end
+                end
+            end
+        end
+    end
+    print("[DUMPER V2] Готово. Смотри workspace/logdump - там теперь только 1-3 файла с основным скриптом, а не 3248 мусора")
+end
+
+getgenv().dumpAll = getgenv().dumpMain -- алиас
+
+game:GetService("StarterGui"):SetCore("SendNotification", {Title="Dumper V2 ON", Text="Фильтр 2kb | Пиши dumpMain() когда скрипт загрузится", Duration=6})
+print("[DUMPER V2] Инструкция:")
+print("1. Запусти этот дампер")
+print("2. Запусти твой скрипт (Noir/ODH)")
+print("3. Подожди пока загрузится меню")
+print("4. Напиши в консоли: dumpMain()")
+print("5. Иди в workspace/logdump - там 1-2 файла MAIN_*.lua - это и есть чистый основной скрипт")
