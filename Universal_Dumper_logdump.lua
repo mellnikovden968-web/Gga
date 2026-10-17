@@ -33,13 +33,10 @@ print("[YIELD] ok, VM будет с yield каждые 20k инстр. (3-5 ми
 
 local co = coroutine.create(function() return fn(key1, key2) end)
 
--- хук который заставляет VM yield каждые 20000 инструкций
+-- хук только для этого потока, не для основного (иначе фриз)
 if debug and debug.sethook then
-    debug.sethook(function()
-        -- yield из корутины
-        coroutine.yield()
-    end, "", 20000)
-    print("[YIELD] hook установлен 20000")
+    local ok, err = pcall(function() debug.sethook(co, function() coroutine.yield() end, "", 20000) end)
+    if ok then print("[YIELD] hook установлен 20000 на co") else print("[YIELD] hook fail "..tostring(err).." пробую глобально") pcall(function() debug.sethook(function() coroutine.yield() end, "", 20000) end) end
 else
     print("[YIELD] debug.sethook нет, будет фриз")
 end
@@ -74,7 +71,8 @@ while true do
     if count>5000 then print("too many yields") break end
 end
 
-if debug and debug.sethook then debug.sethook() end
+pcall(function() if debug and debug.sethook then debug.sethook(co, nil) end end)
+pcall(function() if debug and debug.sethook then debug.sethook() end end)
 print(string.format("[YIELD] VM finished ok=%s type=%s yields=%d", tostring(ok), type(ret), count))
 if not ok then return end
 
