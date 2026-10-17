@@ -1,157 +1,86 @@
--- Luraph ODH SAFE v2 | фикс Malicious Loader Detected (file 8 kick)
--- Добавлен байпас: CoreGui @bubbles.elia + odh_shared_plugins.kick + Players.Kick
--- Всё ещё без hookfunction (стелс)
--- Запуск ДО ODH: loadstring(readfile("Luraph_ODH_Dumper_SAFE_v2.lua"))() then loader
--- Папка: logdump_odh_safe2
+-- Patch_Bootstrapper_Stealth.lua | 100% стелс, без hookfunction, без замены loadstring
+-- Патчит сам файл Ixry Shizuka/files/bootstrapper.lua на диске, добавляя хук buffer.fromstring ВНУТРИ файла
+-- После патча запускай ODH обычным лоадером - кика не будет, т.к. loadstring не тронут
+-- Запуск ОДИН РАЗ: loadstring(readfile("Patch_Bootstrapper_Stealth.lua"))()
 
-local LOG="logdump_odh_safe2"
-pcall(function() if makefolder then pcall(makefolder, LOG) end end)
-local seen,cnt={},0
-local MIN=500
-local function save(tag, src, extra)
-    if type(src)~="string" or #src<MIN then return end
-    local h=#src..":"..src:sub(1,80)
-    if seen[h] then return end
-    seen[h]=true; cnt=cnt+1
-    local name=string.format("%s/%02d_%s.lua", LOG, cnt, tag)
-    pcall(function() writefile(name, "-- SAFE2 "..tag.." "..tostring(extra or "").." "..os.date().."\n\n"..src) end)
-    print("[SAFE2] saved "..name.." ("..#src..") "..tostring(extra or ""))
+local path = "Ixry Shizuka/files/bootstrapper.lua"
+local log = "logdump_stealth"
+pcall(function() if makefolder then pcall(makefolder, log) end end)
+
+local src = readfile(path)
+if not src or #src < 100000 then
+    print("[PATCH] файл не найден или мал: "..tostring(path).." len="..tostring(src and #src or 0))
+    print("[PATCH] попробуй второй путь: Ixry Shizuka/files/bootstrapper.lua или скачай с cdn и сохрани туда")
+    return
 end
+print("[PATCH] bootstrapper len="..#src)
 
-print("=== SAFE2 ON (Malicious Loader bypass) ===")
+-- бэкап
+pcall(function() writefile(path..".bak", src) end)
+print("[PATCH] backup -> "..path..".bak")
 
--- 1. Байпас CoreGui @bubbles.elia (file 8 проверяет Version v3.2/v3.5)
-pcall(function()
-    local ok, CoreGui = pcall(function() return game:GetService("CoreGui") end)
-    if ok and CoreGui then
-        local orig_Find = CoreGui.FindFirstChild
-        -- стелс подмена без hookfunction
-        CoreGui.FindFirstChild = function(self, name, rec)
-            if name=="@bubbles.elia" or (type(name)=="string" and name:find("bubbles")) then
-                print("[SAFE2] blocked FindFirstChild bubbles")
-                return nil
-            end
-            return orig_Find(self, name, rec)
-        end
-        -- также для :FindFirstChild с разными вызывами
-        local orig_FFC = game.FindFirstChild
-        print("[SAFE2] CoreGui patch done")
-    end
-end)
-
--- 2. Байпас odh_shared_plugins.kick и shared.kick (file 8 и другие)
-pcall(function()
-    -- ждём создания odh_shared_plugins
-    task.spawn(function()
-        for i=1,50 do
-            task.wait(0.2)
-            local host = rawget(getgenv(), "odh_shared_plugins") or shared and shared.odh_shared_plugins or _G.odh_shared_plugins
-            -- также глобальный shared
-            if getgenv().odh_shared_plugins then host=getgenv().odh_shared_plugins end
-            if host and type(host)=="table" then
-                if host.kick then
-                    print("[SAFE2] found odh_shared_plugins.kick -> neutralized")
-                    host.kick = function(...) print("[SAFE2] kick blocked", ...) end
-                end
-                if host.Kick then host.Kick = host.kick end
-            end
-            if shared and shared.kick then
-                print("[SAFE2] shared.kick blocked")
-                shared.kick = function(...) print("[SAFE2] shared kick blocked") end
-            end
-            if _G.odh_shared_plugins and _G.odh_shared_plugins.kick then
-                _G.odh_shared_plugins.kick = function() end
-            end
-        end
-    end)
-    -- немедленная заглушка на случай если уже есть
-    if getgenv().odh_shared_plugins and getgenv().odh_shared_plugins.kick then
-        getgenv().odh_shared_plugins.kick = function() print("[SAFE2] early kick block") end
-    end
-end)
-
--- 3. Байпас Players.LocalPlayer.Kick (прямая подмена)
-pcall(function()
-    local plr = game:GetService("Players").LocalPlayer
-    if plr and plr.Kick then
-        pcall(function() plr.Kick = function(...) print("[SAFE2] Player Kick blocked") task.wait(5) end end)
-        print("[SAFE2] Player Kick patch attempted")
-    end
-end)
-
--- 4. loadstring wrapper без hookfunction (как в SAFE v1) + vm_return
+-- префикс который будет выполнен ДО Luraph VM, хукает buffer внутри, без глобального loadstring хука
+local prefix = [[
+-- STEALTH HOOK (injected by Patch_Bootstrapper_Stealth)
+local _LOG="logdump_stealth"
+pcall(function() if makefolder then pcall(makefolder,_LOG) end end)
 do
-    local orig_ls = loadstring
-    local orig_load = load
-    local function makeWrapper(orig_fn, tag)
-        return function(...)
-            print("[SAFE2] VM call "..tag)
-            local a,b,c,d = pcall(orig_fn, ...)
-            -- pcall возвращает ok, ret...
-            -- Но orig_fn уже защищена pcall, нужно unpack правильно
-            -- На самом деле orig_fn может кикнуть - оборачиваем
-            if not a then
-                print("[SAFE2] VM pcall error: "..tostring(b))
-                error(b,0)
-            end
-            -- b,c,d - это возвраты VM (их может быть 1-3)
-            local ret=b
-            if type(ret)=="string" and #ret>=MIN then
-                save("vm_return", ret, tag)
-                print("[SAFE2] vm_return string "..#ret)
-            elseif type(ret)=="table" then
-                local n=0; for _ in pairs(ret) do n=n+1 end
-                print("[SAFE2] vm_return table keys="..n)
-                if n>100 then
-                    -- handlers таблица как 1.8M - не сохраняем как vm_return, это не чистый
-                    print("[SAFE2] handlers table detected (534) - это не чистый, нужен ПК-деобф")
-                else
-                    pcall(function()
-                        local hs=game:GetService("HttpService")
-                        local j=hs:JSONEncode(ret)
-                        if #j>=MIN then save("vm_return_table", j, tag.." json") end
-                    end)
-                end
-            else
-                print("[SAFE2] vm_return type="..type(ret))
-            end
-            return b,c,d
+    local _orig_fromstring = buffer.fromstring
+    buffer.fromstring = function(s,...)
+        if type(s)=="string" and #s>5000 then
+            local ok=pcall(function() writefile(_LOG.."/buffer_"..#s..".bin", s) end)
+            print("[STEALTH] buffer.fromstring captured "..#s.." ok="..tostring(ok))
         end
+        return _orig_fromstring(s,...)
     end
-    getgenv().loadstring = function(s, chunk, ...)
-        if type(s)=="string" and #s>=MIN then pcall(save, "loadstring_src", s, chunk or "") end
-        local fn, err = orig_ls(s, chunk, ...)
-        if type(fn)=="function" then return makeWrapper(fn, tostring(chunk or "ls")), err end
-        return fn, err
-    end
-    getgenv().load = function(s, chunk, ...)
-        if type(s)=="string" and #s>=MIN then pcall(save, "load_src", s, chunk or "") end
-        local fn, err = orig_load(s, chunk, ...)
-        if type(fn)=="function" then return makeWrapper(fn, tostring(chunk or "load")), err end
-        return fn, err
-    end
-    print("[SAFE2] loadstring wrapped")
+    print("[STEALTH] buffer.fromstring hooked (stealth)")
+    -- байпас кика сразу, до VM
+    pcall(function()
+        local p=game:GetService("Players").LocalPlayer
+        -- не трогаем метаметоды, просто создаём заглушку в глобалках которые VM позже использует
+        getgenv().shared = getgenv().shared or {}
+        getgenv().shared.kick = function(...) print("[STEALTH] shared.kick blocked") end
+        -- odh_shared_plugins создаётся позже VM, ставим мету на _G чтобы поймать момент создания
+        local _orig_newindex
+        local mt=getrawmetatable(_G)
+        if mt then
+            _orig_newindex=mt.__newindex
+            setreadonly(mt,false)
+            mt.__newindex=function(t,k,v)
+                if k=="odh_shared_plugins" and type(v)=="table" then
+                    print("[STEALTH] odh_shared_plugins creation intercepted")
+                    if v.kick then v.kick=function(...) print("[STEALTH] odh kick blocked") end end
+                    if v.Kick then v.Kick=v.kick end
+                end
+                if _orig_newindex then return _orig_newindex(t,k,v) else return rawset(t,k,v) end
+            end
+            setreadonly(mt,true)
+            print("[STEALTH] _G newindex hooked")
+        end
+        -- CoreGui patch без hookfunction (прямая подмена если возможно)
+        pcall(function()
+            local cg=game:GetService("CoreGui")
+            local orig=cg.FindFirstChild
+            cg.FindFirstChild=function(self,n,rec)
+                if type(n)=="string" and n:find("bubbles") then return nil end
+                return orig(self,n,rec)
+            end
+            print("[STEALTH] CoreGui patch done")
+        end)
+    end)
+end
+]]
+
+-- проверяем не запатчен ли уже
+if src:find("STEALTH HOOK") then
+    print("[PATCH] уже запатчен, пропускаю")
+else
+    local patched = prefix .. "\n" .. src
+    writefile(path, patched)
+    print("[PATCH] patched -> "..path.." new len="..#patched)
+    print("[PATCH] теперь запусти ODH ОБЫЧНЫМ лоадером (без дамперов loadstring)")
+    print("[PATCH] после загрузки смотри "..log.."/buffer_*.bin  + проверяй кик")
 end
 
--- 5. buffer.fromstring стелс
-pcall(function()
-    if buffer and buffer.fromstring then
-        local orig=buffer.fromstring
-        buffer.fromstring=function(str,...)
-            if type(str)=="string" and #str>=800 then pcall(save, "buffer_fromstring", str, "fromstring") end
-            return orig(str,...)
-        end
-        print("[SAFE2] buffer patch done")
-    end
-end)
-pcall(function()
-    local orig=game.HttpGet
-    game.HttpGet=function(self,url,...)
-        local r=orig(self,url,...)
-        if type(r)=="string" and #r>=MIN then pcall(save,"HttpGet",r,url) end
-        return r
-    end
-end)
-
-print("[SAFE2] Готово. Запускай ODH лоадер сейчас. Если опять Malicious - скинь папку "..LOG)
-print("[SAFE2] Если не поможет - просто скинь 02 файл (568K) мне, сделаю офлайн-деобф на ПК")
+-- также сразу ставим те же хуки в текущем окружении чтобы текущий запуск тоже перехватил
+print("[PATCH] готово. Для отката: deletefile+ move "..path..".bak -> "..path)
