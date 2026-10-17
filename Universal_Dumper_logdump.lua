@@ -1,19 +1,18 @@
--- Decompile ODH Async | не вешает игру, показывает прогресс
--- Запуск: loadstring(readfile("Decompile_ODH_Async.lua"))()
+-- Decompile ODH Yield | не фризит, VM отдаёт управление каждые 20000 инстр.
+-- Запуск: loadstring(readfile("Decompile_ODH_Yield.lua"))()
 
 local bootPath = "Ixry Shizuka/files/bootstrapper.lua"
 if isfile(bootPath..".bak") then
     local s=readfile(bootPath)
-    if s and s:find("STEALTH HOOK") then pcall(function() writefile(bootPath, readfile(bootPath..".bak")) end) print("[ASYNC] откатил stealth патч") end
+    if s and s:find("STEALTH HOOK") then pcall(function() writefile(bootPath, readfile(bootPath..".bak")) end) print("[YIELD] откатил stealth") end
 end
 local src = readfile(bootPath)
 if not src or #src<100000 then
     local ok,r=pcall(function() return game:HttpGet("https://cdn.overdrivehub.xyz/bootstrapper.lua") end)
     if ok and r then src=r end
 end
-print("[ASYNC] boot len "..tostring(src and #src or 0))
+print("[YIELD] boot len "..tostring(src and #src or 0))
 
--- байпасы
 pcall(function()
     local ok,cg=pcall(function() return game:GetService("CoreGui") end)
     if ok and cg and cg.FindFirstChild then
@@ -22,70 +21,83 @@ pcall(function()
     end
 end)
 getgenv().shared = getgenv().shared or {}
-getgenv().shared.kick = function(...) print("[ASYNC] kick blocked") end
+getgenv().shared.kick = function(...) print("[YIELD] kick block") end
 
 local key1 = "\25\31\98\86\30\24\99\81\30\24\96\81\31\25\102\80\30\24\99\81\30\24\96\81\9\15\113\70\9\15\112\70\20\18\111\91\21\19\108\90\20\18\111\91\21\19\108\90\21\19\108\90\9\15\112\70\14\8\113\65\11\13\115\68\9\15\115\70\21\19\110\90\11\13\114\68\14\8\113\65\8\14\112\71\9\15\112\70\9\15\113\70\9\15\112\70\14\8\113\65\21\19\108\90\8\14\114\71\20\18\110\91\21\19\110\90\14\8\113\65\8\14\112\71\8\14\112\71\21\19\108\90\20\18\111\91\9\15\115\70\8\14\112\71\21\19\108\90\20\18\108\91\20\18\110\91\9\15\112\70\20\18\108\91\20\18\111\91"
 local key2 = "\21\19\100\90\27\29\107\84\31\25\110\80\30\24\107\81\25\31\107\86\31\25\110\80\29\27\108\82\13\11\125\66\17\23\98\94\30\24\107\81\30\24\110\81\24\30\106\87\28\26\111\83\25\31\107\86\13\11\125\66\24\30\85\87\29\27\108\82\25\31\106\86\13\11\125\66\31\25\111\80\28\26\111\83\25\31\107\86\28\26\111\83\14\8\120\65"
 
-print("[ASYNC] loadstring...")
+print("[YIELD] loadstring...")
 local fn,err = loadstring(src)
 if not fn then print("fail "..tostring(err)) return end
-print("[ASYNC] loadstring ok, VM стартует (телефон зависнет на 60-90 сек, не трогай!)")
+print("[YIELD] ok, VM будет с yield каждые 20k инстр. (3-5 мин, не закрывай)")
 
--- heartbeat чтобы видеть что не умер
-task.spawn(function()
-    for i=1,120 do
-        task.wait(1)
-        print("[ASYNC] heartbeat "..i.."s / VM decrypting...")
+local co = coroutine.create(function() return fn(key1, key2) end)
+
+-- хук который заставляет VM yield каждые 20000 инструкций
+if debug and debug.sethook then
+    debug.sethook(function()
+        -- yield из корутины
+        coroutine.yield()
+    end, "", 20000)
+    print("[YIELD] hook установлен 20000")
+else
+    print("[YIELD] debug.sethook нет, будет фриз")
+end
+
+local last = tick()
+local count = 0
+local ok, ret
+while true do
+    local status = coroutine.status(co)
+    if status=="dead" then break end
+    ok, ret = coroutine.resume(co)
+    if not ok then
+        print("[YIELD] VM error: "..tostring(ret):sub(1,2000))
+        if debug and debug.sethook then debug.sethook() end
+        return
     end
-end)
+    -- если корутина yield, она вернёт true, nil и статус suspended
+    if coroutine.status(co)=="suspended" then
+        count = count + 1
+        if tick()-last > 1 then
+            print(string.format("[YIELD] decrypting... %d yields (%.1fs)", count, tick()-last))
+            last = tick()
+            task.wait(0.05) -- даём игре отлагать
+        end
+        -- снимаем хук на момент wait чтобы не спамить, потом ставим снова
+        -- нет, оставляем
+    else
+        -- completed
+        break
+    end
+    -- защита от бесконеч
+    if count>5000 then print("too many yields") break end
+end
 
--- запуск VM в отдельном потоке чтобы не вешать проверку heartbeat
-task.spawn(function()
-    local t0 = tick()
-    local ok, ret = pcall(fn, key1, key2)
-    print(string.format("[ASYNC] VM done in %.1fs ok=%s type=%s", tick()-t0, tostring(ok), type(ret)))
-    if not ok then print("VM err "..tostring(ret):sub(1,2000)) return end
-    if type(ret)=="function" then
-        print("[ASYNC] ret function, decompiling (ещё 30 сек)...")
-        task.wait(1)
-        if decompile then
-            local ok2, code = pcall(decompile, ret)
-            if ok2 and code and #code>1000 then
-                pcall(function() if makefolder then makefolder("logdump_stealth") end end)
-                writefile("logdump_stealth/ODH_CLEAN.lua", code)
-                print("[ASYNC] SAVED ODH_CLEAN "..#code.." -> logdump_stealth/ODH_CLEAN.lua")
-                print(code:sub(1,1000))
-            else
-                print("decompile fail "..tostring(code):sub(1,500))
-            end
+if debug and debug.sethook then debug.sethook() end
+print(string.format("[YIELD] VM finished ok=%s type=%s yields=%d", tostring(ok), type(ret), count))
+if not ok then return end
+
+if type(ret)=="function" then
+    print("[YIELD] decompiling... (ещё 20 сек)")
+    task.wait(0.5)
+    if decompile then
+        local ok2, code = pcall(decompile, ret)
+        if ok2 and code and #code>1000 then
+            pcall(function() if makefolder then makefolder("logdump_stealth") end end)
+            writefile("logdump_stealth/ODH_CLEAN.lua", code)
+            print("[YIELD] SAVED ODH_CLEAN "..#code)
+            print(code:sub(1,1200))
         else
-            print("no decompile, trying call ret()")
-            local ok2,r2=pcall(ret)
-            print("r2 "..type(r2).." "..tostring(r2 and #r2 or 0))
-            if type(r2)=="string" and #r2>1000 then writefile("logdump_stealth/ODH_CLEAN2.lua", r2) print("saved2") end
-        end
-    elseif type(ret)=="string" then
-        pcall(function() if makefolder then makefolder("logdump_stealth") end end)
-        writefile("logdump_stealth/ODH_CLEAN.lua", ret)
-        print("[ASYNC] saved string "..#ret)
-    elseif type(ret)=="table" then
-        local n=0; for _ in pairs(ret) do n=n+1 end
-        print("table n="..n)
-        for k,v in pairs(ret) do
-            if type(v)=="function" then
-                print("try decompile key "..tostring(k))
-                if decompile then
-                    local ok2,code=pcall(decompile,v)
-                    if ok2 and code and #code>1000 then
-                        writefile("logdump_stealth/ODH_CLEAN_"..tostring(k)..".lua", code)
-                        print("saved "..k)
-                        break
-                    end
-                end
-            end
+            print("decompile fail "..tostring(code):sub(1,600))
         end
     end
-    print("[ASYNC] DONE смотри logdump_stealth/")
-end)
-print("[ASYNC] VM запущена в фоне, жди heartbeat и не закрывай игру 2 минуты")
+elseif type(ret)=="string" then
+    writefile("logdump_stealth/ODH_CLEAN.lua", ret)
+    print("saved string "..#ret)
+elseif type(ret)=="table" then
+    local n=0; for _ in pairs(ret) do n=n+1 end
+    print("table n="..n)
+    for k,v in pairs(ret) do if type(v)=="function" then local ok2,c=pcall(decompile,v) if ok2 and #c>1000 then writefile("logdump_stealth/ODH_CLEAN_"..tostring(k)..".lua",c) print("saved "..k) break end end end
+end
+print("[YIELD] DONE смотри logdump_stealth/")
