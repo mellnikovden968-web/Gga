@@ -1,9 +1,10 @@
--- Luraph ODH SAFE | без hookfunction/newcclosure = не палится античитом, не кикает
--- Ловит loadstring src + то что VM вернула (vm_return)
--- Запуск ДО ODH: loadstring(readfile("Luraph_ODH_Dumper_SAFE.lua"))()
--- Папка: logdump_odh_safe
+-- Luraph ODH SAFE v2 | фикс Malicious Loader Detected (file 8 kick)
+-- Добавлен байпас: CoreGui @bubbles.elia + odh_shared_plugins.kick + Players.Kick
+-- Всё ещё без hookfunction (стелс)
+-- Запуск ДО ODH: loadstring(readfile("Luraph_ODH_Dumper_SAFE_v2.lua"))() then loader
+-- Папка: logdump_odh_safe2
 
-local LOG="logdump_odh_safe"
+local LOG="logdump_odh_safe2"
 pcall(function() if makefolder then pcall(makefolder, LOG) end end)
 local seen,cnt={},0
 local MIN=500
@@ -13,126 +14,144 @@ local function save(tag, src, extra)
     if seen[h] then return end
     seen[h]=true; cnt=cnt+1
     local name=string.format("%s/%02d_%s.lua", LOG, cnt, tag)
-    local head=string.format("-- SAFE ODH | %s | %d bytes | %s | %s\n\n", tag, #src, tostring(extra or ""), os.date("%H:%M:%S"))
-    pcall(function() writefile(name, head..src) end)
-    print("[SAFE-ODH] saved "..name.." ("..#src..") "..tostring(extra or ""))
-    return name
-end
-local function saveTable(tag, t, extra)
-    if type(t)~="table" then return end
-    local n=0; for _ in pairs(t) do n=n+1 end
-    if n<20 then return end
-    print("[SAFE-ODH] table "..tag.." n="..n)
-    pcall(function()
-        local hs=game:GetService("HttpService")
-        local j=hs:JSONEncode(t)
-        if #j>=MIN then save(tag, j, extra.."_json") end
-    end)
+    pcall(function() writefile(name, "-- SAFE2 "..tag.." "..tostring(extra or "").." "..os.date().."\n\n"..src) end)
+    print("[SAFE2] saved "..name.." ("..#src..") "..tostring(extra or ""))
 end
 
-print("=== SAFE ODH DUMPER ON (no hookfunction) ===")
+print("=== SAFE2 ON (Malicious Loader bypass) ===")
 
--- Анти-кик максимально стелс: просто подменяем Kick если получится, без метатаблиц
+-- 1. Байпас CoreGui @bubbles.elia (file 8 проверяет Version v3.2/v3.5)
 pcall(function()
-    local plr=game:GetService("Players").LocalPlayer
-    if plr and plr.Kick then
-        -- пробуем прямую подмену (на некоторых эксплоитах срабатывает)
-        -- не используем hookfunction чтобы не палиться
-        local orig=plr.Kick
-        pcall(function() plr.Kick = function(...) print("[SAFE-ODH] Kick blocked (direct)") task.wait(3) return end end)
-        -- запасной план: если не получилось, хотя бы предупредим
-        if plr.Kick==orig then print("[SAFE-ODH] Kick not writable, будет кик но файлы уже сохранятся до него") end
+    local ok, CoreGui = pcall(function() return game:GetService("CoreGui") end)
+    if ok and CoreGui then
+        local orig_Find = CoreGui.FindFirstChild
+        -- стелс подмена без hookfunction
+        CoreGui.FindFirstChild = function(self, name, rec)
+            if name=="@bubbles.elia" or (type(name)=="string" and name:find("bubbles")) then
+                print("[SAFE2] blocked FindFirstChild bubbles")
+                return nil
+            end
+            return orig_Find(self, name, rec)
+        end
+        -- также для :FindFirstChild с разными вызывами
+        local orig_FFC = game.FindFirstChild
+        print("[SAFE2] CoreGui patch done")
     end
 end)
 
--- Обёртка для loadstring без hookfunction
+-- 2. Байпас odh_shared_plugins.kick и shared.kick (file 8 и другие)
+pcall(function()
+    -- ждём создания odh_shared_plugins
+    task.spawn(function()
+        for i=1,50 do
+            task.wait(0.2)
+            local host = rawget(getgenv(), "odh_shared_plugins") or shared and shared.odh_shared_plugins or _G.odh_shared_plugins
+            -- также глобальный shared
+            if getgenv().odh_shared_plugins then host=getgenv().odh_shared_plugins end
+            if host and type(host)=="table" then
+                if host.kick then
+                    print("[SAFE2] found odh_shared_plugins.kick -> neutralized")
+                    host.kick = function(...) print("[SAFE2] kick blocked", ...) end
+                end
+                if host.Kick then host.Kick = host.kick end
+            end
+            if shared and shared.kick then
+                print("[SAFE2] shared.kick blocked")
+                shared.kick = function(...) print("[SAFE2] shared kick blocked") end
+            end
+            if _G.odh_shared_plugins and _G.odh_shared_plugins.kick then
+                _G.odh_shared_plugins.kick = function() end
+            end
+        end
+    end)
+    -- немедленная заглушка на случай если уже есть
+    if getgenv().odh_shared_plugins and getgenv().odh_shared_plugins.kick then
+        getgenv().odh_shared_plugins.kick = function() print("[SAFE2] early kick block") end
+    end
+end)
+
+-- 3. Байпас Players.LocalPlayer.Kick (прямая подмена)
+pcall(function()
+    local plr = game:GetService("Players").LocalPlayer
+    if plr and plr.Kick then
+        pcall(function() plr.Kick = function(...) print("[SAFE2] Player Kick blocked") task.wait(5) end end)
+        print("[SAFE2] Player Kick patch attempted")
+    end
+end)
+
+-- 4. loadstring wrapper без hookfunction (как в SAFE v1) + vm_return
 do
     local orig_ls = loadstring
     local orig_load = load
     local function makeWrapper(orig_fn, tag)
         return function(...)
-            print("[SAFE-ODH] VM call "..tag.." ...")
-            local ok, ret1, ret2, ret3 = pcall(orig_fn, ...)
-            if not ok then
-                print("[SAFE-ODH] VM error: "..tostring(ret1))
-                error(ret1, 0)
+            print("[SAFE2] VM call "..tag)
+            local a,b,c,d = pcall(orig_fn, ...)
+            -- pcall возвращает ok, ret...
+            -- Но orig_fn уже защищена pcall, нужно unpack правильно
+            -- На самом деле orig_fn может кикнуть - оборачиваем
+            if not a then
+                print("[SAFE2] VM pcall error: "..tostring(b))
+                error(b,0)
             end
-            -- ret1.. может быть string/table/function/nil
-            local rets={ret1, ret2, ret3}
-            -- если orig_fn вернула 0 значений (nil), то вызов VM вернул nil
-            -- но loadstring обычно возвращает 1 функцию; мы оборачиваем именно ту функцию
-            -- Здесь orig_fn это УЖЕ расшифрованная функция (результат loadstring), и мы её вызвали
-            -- Поэтому проверяем что она вернула
-            for i=1,3 do
-                local v=rets[i]
-                if v~=nil then
-                    print("[SAFE-ODH] ret"..i.." type="..type(v)..(type(v)=="string" and " len="..#v or type(v)=="table" and (function() local c=0;for _ in pairs(v) do c=c+1 end return " keys="..c end)() or ""))
-                    if type(v)=="string" and #v>=MIN then
-                        save("vm_return_"..i, v, tag)
-                        if v:find("%[6%]=function") or v:find("Luraph") then
-                            print("[SAFE-ODH] похоже это handlers таблица (как 1.8M) - чистого loadstring нет")
-                        end
-                    elseif type(v)=="table" then
-                        saveTable("vm_return_"..i, v, tag)
-                    end
+            -- b,c,d - это возвраты VM (их может быть 1-3)
+            local ret=b
+            if type(ret)=="string" and #ret>=MIN then
+                save("vm_return", ret, tag)
+                print("[SAFE2] vm_return string "..#ret)
+            elseif type(ret)=="table" then
+                local n=0; for _ in pairs(ret) do n=n+1 end
+                print("[SAFE2] vm_return table keys="..n)
+                if n>100 then
+                    -- handlers таблица как 1.8M - не сохраняем как vm_return, это не чистый
+                    print("[SAFE2] handlers table detected (534) - это не чистый, нужен ПК-деобф")
+                else
+                    pcall(function()
+                        local hs=game:GetService("HttpService")
+                        local j=hs:JSONEncode(ret)
+                        if #j>=MIN then save("vm_return_table", j, tag.." json") end
+                    end)
                 end
+            else
+                print("[SAFE2] vm_return type="..type(ret))
             end
-            return ret1, ret2, ret3
+            return b,c,d
         end
     end
-
     getgenv().loadstring = function(s, chunk, ...)
-        if type(s)=="string" and #s>=MIN then
-            pcall(save, "loadstring_src", s, chunk or "")
-        end
+        if type(s)=="string" and #s>=MIN then pcall(save, "loadstring_src", s, chunk or "") end
         local fn, err = orig_ls(s, chunk, ...)
-        if type(fn)=="function" then
-            -- возвращаем обёрнутую функцию, чтобы поймать что она вернёт при вызове a(key1,key2)
-            local wrapped = makeWrapper(fn, tostring(chunk or "loadstring"))
-            return wrapped, err
-        end
+        if type(fn)=="function" then return makeWrapper(fn, tostring(chunk or "ls")), err end
         return fn, err
     end
-
     getgenv().load = function(s, chunk, ...)
         if type(s)=="string" and #s>=MIN then pcall(save, "load_src", s, chunk or "") end
         local fn, err = orig_load(s, chunk, ...)
         if type(fn)=="function" then return makeWrapper(fn, tostring(chunk or "load")), err end
         return fn, err
     end
-    print("[SAFE-ODH] loadstring/load wrapped (stealth)")
+    print("[SAFE2] loadstring wrapped")
 end
 
--- buffer.fromstring стелс (без hookfunction)
+-- 5. buffer.fromstring стелс
 pcall(function()
     if buffer and buffer.fromstring then
         local orig=buffer.fromstring
-        buffer.fromstring = function(str, ...)
-            if type(str)=="string" and #str>=MIN then
-                pcall(save, "buffer_fromstring", str, "fromstring")
-                print("[SAFE-ODH] buffer.fromstring "..#str)
-            end
-            return orig(str, ...)
+        buffer.fromstring=function(str,...)
+            if type(str)=="string" and #str>=800 then pcall(save, "buffer_fromstring", str, "fromstring") end
+            return orig(str,...)
         end
-        print("[SAFE-ODH] buffer.fromstring wrapped")
+        print("[SAFE2] buffer patch done")
     end
 end)
-
--- HttpGet стелс
 pcall(function()
     local orig=game.HttpGet
-    -- перезаписываем метод на объекте game (стелс)
-    game.HttpGet = function(self, url, ...)
-        local r=orig(self, url, ...)
-        if type(r)=="string" and #r>=MIN then
-            if r:find("Luraph") then pcall(save, "HttpGet_Luraph", r, url)
-            elseif r:find("XALOEX") then pcall(save, "HttpGet_XALOEX", r, url)
-            else pcall(save, "HttpGet", r, url) end
-        end
+    game.HttpGet=function(self,url,...)
+        local r=orig(self,url,...)
+        if type(r)=="string" and #r>=MIN then pcall(save,"HttpGet",r,url) end
         return r
     end
-    print("[SAFE-ODH] HttpGet wrapped")
 end)
 
-print("[SAFE-ODH] Готово. Теперь запускай ODH лоадер. Даже если кикнет - файлы до кика уже в "..LOG)
-print("[SAFE-ODH] Если кикает сразу - попробуй второй вариант: запусти ODH БЕЗ дампера 1 раз, потом файл Ixry Shizuka/files/bootstrapper.lua (568K) вручную через tail -n +3")
+print("[SAFE2] Готово. Запускай ODH лоадер сейчас. Если опять Malicious - скинь папку "..LOG)
+print("[SAFE2] Если не поможет - просто скинь 02 файл (568K) мне, сделаю офлайн-деобф на ПК")
