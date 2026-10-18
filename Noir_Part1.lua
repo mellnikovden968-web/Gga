@@ -2,7 +2,7 @@
     Luraph v15.1 Obfuscated
     Preset: MAX | VM: LuaVM | Transformations: CONTROL_FLOW, CONSTANTS, STRINGS
     Original: Noir_Part1.lua (1101997 bytes)
-    Obfuscated: 2026-10-18 15:03:56
+    Obfuscated: 2026-10-18 15:16:15
     https://lura.ph
     LPH_ATTRIBUTES(VM(LuaVM), PRESET(MAX), TRANSFORM(CONTROL_FLOW, EXTRACT, CONSTANTS))
 ]]--
