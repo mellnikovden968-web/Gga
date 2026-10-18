@@ -49,4 +49,4 @@ local _ld = loadstring or load or (getgenv and pcall(function() return getgenv()
 if not _ld then error("NRX2: no loadstring/load available") end
 local _fn, _err = _ld(_code)
 if not _fn then error("NRX2 protected load failed: "..tostring(_err)) end
-return _fn()
+_fn()
