@@ -1466,6 +1466,1115 @@ restore.MouseButton1Click:Connect(function()
     TweenService:Create(winScale, TweenInfo.new(.46, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
 end)
 
+-- ═══════════════════════════════════════════════════════════════════════════
+--  Autofarm section lives in its own function: inside __noirW1b it pushed the
+--  active-local count past the Luau 200-locals compile limit (Delta executor
+--  fails with "Out of local registers"). Murderer/sheriff are re-assigned by
+--  role detection later, so they are read live through accessor closures.
+-- ═══════════════════════════════════════════════════════════════════════════
+local function __noirFarmSection(sectionPanels, roleCache, getMurderer, getSheriff)
+do
+    -- ============================================================
+    -- Autofarm ported 1:1 from the Shitaro paste "autos" section:
+    -- grab gun / farm / type (Basic-Down) / murder check / auto reset / auto kill.
+    -- Original names and logic kept (farm_hrp, can_farm, pick_coin, avoid_steer,
+    -- fire_touch, farm_move, Stepped engine, AUTOFARM_HOLD ...).
+    -- ============================================================
+    local players = Players
+    local lp = LocalPlayer
+    local run = RunService
+    local cs = game:GetService("\x43ollectionService")
+    local rs = ReplicatedStorage
+
+    local function panel(title, subtitle)
+        local page = win:FindFirstChild("\x46armContent")
+        local col = page and page:FindFirstChild("\x4eoirColumn1")
+        if not (page and col) then return nil end
+        pcall(function()
+            for _, oldCard in ipairs(col:GetChildren()) do
+                if oldCard:IsA("GuiObject") and oldCard:GetAttribute("NoirPanelTitle") == title then oldCard:Destroy() end
+            end
+        end)
+        local card = New("\x46rame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = C.panel, BackgroundTransparency = .86, ClipsDescendants = true })
+        card:SetAttribute("NoirPanelTitle", title)
+        table.insert(sectionPanels, { panel = card, page = "\x66arm", name = string.lower(title .. "\x20" .. (subtitle or "") .. "\x20autofarm farm coins coin grab gun murder check") })
+        corner(card, 10); stroke(card, C.border, .15)
+        local tick = New("\x46rame", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
+        corner(tick, 2)
+        kitiTitle(card, title)
+        if subtitle and subtitle ~= "" then kitiDesc(card, subtitle) end
+        local holder = New("\x46rame", { Parent = card, Position = UDim2.fromOffset(10, subtitle ~= "" and 48 or 38), Size = UDim2.new(1, -20, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
+        New("\x55IListLayout", { Parent = holder, Padding = UDim.new(0, 7), SortOrder = Enum.SortOrder.LayoutOrder })
+        New("\x55IPadding", { Parent = holder, PaddingBottom = UDim.new(0, 12) })
+        return holder
+    end
+    local function makeToggle(parent, label, callback, startOn, storageKey)
+        local key = "\x61utofarm::" .. (storageKey or label)
+        local savedState = NoirPersistence.GetValue("\x74oggles", key, nil)
+        local state = savedState == true and true or false
+        local r = New("\x46rame", { Parent = parent, Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1 })
+        text(r, label, 16, UDim2.fromOffset(0, 10))
+        local pill = New("\x54extButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 2), Size = UDim2.fromOffset(30, 16),
+            BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
+        corner(pill, 8); stroke(pill, C.border, 0)
+        local dot = New("\x46rame", { Parent = pill, AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 2, .5, 0), Size = UDim2.fromOffset(12, 12), BackgroundColor3 = C.text })
+        corner(dot, 6)
+        local function apply(v, restoring)
+            state = v == true
+            TweenService:Create(pill, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = state and C.accent or C.off }):Play()
+            TweenService:Create(dot, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                Position = state and UDim2.new(1, -14, .5, 0) or UDim2.new(0, 2, .5, 0),
+                BackgroundColor3 = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 155, 162)
+            }):Play()
+            callback(state)
+            if not restoring then NoirPersistence.SetValue("\x74oggles", key, state) end
+        end
+        local last = 0
+        local function fire()
+            local now = os.clock()
+            if now - last < .18 then return end
+            last = now
+            apply(not state)
+        end
+        pill.Activated:Connect(fire)
+        if savedState == nil and startOn == true then
+            apply(true)
+        elseif state then
+            apply(true, true)
+        end
+        return apply
+    end
+    local function farmBtn(parent, label, fn)
+        local b = New("\x54extButton", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
+            Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
+        corner(b, 12); stroke(b, C.border, .5)
+        do
+            local idleColor = b.BackgroundColor3
+            b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = Color3.fromRGB(34, 28, 22) }):Play() end)
+            b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = idleColor }):Play() end)
+        end
+        local last = 0
+        local function fire2()
+            local now = os.clock()
+            if now - last < .2 then return end
+            last = now
+            fn()
+        end
+        b.Activated:Connect(fire2)
+        return b
+    end
+    local function farmSlider(parent, label, min, max, default, callback, storageKey)
+        local key = "\x61utofarm::" .. (storageKey or label)
+        local savedValue = tonumber(NoirPersistence.GetValue("\x73liders", key, nil))
+        if savedValue then default = math.clamp(savedValue, min, max) end
+        local r = New("\x46rame", { Parent = parent, Size = UDim2.new(1, 0, 0, 58), BackgroundTransparency = 1 })
+        text(r, label, 16, UDim2.fromOffset(0, 0))
+        local box = New("\x54extBox", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Size = UDim2.fromOffset(72, 30),
+            BackgroundColor3 = C.surface, BackgroundTransparency = .12, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
+            TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false })
+        corner(box, 9); stroke(box, C.border, .4)
+        local track = New("\x46rame", { Parent = r, Position = UDim2.new(0, 0, 0, 42), Size = UDim2.new(1, 0, 0, 6), BackgroundColor3 = C.off, BorderSizePixel = 0 })
+        corner(track, 3)
+        local fill = New("\x46rame", { Parent = track, Size = UDim2.fromScale((default - min) / (max - min), 1), BackgroundColor3 = C.accent, BorderSizePixel = 0 })
+        corner(fill, 3)
+        local knob = New("\x46rame", { Parent = track, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new((default - min) / (max - min), 0, .5, 0),
+            Size = UDim2.fromOffset(14, 14), BackgroundColor3 = C.text, BorderSizePixel = 0 })
+        knob.Size = UDim2.fromOffset(15, 15); corner(knob, 8); stroke(knob, C.border, .3)
+        local current = default
+        local function set(v)
+            current = math.clamp(math.floor((tonumber(v) or current or default) + .5), min, max)
+            fill.Size = UDim2.fromScale((current - min) / (max - min), 1)
+            knob.Position = UDim2.new((current - min) / (max - min), 0, .5, 0)
+            box.Text = tostring(current)
+            callback(current)
+            NoirPersistence.SetValue("\x73liders", key, current)
+        end
+        set(default)
+        box.FocusLost:Connect(function() set(box.Text) end)
+        local drag = false
+        track.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
+                drag = true
+                set(min + (max - min) * math.clamp((i.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1))
+            end
+        end)
+        UIS.InputChanged:Connect(function(i)
+            if drag and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
+                set(min + (max - min) * math.clamp((i.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1))
+            end
+        end)
+        UIS.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
+        end)
+        return r
+    end
+
+    -- ---------- grab gun (paste) ----------
+    local autograb_on = false
+
+    local grab_rs = rs
+    local grab_round_mod = nil
+    local function grab_has_role()
+        if not grab_round_mod then
+            local ok, m = pcall(function()
+                return require(grab_rs:WaitForChild("\x4dodules"):WaitForChild("\x43urrentRoundClient"))
+            end)
+            if ok and type(m) == "\x74able" then grab_round_mod = m end
+        end
+        local d = grab_round_mod and grab_round_mod.PlayerData
+        if type(d) ~= "\x74able" then return false end
+        local me = d[lp.Name]
+        return me ~= nil and me.Role ~= nil and not me.Dead
+    end
+
+    local function has_knife()
+        local char = lp.Character
+        if char and char:FindFirstChild("\x4bnife") then return true end
+        local backpack = lp:FindFirstChildOfClass("\x42ackpack")
+        if backpack and backpack:FindFirstChild("\x4bnife") then return true end
+        return false
+    end
+
+    local function grab_gun(obj)
+        if not autograb_on or has_knife() then return end
+        if not grab_has_role() then return end
+        local char = lp.Character
+        local root = char and char:FindFirstChild("\x48umanoidRootPart")
+        if not root then return end
+        pcall(function() obj.CFrame = root.CFrame end)
+        local prompt = obj:FindFirstChildOfClass("\x50roximityPrompt")
+        if prompt then
+            pcall(function() fireproximityprompt(prompt) end)
+        end
+    end
+
+    local function scan_guns()
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj.Name == "\x47unDrop" and obj:IsA("\x42asePart") then
+                grab_gun(obj)
+            end
+        end
+    end
+
+    local grab_desc_conn = nil
+
+    local function grab_desc_added(obj)
+        if obj.Name == "\x47unDrop" and obj:IsA("\x42asePart") then
+            task.wait(0.1)
+            grab_gun(obj)
+        end
+    end
+
+    local function grab_desc_stop()
+        if grab_desc_conn then
+            pcall(function() grab_desc_conn:Disconnect() end)
+            grab_desc_conn = nil
+        end
+    end
+
+    -- ---------- farm engine (paste) ----------
+    local autofarm_on = false
+    local autoreset_on = false
+    local autokill_on = false
+    local autokillsheriff_on = false
+    local tpAfterFarm_mode = NoirPersistence.GetValue("\x64ropdowns", "\x61utofarm::tp_mode", "None")
+    if type(tpAfterFarm_mode) ~= "\x73tring" then tpAfterFarm_mode = "None" end
+    local shootFull_on = false
+    local flingSheriffFull_on = false
+    local coins_done = false
+    local saw_coins = false
+    local farm_target = nil
+    local nc_cache = {}
+    local FARM_SPEED = 23
+    local round_mod = nil
+    local collected_ids = {}
+    local collected_count = 0
+
+    local farm_mode = "\x42asic"
+    local avoid_murder = false
+    local was_down = false
+    local down_ref_y = nil
+    local last_touch = 0
+    local shootfull_busy = false
+    local aura_on = false
+    local AURA_RADIUS = 22
+    local AURA_INTERVAL = 0.12
+    local aura_last = 0
+    local flingMurderFull_on = false
+    local flingMurderLast, flingMurderTargetId = 0, nil
+    local SF_DIST = 12
+    local DOWN_DEPTH = 14
+    local DOWN_RISE_XZ = 4
+    local AVOID_DIST = 40
+    local RISE_SAFE_DIST = 20
+
+    getgenv().AUTOFARM_HOLD = false
+
+    local function farm_hrp()
+        local c = lp.Character
+        return c and c:FindFirstChild("\x48umanoidRootPart")
+    end
+
+    -- ===== knife kills for autofarm (SNPWARE style: equip the knife themselves) =====
+    local function farm_knife_tool()
+        local function find(parent)
+            if not parent then return nil end
+            local named = parent:FindFirstChild("Knife")
+            if named and named:IsA("Tool") then return named end
+            for _, child in ipairs(parent:GetChildren()) do
+                if child:IsA("Tool") and (child:FindFirstChild("KnifeStabbed", true) or child:FindFirstChild("HandleTouched", true)) then
+                    return child
+                end
+            end
+            return nil
+        end
+        local character = lp.Character
+        local equipped = find(character)
+        if equipped then return equipped end
+        local backpack = lp:FindFirstChildOfClass("Backpack")
+        local source = find(backpack)
+        if not source and backpack and backpack:FindFirstChild("Toys") then source = find(backpack.Toys) end
+        if source then
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            if humanoid then pcall(function() humanoid:EquipTool(source) end) end
+            return find(character) or source
+        end
+        return nil
+    end
+
+    local function farm_stab(knife, hrp)
+        if not knife or not hrp then return false end
+        local events = knife:FindFirstChild("Events")
+        local stabbed = (events and events:FindFirstChild("KnifeStabbed")) or knife:FindFirstChild("KnifeStabbed", true)
+        local touched = (events and events:FindFirstChild("HandleTouched")) or knife:FindFirstChild("HandleTouched", true)
+        local handle = knife:FindFirstChild("Handle", true)
+        if handle and type(firetouchinterest) == "function" then
+            pcall(firetouchinterest, hrp, handle, 0)
+            pcall(firetouchinterest, hrp, handle, 1)
+        end
+        if touched and touched:IsA("RemoteEvent") then pcall(touched.FireServer, touched, hrp) end
+        if stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
+        return true
+    end
+
+    local function farm_kill_everyone()
+        local knife = farm_knife_tool()
+        if not knife then return 0 end
+        local count = 0
+        for _, plr in ipairs(players:GetPlayers()) do
+            if plr ~= lp then
+                local character = plr.Character
+                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                if hrp and humanoid and humanoid.Health > 0 then
+                    farm_stab(knife, hrp)
+                    count += 1
+                end
+            end
+        end
+        return count
+    end
+
+    local function farm_kill_sheriff()
+        local knife = farm_knife_tool()
+        if not knife then return false end
+        for _, plr in ipairs(players:GetPlayers()) do
+            if plr ~= lp then
+                local character = plr.Character
+                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                local backpack = plr:FindFirstChildOfClass("Backpack")
+                local gun = (character and character:FindFirstChild("Gun")) or (backpack and backpack:FindFirstChild("Gun"))
+                if hrp and humanoid and humanoid.Health > 0 and gun then
+                    farm_stab(knife, hrp)
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function farm_equip_gun()
+        local character = lp.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return nil end
+        local gun = character and character:FindFirstChild("Gun")
+        if gun then return gun end
+        local backpack = lp:FindFirstChildOfClass("Backpack")
+        gun = backpack and backpack:FindFirstChild("Gun")
+        if gun then pcall(function() humanoid:EquipTool(gun) end) end
+        return gun
+    end
+
+    local function farm_tp_after()
+        local keyword
+        if tpAfterFarm_mode == "Map" then keyword = "spawn" end
+        if tpAfterFarm_mode == "Lobby" then keyword = "lobby" end
+        if tpAfterFarm_mode == "Secret" then keyword = "secret" end
+        if not keyword then return false end
+        local hrp = farm_hrp()
+        if not hrp then return false end
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if (obj:IsA("BasePart") or obj:IsA("Model")) and string.find(string.lower(obj.Name), keyword, 1, true) then
+                local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+                if part then
+                    pcall(function() hrp.CFrame = CFrame.new(part.Position + Vector3.new(0, 3, 0)) end)
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+
+    local function get_round_data()
+        if not round_mod then
+            local ok, m = pcall(function()
+                return require(rs:WaitForChild("\x4dodules"):WaitForChild("\x43urrentRoundClient"))
+            end)
+            if ok and type(m) == "\x74able" then round_mod = m end
+        end
+        return round_mod and round_mod.PlayerData
+    end
+
+    local function can_farm()
+        local char = lp.Character
+        local hum = char and char:FindFirstChildOfClass("\x48umanoid")
+        if not hum or hum.Health <= 0 then return false end
+        local d = get_round_data()
+        if type(d) == "\x74able" then
+            local me = d[lp.Name]
+            if not me or not me.Role or me.Dead then return false end
+        end
+        return true
+    end
+
+    local function coin_bags_full()
+        local pg = lp:FindFirstChild("\x50layerGui")
+        local main = pg and pg:FindFirstChild("\x4dainGUI")
+        local gg = main and main:FindFirstChild("\x47ame")
+        local bags = gg and gg:FindFirstChild("\x43oinBags")
+        local container = bags and bags:FindFirstChild("\x43ontainer")
+        if not container then return false end
+        local any = false
+        for _, v in ipairs(container:GetChildren()) do
+            if v:IsA("\x46rame") and v.Visible then
+                any = true
+                local full = v:FindFirstChild("\x46ull")
+                if not (full and full.Visible) then
+                    return false
+                end
+            end
+        end
+        return any
+    end
+
+    local function update_hold()
+        getgenv().AUTOFARM_HOLD = autofarm_on and autokill_on and not coins_done
+    end
+
+    local function reset_farm_progress()
+        collected_ids = {}
+        collected_count = 0
+        coins_done = false
+        saw_coins = false
+        farm_target = nil
+        update_hold()
+    end
+
+    task.spawn(function()
+        local ok, remote = pcall(function()
+            return rs:WaitForChild("\x52emotes"):WaitForChild("\x47ameplay"):WaitForChild("\x43oinsStarted", 15)
+        end)
+        if ok and remote then
+            remote.OnClientEvent:Connect(reset_farm_progress)
+        end
+    end)
+
+    lp.CharacterAdded:Connect(function()
+        reset_farm_progress()
+    end)
+
+    local function coin_available(v)
+        return v and v.Parent and v:IsA("\x42asePart") and not v:GetAttribute("\x43ollected") and not v:GetAttribute("\x44elete")
+    end
+
+    local function nearest_coin(pos, list)
+        local best, bd = nil, math.huge
+        for _, v in ipairs(list) do
+            local d = (v.Position - pos).Magnitude
+            if d < bd then bd = d best = v end
+        end
+        return best
+    end
+
+    local function set_farm_noclip(on)
+        local char = lp.Character
+        local hum = char and char:FindFirstChildOfClass("\x48umanoid")
+        if on then
+            if not char then return end
+            if hum then pcall(function() hum.PlatformStand = true end) end
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("\x42asePart") and p.CanCollide then
+                    if nc_cache[p] == nil then nc_cache[p] = p.CanCollide end
+                    p.CanCollide = false
+                end
+            end
+        else
+            if hum then pcall(function() hum.PlatformStand = false end) end
+            for p, v in pairs(nc_cache) do
+                if p and p.Parent then pcall(function() p.CanCollide = v end) end
+            end
+            nc_cache = {}
+        end
+    end
+
+    local up_params = RaycastParams.new()
+    up_params.FilterType = Enum.RaycastFilterType.Exclude
+    up_params.IgnoreWater = true
+
+    local function return_to_surface()
+        local hrp = farm_hrp()
+        if not hrp then return end
+        local origin = hrp.Position
+        up_params.FilterDescendantsInstances = { lp.Character }
+        local res = workspace:Raycast(origin, Vector3.new(0, 400, 0), up_params)
+        local y = res and (res.Position.Y + 5) or (down_ref_y and down_ref_y + 5 or nil)
+        if not y then return end
+        pcall(function()
+            hrp.CFrame = CFrame.new(origin.X, y, origin.Z)
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end)
+    end
+
+    local function farm_release()
+        if was_down then
+            was_down = false
+            return_to_surface()
+        end
+        set_farm_noclip(false)
+    end
+
+    local murder_hrp_cache, murder_hrp_t = nil, 0
+    local function murderer_hrp()
+        local now = os.clock()
+        if now - murder_hrp_t < 0.25 then return murder_hrp_cache end
+        murder_hrp_t = now
+        murder_hrp_cache = nil
+        local d = get_round_data()
+        if type(d) == "\x74able" then
+            local me = d[lp.Name]
+            if me and me.Role == "\x4durderer" then return nil end
+            for name, info in pairs(d) do
+                if type(info) == "\x74able" and info.Role == "\x4durderer" and not info.Dead and name ~= lp.Name then
+                    local pl = players:FindFirstChild(name)
+                    local char = pl and pl.Character
+                    local h = char and char:FindFirstChild("\x48umanoidRootPart")
+                    local hum = char and char:FindFirstChildOfClass("\x48umanoid")
+                    if h and (not hum or hum.Health > 0) then murder_hrp_cache = h end
+                    break
+                end
+            end
+        end
+        return murder_hrp_cache
+    end
+
+    local function flat_dist(a, b)
+        return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+    end
+
+    local function pick_coin(pos, list, mpos)
+        if not (avoid_murder and mpos) then
+            return nearest_coin(pos, list)
+        end
+        local safe, sd = nil, math.huge
+        local far, fd = nil, -1
+        for _, v in ipairs(list) do
+            local md = flat_dist(v.Position, mpos)
+            if md > fd then fd = md far = v end
+            if md >= AVOID_DIST then
+                local d = (v.Position - pos).Magnitude
+                if d < sd then sd = d safe = v end
+            end
+        end
+        if safe then return safe end
+        if far and fd >= AVOID_DIST * 0.6 then return far end
+        return nil
+    end
+
+    local function coin_ok_now(v, mpos)
+        if not coin_available(v) then return false end
+        if avoid_murder and mpos and flat_dist(v.Position, mpos) < AVOID_DIST * 0.6 then return false end
+        return true
+    end
+
+    local function avoid_steer(cur, dest, mpos)
+        if not (avoid_murder and mpos) then return dest end
+        local dm = flat_dist(cur, mpos)
+        if dm >= AVOID_DIST then return dest end
+        local away = Vector3.new(cur.X - mpos.X, 0, cur.Z - mpos.Z)
+        if away.Magnitude < 0.1 then away = Vector3.new(1, 0, 0) end
+        away = away.Unit
+        local want = Vector3.new(dest.X - cur.X, 0, dest.Z - cur.Z)
+        local mag = want.Magnitude
+        if mag < 0.1 then return dest end
+        local weight = 1 + (1 - dm / AVOID_DIST) * 2
+        local blend = (want.Unit + away * weight)
+        if blend.Magnitude < 0.1 then blend = away else blend = blend.Unit end
+        local np = cur + blend * mag
+        return Vector3.new(np.X, dest.Y, np.Z)
+    end
+
+    local function touch_targets(coin)
+        local list = {}
+        local seen = {}
+        local function add(p)
+            if p and not seen[p] and p:IsA("\x42asePart") and p:FindFirstChildOfClass("\x54ouchTransmitter") then
+                seen[p] = true
+                list[#list + 1] = p
+            end
+        end
+        add(coin)
+        for _, v in ipairs(coin:GetChildren()) do add(v) end
+        local par = coin.Parent
+        if par then
+            if par:IsA("\x42asePart") then add(par) end
+            for _, v in ipairs(par:GetChildren()) do add(v) end
+        end
+        if #list == 0 then list[1] = coin end
+        return list
+    end
+
+    local function fire_touch(coin, force)
+        if type(firetouchinterest) ~= "\x66unction" then return end
+        if not coin or not coin.Parent then return end
+        local now = os.clock()
+        if not force and now - last_touch < 0.05 then return end
+        last_touch = now
+        local hrp = farm_hrp()
+        if not hrp then return end
+        for _, p in ipairs(touch_targets(coin)) do
+            pcall(firetouchinterest, hrp, p, 0)
+            pcall(firetouchinterest, hrp, p, 1)
+        end
+    end
+
+    local function farm_move(hrp, dest, dt)
+        local dir = dest - hrp.Position
+        local dist = dir.Magnitude
+        local np = dest
+        if dist > 0.1 then
+            np = hrp.Position + dir.Unit * math.min(FARM_SPEED * dt, dist)
+        end
+        local cf = CFrame.new(np)
+        if farm_mode == "\x44own" then
+            cf = cf * CFrame.Angles(-math.pi * 0.5, 0, 0)
+            was_down = true
+        end
+        pcall(function()
+            hrp.CFrame = cf
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end)
+    end
+
+    local farm_conn = run.Stepped:Connect(function(_, dt)
+        if not autofarm_on then return end
+        if shootfull_busy then return end
+        if not can_farm() then
+            farm_target = nil
+            was_down = false
+            set_farm_noclip(false)
+            return
+        end
+        local hrp = farm_hrp()
+        if not hrp then return end
+
+        local list = {}
+        for _, v in ipairs(cs:GetTagged("\x43oinVisual")) do
+            if v and v.Parent and v:IsA("\x42asePart") then
+                if v:GetAttribute("\x43ollected") then
+                    local id = v:GetAttribute("\x43oinID")
+                    if id and not collected_ids[id] then
+                        collected_ids[id] = true
+                        collected_count = collected_count + 1
+                    end
+                elseif not v:GetAttribute("\x44elete") then
+                    list[#list + 1] = v
+                end
+            end
+        end
+
+        local function finish()
+            farm_target = nil
+            farm_release()
+            if not coins_done then
+                coins_done = true
+                update_hold()
+                if tpAfterFarm_mode ~= "None" then
+                    task.spawn(function()
+                        task.wait(0.4)
+                        pcall(farm_tp_after)
+                    end)
+                end
+                if autoreset_on then
+                    local hum = lp.Character and lp.Character:FindFirstChildOfClass("\x48umanoid")
+                    if hum then pcall(function() hum.Health = 0 end) end
+                end
+            end
+        end
+
+        if saw_coins and coin_bags_full() then
+            finish()
+            return
+        end
+
+        if #list > 0 then
+            saw_coins = true
+            if coins_done then coins_done = false update_hold() end
+
+            local mhrp = avoid_murder and murderer_hrp() or nil
+            local mpos = mhrp and mhrp.Position or nil
+
+            if not coin_ok_now(farm_target, mpos) then
+                farm_target = pick_coin(hrp.Position, list, mpos)
+            end
+
+            if farm_target then
+                set_farm_noclip(true)
+                local cpos = farm_target.Position
+                down_ref_y = cpos.Y
+                local dest = cpos
+
+                if farm_mode == "\x44own" then
+                    local xz = flat_dist(hrp.Position, cpos)
+                    local safe_to_rise = (not mpos) or flat_dist(hrp.Position, mpos) > RISE_SAFE_DIST
+                    if xz <= DOWN_RISE_XZ and safe_to_rise then
+                        dest = cpos
+                        fire_touch(farm_target)
+                    else
+                        dest = Vector3.new(cpos.X, cpos.Y - DOWN_DEPTH, cpos.Z)
+                    end
+                elseif (cpos - hrp.Position).Magnitude <= 6 then
+                    fire_touch(farm_target)
+                end
+
+                dest = avoid_steer(hrp.Position, dest, mpos)
+                farm_move(hrp, dest, dt)
+            elseif mpos then
+                set_farm_noclip(true)
+                local away = Vector3.new(hrp.Position.X - mpos.X, 0, hrp.Position.Z - mpos.Z)
+                if away.Magnitude < 0.1 then away = Vector3.new(1, 0, 0) end
+                away = away.Unit
+                local y = hrp.Position.Y
+                if farm_mode == "\x44own" and down_ref_y then y = down_ref_y - DOWN_DEPTH end
+                farm_move(hrp, hrp.Position + away * 40 + Vector3.new(0, y - hrp.Position.Y, 0), dt)
+            end
+        else
+            farm_target = nil
+            farm_release()
+            if saw_coins and not coins_done and collected_count > 0 then
+                finish()
+            end
+        end
+    end)
+    -- ---------- Coin Aura (autofarm page) ----------
+    -- Built from this file's own coin primitives: CoinVisual tag -> coin_available ->
+    -- touch_targets -> firetouchinterest. Same touch path as the farm walk, but
+    -- nothing moves: every coin inside the radius is touched every Aura Interval.
+    local aura_conn = run.Heartbeat:Connect(function()
+        if not aura_on then return end
+        local hrp = farm_hrp()
+        if not hrp then return end
+        local now = os.clock()
+        if now - aura_last < AURA_INTERVAL then return end
+        aura_last = now
+        if saw_coins and coin_bags_full() then return end
+        local origin = hrp.Position
+        local mpos = nil
+        if avoid_murder then
+            local mhrp = murderer_hrp()
+            mpos = mhrp and mhrp.Position or nil
+        end
+        local radius = AURA_RADIUS
+        local radius2 = radius * radius
+        local touched = 0
+        for _, v in ipairs(cs:GetTagged("\x43oinVisual")) do
+            if v and v.Parent and v:IsA("\x42asePart") and not v:GetAttribute("\x43ollected") and not v:GetAttribute("\x44elete") then
+                local d = v.Position - origin
+                if d.X * d.X + d.Z * d.Z <= radius2 and math.abs(d.Y) <= radius * 1.5 then
+                    if coin_ok_now(v, mpos) then
+                        fire_touch(v, true)
+                        touched = touched + 1
+                        if touched >= 40 then break end
+                    end
+                end
+            end
+        end
+    end)
+
+
+    -- auto kill executor: the paste's kill modules honor getgenv().AUTOFARM_HOLD
+    -- (paused while coins remain, released when bags are full). This mirrors that:
+    -- when the hold drops and coins are done, clear the round as the Murderer.
+    task.spawn(function()
+        while true do
+            task.wait(0.25)
+            if not (autofarm_on and (autokill_on or autokillsheriff_on)) then continue end
+            if getgenv().AUTOFARM_HOLD then continue end
+            if not coins_done then continue end
+            local my_root = farm_hrp()
+            if not my_root then continue end
+            local knife = autokill_on and farm_knife_tool() or nil
+            if autokill_on and knife then
+                -- kill everyone in the full bag: knife out, stab every player (no teleport)
+                for _, plr in ipairs(players:GetPlayers()) do
+                    if plr ~= lp then
+                        local tc = plr.Character
+                        local hum = tc and tc:FindFirstChildOfClass("\x48umanoid")
+                        local part = tc and (tc:FindFirstChild("\x48umanoidRootPart") or tc:FindFirstChild("\x48ead"))
+                        if hum and hum.Health > 0 and part then
+                            farm_stab(knife, part)
+                        end
+                    end
+                end
+            end
+            if autokillsheriff_on then
+                -- reuse the Knife Silent Aim killer (it equips the knife and stabs the sheriff)
+                pcall(function()
+                    local runtime = NoirGenv().__NoirKnifeUtilityRuntime
+                    if type(runtime) == "table" and type(runtime.KillSheriff) == "function" then
+                        runtime:KillSheriff()
+                    end
+                end)
+            end
+        end
+    end)
+
+    -- Autofarm: shoot murder on full bag + auto fling sheriff when innocent for gun
+    -- Expose flags for external access
+    pcall(function() NoirGenv().__ShootFull = shootFull_on; NoirGenv().__FlingSheriffFull = flingSheriffFull_on end)
+    -- Fling helper for autofarm — uses proper Noir fling from Part2 (no stretch)
+    local function autofarmFlingTarget(targetPlr)
+        if not targetPlr or not targetPlr.Parent then return false end
+        local ok = false
+        pcall(function()
+            if NoirGenv().__NoirFling and typeof(NoirGenv().__NoirFling)=="function" then
+                local res = NoirGenv().__NoirFling(targetPlr)
+                ok = res ~= false
+            elseif getgenv().__NoirFling and typeof(getgenv().__NoirFling)=="function" then
+                local res = getgenv().__NoirFling(targetPlr)
+                ok = res ~= false
+            end
+        end)
+        return ok
+    end
+
+    -- ===== Shoot Murder on full bag: прилипаем за спиной (как bang), один возврат =====
+    -- Держимся в системе координат маньяка на SF_DIST студов сзади и чуть выше —
+    -- едем вместе с ним, пока он жив, и стреляем. CFrame пишем только когда реально
+    -- съехали (стоит — ни одной записи). Возврат один: убийца умер / потеряли его /
+    -- сняли тоггл. Никаких "туда-сюда" циклами.
+    local sf_state = "idle"              -- idle | hold
+    local sf_target, sf_originCF = nil, nil
+    local sf_seenSince, sf_cooldownUntil = 0, 0
+    local sf_lastSeen, sf_lastShot, sf_lastEquip, sf_lastResolve = 0, 0, 0, 0
+    local sf_prevAutoRotate = nil
+    local sf_tick = 0
+    local function sf_release()
+        shootfull_busy = false
+        local hum = lp.Character and lp.Character:FindFirstChildOfClass("\x48umanoid")
+        if hum and sf_prevAutoRotate ~= nil then pcall(function() hum.AutoRotate = sf_prevAutoRotate end) end
+        sf_prevAutoRotate = nil
+        pcall(function() set_farm_noclip(false) end)
+        sf_target = nil
+        sf_seenSince = 0
+        sf_state = "idle"
+    end
+    local function sf_home(my_root)
+        if not (sf_originCF and my_root and my_root.Parent) then return end
+        local restore = sf_originCF
+        pcall(function()
+            local rotation = restore - restore.Position
+            local landing = restore
+            local down = RaycastParams.new()
+            down.FilterType = Enum.RaycastFilterType.Exclude
+            down.FilterDescendantsInstances = { lp.Character }
+            down.IgnoreWater = true
+            local hit = workspace:Raycast(restore.Position + Vector3.new(0, 5, 0), Vector3.new(0, -80, 0), down)
+            if hit then landing = CFrame.new(hit.Position + Vector3.new(0, 3.4, 0)) * rotation end
+            my_root.CFrame = landing
+            my_root.AssemblyLinearVelocity = Vector3.zero
+            my_root.AssemblyAngularVelocity = Vector3.zero
+        end)
+    end
+    run.Heartbeat:Connect(function()
+        local now = os.clock()
+        if now - sf_tick < 0.03 then return end
+        sf_tick = now
+        local my_root = farm_hrp()
+        local my_hum = lp.Character and lp.Character:FindFirstChildOfClass("\x48umanoid")
+        if not (my_root and my_hum and my_hum.Health > 0) then
+            if sf_state ~= "idle" then sf_originCF = nil; sf_release() end
+            return
+        end
+        local hasGun = my_root.Parent:FindFirstChild("\x47un") ~= nil
+        if not hasGun then
+            local bp = lp:FindFirstChildOfClass("\x42ackpack")
+            hasGun = bp ~= nil and bp:FindFirstChild("\x47un") ~= nil
+        end
+        if sf_state ~= "idle" and not (shootFull_on and autofarm_on and hasGun) then
+            sf_home(my_root)
+            sf_originCF = nil
+            sf_release()
+            sf_cooldownUntil = now + 1.5
+            return
+        end
+
+        -- цель: одна и та же, пока жива
+        local target_root = sf_target and sf_target.Character and sf_target.Character:FindFirstChild("\x48umanoidRootPart")
+        local target_hum = sf_target and sf_target.Character and sf_target.Character:FindFirstChildOfClass("\x48umanoid")
+        if not (sf_target and target_root and target_hum and target_hum.Health > 0) then
+            target_root, target_hum = nil, nil
+            if now - sf_lastResolve > 0.4 then
+                sf_lastResolve = now
+                local found = getMurderer()
+                if not (found and validTarget(found)) then
+                    local okFind, byKnife = pcall(function() return findByKnife and findByKnife() or nil end)
+                    if okFind and byKnife and validTarget(byKnife) then found = byKnife end
+                end
+                if found and validTarget(found) then
+                    if found ~= sf_target then sf_seenSince = now end
+                    sf_target = found
+                    target_root = found.Character and found.Character:FindFirstChild("\x48umanoidRootPart")
+                    target_hum = found.Character and found.Character:FindFirstChildOfClass("\x48umanoid")
+                end
+            end
+        end
+
+        if target_root and target_hum and target_hum.Health > 0 then
+            sf_lastSeen = now
+            if sf_state == "idle" then
+                if shootFull_on and autofarm_on and hasGun and coins_done
+                    and now >= sf_cooldownUntil and sf_seenSince > 0 and now - sf_seenSince >= 0.35 then
+                    sf_state = "hold"
+                    sf_originCF = my_root.CFrame
+                    sf_lastShot, sf_lastEquip = 0, 0
+                    shootfull_busy = true
+                    sf_prevAutoRotate = my_hum.AutoRotate
+                    pcall(function() my_hum.AutoRotate = false end)
+                    pcall(function() set_farm_noclip(true) end)
+                end
+            end
+            if sf_state == "hold" then
+                -- держимся за спиной на дистанции: пишем CFrame только при сносе,
+                -- скорость берём у цели, чтобы физика не тянула вниз
+                local desired = target_root.CFrame * CFrame.new(0, 2.2, SF_DIST)
+                if (desired.Position - my_root.Position).Magnitude > 0.12 then
+                    pcall(function() my_root.CFrame = desired end)
+                end
+                pcall(function()
+                    my_root.AssemblyLinearVelocity = target_root.AssemblyLinearVelocity
+                    my_root.AssemblyAngularVelocity = Vector3.zero
+                end)
+                if now - sf_lastEquip > 0.8 then
+                    sf_lastEquip = now
+                    pcall(farm_equip_gun)
+                end
+                if now - sf_lastShot > 0.12 then
+                    sf_lastShot = now
+                    pcall(function() if fireGunAt then fireGunAt(sf_target, true) end end)
+                end
+            end
+        elseif sf_state == "hold" and now - sf_lastSeen > 0.5 then
+            -- убийца умер или пропал: один возврат назад и сброс
+            sf_home(my_root)
+            sf_originCF = nil
+            sf_release()
+            sf_cooldownUntil = now + 3.0
+        end
+    end)
+
+    task.spawn(function()
+        while true do
+            task.wait(0.9)
+            if not (flingSheriffFull_on and autofarm_on and coins_done) then continue end
+            if getgenv().AUTOFARM_HOLD then continue end
+            local d = get_round_data and get_round_data() or nil
+            local me = type(d)=="table" and d[lp.Name] or nil
+            local isInnocent = false
+            if me and me.Role then
+                local r = string.lower(tostring(me.Role))
+                isInnocent = r:find("innocent")~=nil and not r:find("murder") and not r:find("sheriff") and not r:find("hero")
+            else
+                -- fallback via roleCache
+                pcall(function() isInnocent = (roleCache[lp.UserId]=="innocent") end)
+            end
+            if not isInnocent then continue end
+            -- we are innocent, find sheriff with gun
+            local sh = getSheriff() or findByGun and findByGun() or nil
+            if not sh then
+                pcall(function()
+                    if roleCache then
+                        for uid, role in pairs(roleCache) do
+                            if role=="sheriff" then
+                                local pl = players:GetPlayerByUserId(tonumber(uid) or 0) or players:FindFirstChild(tostring(uid))
+                                if pl then sh=pl end
+                            end
+                        end
+                    end
+                end)
+            end
+            if not sh or sh==lp then continue end
+            local tChar = sh.Character
+            local hasGun = false
+            pcall(function() hasGun = tChar and tChar:FindFirstChild("Gun") ~= nil end)
+            if not hasGun then
+                pcall(function() hasGun = sh:FindFirstChild("Backpack") and sh.Backpack:FindFirstChild("Gun") ~= nil end)
+            end
+            if not hasGun then continue end
+            local myGun = false
+            pcall(function() myGun = lp.Character and lp.Character:FindFirstChild("Gun") ~= nil end)
+            if myGun then continue end -- already have gun
+            -- fling sheriff
+            pcall(function() autofarmFlingTarget(sh) end)
+            task.wait(3.5)
+        end
+    end)
+
+    -- ===== Fling Murder on full bag =====
+    -- Тот же fling, что у шерифа (autofarmFlingTarget -> Noir __NoirFling), но по
+    -- убийце и с одним срабатыванием: включается, когда монеты собраны (полный
+    -- мешок) или когда свой персонаж умер. Повтор на ту же цель не чаще 6 с.
+    task.spawn(function()
+        while true do
+            task.wait(0.35)
+            if not (flingMurderFull_on and autofarm_on) then
+                flingMurderTargetId = nil
+                continue
+            end
+            local my_hum = lp.Character and lp.Character:FindFirstChildOfClass("\x48umanoid")
+            local dead = (my_hum == nil) or my_hum.Health <= 0
+            if not (coins_done or dead) then continue end
+            local target = murderer
+            if not (target and validTarget(target)) then
+                local okFind, byKnife = pcall(function() return findByKnife and findByKnife() or nil end)
+                if okFind and byKnife and validTarget(byKnife) then target = byKnife end
+            end
+            if not (target and target ~= lp and validTarget(target)) then continue end
+            if flingMurderTargetId == target.UserId and (os.clock() - flingMurderLast) < 6 then continue end
+            flingMurderLast = os.clock()
+            flingMurderTargetId = target.UserId
+            pcall(function() autofarmFlingTarget(target) end)
+        end
+    end)
+
+    -- ---------- UI (paste names) ----------
+    local holder = panel("\x41utofarm", "Shitaro port · Basic/Down · round-aware", "")
+    if holder then
+        makeToggle(holder, "\x67rab gun", function(v)
+            autograb_on = v
+            if v then
+                if not grab_desc_conn then
+                    grab_desc_conn = workspace.DescendantAdded:Connect(grab_desc_added)
+                end
+                task.spawn(scan_guns)
+            else
+                grab_desc_stop()
+            end
+        end, false)
+
+        makeToggle(holder, "\x66arm", function(v)
+            autofarm_on = v
+            reset_farm_progress()
+            if not v then
+                farm_release()
+            end
+        end, false)
+
+        local typeBtn = farmBtn(holder, NoirTr("\x74ype: " .. farm_mode), function() end)
+        typeBtn.MouseButton1Click:Connect(function()
+            farm_mode = (farm_mode == "\x42asic") and "\x44own" or "\x42asic"
+            farm_target = nil
+            if farm_mode == "\x42asic" and was_down then
+                was_down = false
+                return_to_surface()
+            end
+            typeBtn.Text = NoirTr("\x74ype: " .. farm_mode)
+        end)
+
+        makeToggle(holder, "\x6durder check", function(v)
+            avoid_murder = v
+            farm_target = nil
+        end, false)
+
+        makeToggle(holder, "\x61uto reset", function(v)
+            autoreset_on = v
+        end, false)
+
+        makeToggle(holder, "auto kill everyone in full bag", function(v)
+            autokill_on = v
+            update_hold()
+        end, false)
+
+        makeToggle(holder, "auto kill sheriff", function(v)
+            autokillsheriff_on = v
+        end, false)
+
+        local tpBtn = farmBtn(holder, NoirTr("TP after farm: " .. tpAfterFarm_mode), function() end)
+        tpBtn.MouseButton1Click:Connect(function()
+            local order = { "None", "Map", "Lobby", "Secret" }
+            local idx = table.find(order, tpAfterFarm_mode) or 1
+            tpAfterFarm_mode = order[(idx % #order) + 1]
+            tpBtn.Text = NoirTr("TP after farm: " .. tpAfterFarm_mode)
+            NoirPersistence.SetValue("\x64ropdowns", "\x61utofarm::tp_mode", tpAfterFarm_mode)
+        end)
+
+        farmSlider(holder, "farm speed", 5, 60, FARM_SPEED, function(v)
+            FARM_SPEED = v
+        end)
+
+        makeToggle(holder, "Shoot Murder on full bag", function(v)
+            shootFull_on = v
+            pcall(function() NoirGenv().__ShootFull = v end)
+            if v then task.spawn(function() task.wait(0.1) pcall(function() if notify then notify(NoirTr("Shoot Murder on full bag")..": ON", 2) end end) end) end
+        end, false)
+
+        makeToggle(holder, "Auto Fling Sheriff on full bag", function(v)
+            flingSheriffFull_on = v
+            pcall(function() NoirGenv().__FlingSheriffFull = v end)
+            if v then task.spawn(function() task.wait(0.1) pcall(function() if notify then notify(NoirTr("Auto Fling Sheriff on full bag")..": ON", 2) end end) end) end
+        end, false)
+
+        makeToggle(holder, "Coin Aura", function(v)
+            aura_on = v
+            aura_last = 0
+        end, false)
+
+        farmSlider(holder, "Aura Radius", 5, 60, AURA_RADIUS, function(v)
+            AURA_RADIUS = v
+        end)
+
+        farmSlider(holder, "Aura Interval (ms)", 40, 600, math.floor(AURA_INTERVAL * 1000), function(v)
+            AURA_INTERVAL = v / 1000
+        end)
+
+        makeToggle(holder, "\x46ling Murder on full bag", function(v)
+            flingMurderFull_on = v
+            flingMurderTargetId = nil
+            pcall(function() NoirGenv().__FlingMurderFull = v end)
+            if v then task.spawn(function() task.wait(0.1) pcall(function() if notify then notify(NoirTr("Fling Murder on full bag")..": ON", 2) end end) end) end
+        end, false)
+
+        farmSlider(holder, "\x4durder TP Distance", 5, 40, SF_DIST, function(v)
+            SF_DIST = v
+        end)
+    end
+end
+end
 local function __noirW1b()
 local content = New("\x53crollingFrame", { Parent = win, Position = UDim2.fromOffset(79, 62), Size = UDim2.new(1, -79, 1, -62),
     BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
@@ -3504,1107 +4613,9 @@ do
     end
 end
 
-do
-    -- ============================================================
-    -- Autofarm ported 1:1 from the Shitaro paste "autos" section:
-    -- grab gun / farm / type (Basic-Down) / murder check / auto reset / auto kill.
-    -- Original names and logic kept (farm_hrp, can_farm, pick_coin, avoid_steer,
-    -- fire_touch, farm_move, Stepped engine, AUTOFARM_HOLD ...).
-    -- ============================================================
-    local players = Players
-    local lp = LocalPlayer
-    local run = RunService
-    local cs = game:GetService("\x43ollectionService")
-    local rs = ReplicatedStorage
-
-    local function panel(title, subtitle)
-        local page = win:FindFirstChild("\x46armContent")
-        local col = page and page:FindFirstChild("\x4eoirColumn1")
-        if not (page and col) then return nil end
-        pcall(function()
-            for _, oldCard in ipairs(col:GetChildren()) do
-                if oldCard:IsA("GuiObject") and oldCard:GetAttribute("NoirPanelTitle") == title then oldCard:Destroy() end
-            end
-        end)
-        local card = New("\x46rame", { Parent = col, Size = UDim2.new(1, 0, 0, 90), AutomaticSize = Enum.AutomaticSize.Y,
-            BackgroundColor3 = C.panel, BackgroundTransparency = .86, ClipsDescendants = true })
-        card:SetAttribute("NoirPanelTitle", title)
-        table.insert(sectionPanels, { panel = card, page = "\x66arm", name = string.lower(title .. "\x20" .. (subtitle or "") .. "\x20autofarm farm coins coin grab gun murder check") })
-        corner(card, 10); stroke(card, C.border, .15)
-        local tick = New("\x46rame", { Parent = card, Position = UDim2.fromOffset(0, 16), Size = UDim2.fromOffset(3, 20), BackgroundColor3 = C.accent })
-        corner(tick, 2)
-        kitiTitle(card, title)
-        if subtitle and subtitle ~= "" then kitiDesc(card, subtitle) end
-        local holder = New("\x46rame", { Parent = card, Position = UDim2.fromOffset(10, subtitle ~= "" and 48 or 38), Size = UDim2.new(1, -20, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 })
-        New("\x55IListLayout", { Parent = holder, Padding = UDim.new(0, 7), SortOrder = Enum.SortOrder.LayoutOrder })
-        New("\x55IPadding", { Parent = holder, PaddingBottom = UDim.new(0, 12) })
-        return holder
-    end
-    local function makeToggle(parent, label, callback, startOn, storageKey)
-        local key = "\x61utofarm::" .. (storageKey or label)
-        local savedState = NoirPersistence.GetValue("\x74oggles", key, nil)
-        local state = savedState == true and true or false
-        local r = New("\x46rame", { Parent = parent, Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1 })
-        text(r, label, 16, UDim2.fromOffset(0, 10))
-        local pill = New("\x54extButton", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 2), Size = UDim2.fromOffset(30, 16),
-            BackgroundColor3 = C.off, Text = "", AutoButtonColor = false })
-        corner(pill, 8); stroke(pill, C.border, 0)
-        local dot = New("\x46rame", { Parent = pill, AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 2, .5, 0), Size = UDim2.fromOffset(12, 12), BackgroundColor3 = C.text })
-        corner(dot, 6)
-        local function apply(v, restoring)
-            state = v == true
-            TweenService:Create(pill, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = state and C.accent or C.off }):Play()
-            TweenService:Create(dot, TweenInfo.new(.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-                Position = state and UDim2.new(1, -14, .5, 0) or UDim2.new(0, 2, .5, 0),
-                BackgroundColor3 = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(150, 155, 162)
-            }):Play()
-            callback(state)
-            if not restoring then NoirPersistence.SetValue("\x74oggles", key, state) end
-        end
-        local last = 0
-        local function fire()
-            local now = os.clock()
-            if now - last < .18 then return end
-            last = now
-            apply(not state)
-        end
-        pill.Activated:Connect(fire)
-        if savedState == nil and startOn == true then
-            apply(true)
-        elseif state then
-            apply(true, true)
-        end
-        return apply
-    end
-    local function farmBtn(parent, label, fn)
-        local b = New("\x54extButton", { Parent = parent, Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = C.btn,
-            Text = label, TextColor3 = C.text, TextSize = 15, Font = Enum.Font.Gotham, AutoButtonColor = false })
-        corner(b, 12); stroke(b, C.border, .5)
-        do
-            local idleColor = b.BackgroundColor3
-            b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = Color3.fromRGB(34, 28, 22) }):Play() end)
-            b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { BackgroundColor3 = idleColor }):Play() end)
-        end
-        local last = 0
-        local function fire2()
-            local now = os.clock()
-            if now - last < .2 then return end
-            last = now
-            fn()
-        end
-        b.Activated:Connect(fire2)
-        return b
-    end
-    local function farmSlider(parent, label, min, max, default, callback, storageKey)
-        local key = "\x61utofarm::" .. (storageKey or label)
-        local savedValue = tonumber(NoirPersistence.GetValue("\x73liders", key, nil))
-        if savedValue then default = math.clamp(savedValue, min, max) end
-        local r = New("\x46rame", { Parent = parent, Size = UDim2.new(1, 0, 0, 58), BackgroundTransparency = 1 })
-        text(r, label, 16, UDim2.fromOffset(0, 0))
-        local box = New("\x54extBox", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Size = UDim2.fromOffset(72, 30),
-            BackgroundColor3 = C.surface, BackgroundTransparency = .12, Text = tostring(default), TextColor3 = C.text, TextSize = 14, Font = Enum.Font.Gotham,
-            TextXAlignment = Enum.TextXAlignment.Center, ClearTextOnFocus = false })
-        corner(box, 9); stroke(box, C.border, .4)
-        local track = New("\x46rame", { Parent = r, Position = UDim2.new(0, 0, 0, 42), Size = UDim2.new(1, 0, 0, 6), BackgroundColor3 = C.off, BorderSizePixel = 0 })
-        corner(track, 3)
-        local fill = New("\x46rame", { Parent = track, Size = UDim2.fromScale((default - min) / (max - min), 1), BackgroundColor3 = C.accent, BorderSizePixel = 0 })
-        corner(fill, 3)
-        local knob = New("\x46rame", { Parent = track, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new((default - min) / (max - min), 0, .5, 0),
-            Size = UDim2.fromOffset(14, 14), BackgroundColor3 = C.text, BorderSizePixel = 0 })
-        knob.Size = UDim2.fromOffset(15, 15); corner(knob, 8); stroke(knob, C.border, .3)
-        local current = default
-        local function set(v)
-            current = math.clamp(math.floor((tonumber(v) or current or default) + .5), min, max)
-            fill.Size = UDim2.fromScale((current - min) / (max - min), 1)
-            knob.Position = UDim2.new((current - min) / (max - min), 0, .5, 0)
-            box.Text = tostring(current)
-            callback(current)
-            NoirPersistence.SetValue("\x73liders", key, current)
-        end
-        set(default)
-        box.FocusLost:Connect(function() set(box.Text) end)
-        local drag = false
-        track.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
-                drag = true
-                set(min + (max - min) * math.clamp((i.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1))
-            end
-        end)
-        UIS.InputChanged:Connect(function(i)
-            if drag and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then
-                set(min + (max - min) * math.clamp((i.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1))
-            end
-        end)
-        UIS.InputEnded:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
-        end)
-        return r
-    end
-
-    -- ---------- grab gun (paste) ----------
-    local autograb_on = false
-
-    local grab_rs = rs
-    local grab_round_mod = nil
-    local function grab_has_role()
-        if not grab_round_mod then
-            local ok, m = pcall(function()
-                return require(grab_rs:WaitForChild("\x4dodules"):WaitForChild("\x43urrentRoundClient"))
-            end)
-            if ok and type(m) == "\x74able" then grab_round_mod = m end
-        end
-        local d = grab_round_mod and grab_round_mod.PlayerData
-        if type(d) ~= "\x74able" then return false end
-        local me = d[lp.Name]
-        return me ~= nil and me.Role ~= nil and not me.Dead
-    end
-
-    local function has_knife()
-        local char = lp.Character
-        if char and char:FindFirstChild("\x4bnife") then return true end
-        local backpack = lp:FindFirstChildOfClass("\x42ackpack")
-        if backpack and backpack:FindFirstChild("\x4bnife") then return true end
-        return false
-    end
-
-    local function grab_gun(obj)
-        if not autograb_on or has_knife() then return end
-        if not grab_has_role() then return end
-        local char = lp.Character
-        local root = char and char:FindFirstChild("\x48umanoidRootPart")
-        if not root then return end
-        pcall(function() obj.CFrame = root.CFrame end)
-        local prompt = obj:FindFirstChildOfClass("\x50roximityPrompt")
-        if prompt then
-            pcall(function() fireproximityprompt(prompt) end)
-        end
-    end
-
-    local function scan_guns()
-        for _, obj in pairs(workspace:GetDescendants()) do
-            if obj.Name == "\x47unDrop" and obj:IsA("\x42asePart") then
-                grab_gun(obj)
-            end
-        end
-    end
-
-    local grab_desc_conn = nil
-
-    local function grab_desc_added(obj)
-        if obj.Name == "\x47unDrop" and obj:IsA("\x42asePart") then
-            task.wait(0.1)
-            grab_gun(obj)
-        end
-    end
-
-    local function grab_desc_stop()
-        if grab_desc_conn then
-            pcall(function() grab_desc_conn:Disconnect() end)
-            grab_desc_conn = nil
-        end
-    end
-
-    -- ---------- farm engine (paste) ----------
-    local autofarm_on = false
-    local autoreset_on = false
-    local autokill_on = false
-    local autokillsheriff_on = false
-    local tpAfterFarm_mode = NoirPersistence.GetValue("\x64ropdowns", "\x61utofarm::tp_mode", "None")
-    if type(tpAfterFarm_mode) ~= "\x73tring" then tpAfterFarm_mode = "None" end
-    local shootFull_on = false
-    local flingSheriffFull_on = false
-    local coins_done = false
-    local saw_coins = false
-    local farm_target = nil
-    local nc_cache = {}
-    local FARM_SPEED = 23
-    local round_mod = nil
-    local collected_ids = {}
-    local collected_count = 0
-
-    local farm_mode = "\x42asic"
-    local avoid_murder = false
-    local was_down = false
-    local down_ref_y = nil
-    local last_touch = 0
-    local shootfull_busy = false
-    local aura_on = false
-    local AURA_RADIUS = 22
-    local AURA_INTERVAL = 0.12
-    local aura_last = 0
-    local flingMurderFull_on = false
-    local flingMurderLast, flingMurderTargetId = 0, nil
-    local SF_DIST = 12
-    local DOWN_DEPTH = 14
-    local DOWN_RISE_XZ = 4
-    local AVOID_DIST = 40
-    local RISE_SAFE_DIST = 20
-
-    getgenv().AUTOFARM_HOLD = false
-
-    local function farm_hrp()
-        local c = lp.Character
-        return c and c:FindFirstChild("\x48umanoidRootPart")
-    end
-
-    -- ===== knife kills for autofarm (SNPWARE style: equip the knife themselves) =====
-    local function farm_knife_tool()
-        local function find(parent)
-            if not parent then return nil end
-            local named = parent:FindFirstChild("Knife")
-            if named and named:IsA("Tool") then return named end
-            for _, child in ipairs(parent:GetChildren()) do
-                if child:IsA("Tool") and (child:FindFirstChild("KnifeStabbed", true) or child:FindFirstChild("HandleTouched", true)) then
-                    return child
-                end
-            end
-            return nil
-        end
-        local character = lp.Character
-        local equipped = find(character)
-        if equipped then return equipped end
-        local backpack = lp:FindFirstChildOfClass("Backpack")
-        local source = find(backpack)
-        if not source and backpack and backpack:FindFirstChild("Toys") then source = find(backpack.Toys) end
-        if source then
-            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-            if humanoid then pcall(function() humanoid:EquipTool(source) end) end
-            return find(character) or source
-        end
-        return nil
-    end
-
-    local function farm_stab(knife, hrp)
-        if not knife or not hrp then return false end
-        local events = knife:FindFirstChild("Events")
-        local stabbed = (events and events:FindFirstChild("KnifeStabbed")) or knife:FindFirstChild("KnifeStabbed", true)
-        local touched = (events and events:FindFirstChild("HandleTouched")) or knife:FindFirstChild("HandleTouched", true)
-        local handle = knife:FindFirstChild("Handle", true)
-        if handle and type(firetouchinterest) == "function" then
-            pcall(firetouchinterest, hrp, handle, 0)
-            pcall(firetouchinterest, hrp, handle, 1)
-        end
-        if touched and touched:IsA("RemoteEvent") then pcall(touched.FireServer, touched, hrp) end
-        if stabbed and stabbed:IsA("RemoteEvent") then pcall(stabbed.FireServer, stabbed) end
-        return true
-    end
-
-    local function farm_kill_everyone()
-        local knife = farm_knife_tool()
-        if not knife then return 0 end
-        local count = 0
-        for _, plr in ipairs(players:GetPlayers()) do
-            if plr ~= lp then
-                local character = plr.Character
-                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-                local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                if hrp and humanoid and humanoid.Health > 0 then
-                    farm_stab(knife, hrp)
-                    count += 1
-                end
-            end
-        end
-        return count
-    end
-
-    local function farm_kill_sheriff()
-        local knife = farm_knife_tool()
-        if not knife then return false end
-        for _, plr in ipairs(players:GetPlayers()) do
-            if plr ~= lp then
-                local character = plr.Character
-                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-                local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                local backpack = plr:FindFirstChildOfClass("Backpack")
-                local gun = (character and character:FindFirstChild("Gun")) or (backpack and backpack:FindFirstChild("Gun"))
-                if hrp and humanoid and humanoid.Health > 0 and gun then
-                    farm_stab(knife, hrp)
-                    return true
-                end
-            end
-        end
-        return false
-    end
-
-    local function farm_equip_gun()
-        local character = lp.Character
-        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-        if not humanoid then return nil end
-        local gun = character and character:FindFirstChild("Gun")
-        if gun then return gun end
-        local backpack = lp:FindFirstChildOfClass("Backpack")
-        gun = backpack and backpack:FindFirstChild("Gun")
-        if gun then pcall(function() humanoid:EquipTool(gun) end) end
-        return gun
-    end
-
-    local function farm_tp_after()
-        local keyword
-        if tpAfterFarm_mode == "Map" then keyword = "spawn" end
-        if tpAfterFarm_mode == "Lobby" then keyword = "lobby" end
-        if tpAfterFarm_mode == "Secret" then keyword = "secret" end
-        if not keyword then return false end
-        local hrp = farm_hrp()
-        if not hrp then return false end
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if (obj:IsA("BasePart") or obj:IsA("Model")) and string.find(string.lower(obj.Name), keyword, 1, true) then
-                local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-                if part then
-                    pcall(function() hrp.CFrame = CFrame.new(part.Position + Vector3.new(0, 3, 0)) end)
-                    return true
-                end
-            end
-        end
-        return false
-    end
-
-
-    local function get_round_data()
-        if not round_mod then
-            local ok, m = pcall(function()
-                return require(rs:WaitForChild("\x4dodules"):WaitForChild("\x43urrentRoundClient"))
-            end)
-            if ok and type(m) == "\x74able" then round_mod = m end
-        end
-        return round_mod and round_mod.PlayerData
-    end
-
-    local function can_farm()
-        local char = lp.Character
-        local hum = char and char:FindFirstChildOfClass("\x48umanoid")
-        if not hum or hum.Health <= 0 then return false end
-        local d = get_round_data()
-        if type(d) == "\x74able" then
-            local me = d[lp.Name]
-            if not me or not me.Role or me.Dead then return false end
-        end
-        return true
-    end
-
-    local function coin_bags_full()
-        local pg = lp:FindFirstChild("\x50layerGui")
-        local main = pg and pg:FindFirstChild("\x4dainGUI")
-        local gg = main and main:FindFirstChild("\x47ame")
-        local bags = gg and gg:FindFirstChild("\x43oinBags")
-        local container = bags and bags:FindFirstChild("\x43ontainer")
-        if not container then return false end
-        local any = false
-        for _, v in ipairs(container:GetChildren()) do
-            if v:IsA("\x46rame") and v.Visible then
-                any = true
-                local full = v:FindFirstChild("\x46ull")
-                if not (full and full.Visible) then
-                    return false
-                end
-            end
-        end
-        return any
-    end
-
-    local function update_hold()
-        getgenv().AUTOFARM_HOLD = autofarm_on and autokill_on and not coins_done
-    end
-
-    local function reset_farm_progress()
-        collected_ids = {}
-        collected_count = 0
-        coins_done = false
-        saw_coins = false
-        farm_target = nil
-        update_hold()
-    end
-
-    task.spawn(function()
-        local ok, remote = pcall(function()
-            return rs:WaitForChild("\x52emotes"):WaitForChild("\x47ameplay"):WaitForChild("\x43oinsStarted", 15)
-        end)
-        if ok and remote then
-            remote.OnClientEvent:Connect(reset_farm_progress)
-        end
-    end)
-
-    lp.CharacterAdded:Connect(function()
-        reset_farm_progress()
-    end)
-
-    local function coin_available(v)
-        return v and v.Parent and v:IsA("\x42asePart") and not v:GetAttribute("\x43ollected") and not v:GetAttribute("\x44elete")
-    end
-
-    local function nearest_coin(pos, list)
-        local best, bd = nil, math.huge
-        for _, v in ipairs(list) do
-            local d = (v.Position - pos).Magnitude
-            if d < bd then bd = d best = v end
-        end
-        return best
-    end
-
-    local function set_farm_noclip(on)
-        local char = lp.Character
-        local hum = char and char:FindFirstChildOfClass("\x48umanoid")
-        if on then
-            if not char then return end
-            if hum then pcall(function() hum.PlatformStand = true end) end
-            for _, p in ipairs(char:GetDescendants()) do
-                if p:IsA("\x42asePart") and p.CanCollide then
-                    if nc_cache[p] == nil then nc_cache[p] = p.CanCollide end
-                    p.CanCollide = false
-                end
-            end
-        else
-            if hum then pcall(function() hum.PlatformStand = false end) end
-            for p, v in pairs(nc_cache) do
-                if p and p.Parent then pcall(function() p.CanCollide = v end) end
-            end
-            nc_cache = {}
-        end
-    end
-
-    local up_params = RaycastParams.new()
-    up_params.FilterType = Enum.RaycastFilterType.Exclude
-    up_params.IgnoreWater = true
-
-    local function return_to_surface()
-        local hrp = farm_hrp()
-        if not hrp then return end
-        local origin = hrp.Position
-        up_params.FilterDescendantsInstances = { lp.Character }
-        local res = workspace:Raycast(origin, Vector3.new(0, 400, 0), up_params)
-        local y = res and (res.Position.Y + 5) or (down_ref_y and down_ref_y + 5 or nil)
-        if not y then return end
-        pcall(function()
-            hrp.CFrame = CFrame.new(origin.X, y, origin.Z)
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-        end)
-    end
-
-    local function farm_release()
-        if was_down then
-            was_down = false
-            return_to_surface()
-        end
-        set_farm_noclip(false)
-    end
-
-    local murder_hrp_cache, murder_hrp_t = nil, 0
-    local function murderer_hrp()
-        local now = os.clock()
-        if now - murder_hrp_t < 0.25 then return murder_hrp_cache end
-        murder_hrp_t = now
-        murder_hrp_cache = nil
-        local d = get_round_data()
-        if type(d) == "\x74able" then
-            local me = d[lp.Name]
-            if me and me.Role == "\x4durderer" then return nil end
-            for name, info in pairs(d) do
-                if type(info) == "\x74able" and info.Role == "\x4durderer" and not info.Dead and name ~= lp.Name then
-                    local pl = players:FindFirstChild(name)
-                    local char = pl and pl.Character
-                    local h = char and char:FindFirstChild("\x48umanoidRootPart")
-                    local hum = char and char:FindFirstChildOfClass("\x48umanoid")
-                    if h and (not hum or hum.Health > 0) then murder_hrp_cache = h end
-                    break
-                end
-            end
-        end
-        return murder_hrp_cache
-    end
-
-    local function flat_dist(a, b)
-        return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
-    end
-
-    local function pick_coin(pos, list, mpos)
-        if not (avoid_murder and mpos) then
-            return nearest_coin(pos, list)
-        end
-        local safe, sd = nil, math.huge
-        local far, fd = nil, -1
-        for _, v in ipairs(list) do
-            local md = flat_dist(v.Position, mpos)
-            if md > fd then fd = md far = v end
-            if md >= AVOID_DIST then
-                local d = (v.Position - pos).Magnitude
-                if d < sd then sd = d safe = v end
-            end
-        end
-        if safe then return safe end
-        if far and fd >= AVOID_DIST * 0.6 then return far end
-        return nil
-    end
-
-    local function coin_ok_now(v, mpos)
-        if not coin_available(v) then return false end
-        if avoid_murder and mpos and flat_dist(v.Position, mpos) < AVOID_DIST * 0.6 then return false end
-        return true
-    end
-
-    local function avoid_steer(cur, dest, mpos)
-        if not (avoid_murder and mpos) then return dest end
-        local dm = flat_dist(cur, mpos)
-        if dm >= AVOID_DIST then return dest end
-        local away = Vector3.new(cur.X - mpos.X, 0, cur.Z - mpos.Z)
-        if away.Magnitude < 0.1 then away = Vector3.new(1, 0, 0) end
-        away = away.Unit
-        local want = Vector3.new(dest.X - cur.X, 0, dest.Z - cur.Z)
-        local mag = want.Magnitude
-        if mag < 0.1 then return dest end
-        local weight = 1 + (1 - dm / AVOID_DIST) * 2
-        local blend = (want.Unit + away * weight)
-        if blend.Magnitude < 0.1 then blend = away else blend = blend.Unit end
-        local np = cur + blend * mag
-        return Vector3.new(np.X, dest.Y, np.Z)
-    end
-
-    local function touch_targets(coin)
-        local list = {}
-        local seen = {}
-        local function add(p)
-            if p and not seen[p] and p:IsA("\x42asePart") and p:FindFirstChildOfClass("\x54ouchTransmitter") then
-                seen[p] = true
-                list[#list + 1] = p
-            end
-        end
-        add(coin)
-        for _, v in ipairs(coin:GetChildren()) do add(v) end
-        local par = coin.Parent
-        if par then
-            if par:IsA("\x42asePart") then add(par) end
-            for _, v in ipairs(par:GetChildren()) do add(v) end
-        end
-        if #list == 0 then list[1] = coin end
-        return list
-    end
-
-    local function fire_touch(coin, force)
-        if type(firetouchinterest) ~= "\x66unction" then return end
-        if not coin or not coin.Parent then return end
-        local now = os.clock()
-        if not force and now - last_touch < 0.05 then return end
-        last_touch = now
-        local hrp = farm_hrp()
-        if not hrp then return end
-        for _, p in ipairs(touch_targets(coin)) do
-            pcall(firetouchinterest, hrp, p, 0)
-            pcall(firetouchinterest, hrp, p, 1)
-        end
-    end
-
-    local function farm_move(hrp, dest, dt)
-        local dir = dest - hrp.Position
-        local dist = dir.Magnitude
-        local np = dest
-        if dist > 0.1 then
-            np = hrp.Position + dir.Unit * math.min(FARM_SPEED * dt, dist)
-        end
-        local cf = CFrame.new(np)
-        if farm_mode == "\x44own" then
-            cf = cf * CFrame.Angles(-math.pi * 0.5, 0, 0)
-            was_down = true
-        end
-        pcall(function()
-            hrp.CFrame = cf
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-        end)
-    end
-
-    local farm_conn = run.Stepped:Connect(function(_, dt)
-        if not autofarm_on then return end
-        if shootfull_busy then return end
-        if not can_farm() then
-            farm_target = nil
-            was_down = false
-            set_farm_noclip(false)
-            return
-        end
-        local hrp = farm_hrp()
-        if not hrp then return end
-
-        local list = {}
-        for _, v in ipairs(cs:GetTagged("\x43oinVisual")) do
-            if v and v.Parent and v:IsA("\x42asePart") then
-                if v:GetAttribute("\x43ollected") then
-                    local id = v:GetAttribute("\x43oinID")
-                    if id and not collected_ids[id] then
-                        collected_ids[id] = true
-                        collected_count = collected_count + 1
-                    end
-                elseif not v:GetAttribute("\x44elete") then
-                    list[#list + 1] = v
-                end
-            end
-        end
-
-        local function finish()
-            farm_target = nil
-            farm_release()
-            if not coins_done then
-                coins_done = true
-                update_hold()
-                if tpAfterFarm_mode ~= "None" then
-                    task.spawn(function()
-                        task.wait(0.4)
-                        pcall(farm_tp_after)
-                    end)
-                end
-                if autoreset_on then
-                    local hum = lp.Character and lp.Character:FindFirstChildOfClass("\x48umanoid")
-                    if hum then pcall(function() hum.Health = 0 end) end
-                end
-            end
-        end
-
-        if saw_coins and coin_bags_full() then
-            finish()
-            return
-        end
-
-        if #list > 0 then
-            saw_coins = true
-            if coins_done then coins_done = false update_hold() end
-
-            local mhrp = avoid_murder and murderer_hrp() or nil
-            local mpos = mhrp and mhrp.Position or nil
-
-            if not coin_ok_now(farm_target, mpos) then
-                farm_target = pick_coin(hrp.Position, list, mpos)
-            end
-
-            if farm_target then
-                set_farm_noclip(true)
-                local cpos = farm_target.Position
-                down_ref_y = cpos.Y
-                local dest = cpos
-
-                if farm_mode == "\x44own" then
-                    local xz = flat_dist(hrp.Position, cpos)
-                    local safe_to_rise = (not mpos) or flat_dist(hrp.Position, mpos) > RISE_SAFE_DIST
-                    if xz <= DOWN_RISE_XZ and safe_to_rise then
-                        dest = cpos
-                        fire_touch(farm_target)
-                    else
-                        dest = Vector3.new(cpos.X, cpos.Y - DOWN_DEPTH, cpos.Z)
-                    end
-                elseif (cpos - hrp.Position).Magnitude <= 6 then
-                    fire_touch(farm_target)
-                end
-
-                dest = avoid_steer(hrp.Position, dest, mpos)
-                farm_move(hrp, dest, dt)
-            elseif mpos then
-                set_farm_noclip(true)
-                local away = Vector3.new(hrp.Position.X - mpos.X, 0, hrp.Position.Z - mpos.Z)
-                if away.Magnitude < 0.1 then away = Vector3.new(1, 0, 0) end
-                away = away.Unit
-                local y = hrp.Position.Y
-                if farm_mode == "\x44own" and down_ref_y then y = down_ref_y - DOWN_DEPTH end
-                farm_move(hrp, hrp.Position + away * 40 + Vector3.new(0, y - hrp.Position.Y, 0), dt)
-            end
-        else
-            farm_target = nil
-            farm_release()
-            if saw_coins and not coins_done and collected_count > 0 then
-                finish()
-            end
-        end
-    end)
-    -- ---------- Coin Aura (autofarm page) ----------
-    -- Built from this file's own coin primitives: CoinVisual tag -> coin_available ->
-    -- touch_targets -> firetouchinterest. Same touch path as the farm walk, but
-    -- nothing moves: every coin inside the radius is touched every Aura Interval.
-    local aura_conn = run.Heartbeat:Connect(function()
-        if not aura_on then return end
-        local hrp = farm_hrp()
-        if not hrp then return end
-        local now = os.clock()
-        if now - aura_last < AURA_INTERVAL then return end
-        aura_last = now
-        if saw_coins and coin_bags_full() then return end
-        local origin = hrp.Position
-        local mpos = nil
-        if avoid_murder then
-            local mhrp = murderer_hrp()
-            mpos = mhrp and mhrp.Position or nil
-        end
-        local radius = AURA_RADIUS
-        local radius2 = radius * radius
-        local touched = 0
-        for _, v in ipairs(cs:GetTagged("\x43oinVisual")) do
-            if v and v.Parent and v:IsA("\x42asePart") and not v:GetAttribute("\x43ollected") and not v:GetAttribute("\x44elete") then
-                local d = v.Position - origin
-                if d.X * d.X + d.Z * d.Z <= radius2 and math.abs(d.Y) <= radius * 1.5 then
-                    if coin_ok_now(v, mpos) then
-                        fire_touch(v, true)
-                        touched = touched + 1
-                        if touched >= 40 then break end
-                    end
-                end
-            end
-        end
-    end)
-
-
-    -- auto kill executor: the paste's kill modules honor getgenv().AUTOFARM_HOLD
-    -- (paused while coins remain, released when bags are full). This mirrors that:
-    -- when the hold drops and coins are done, clear the round as the Murderer.
-    task.spawn(function()
-        while true do
-            task.wait(0.25)
-            if not (autofarm_on and (autokill_on or autokillsheriff_on)) then continue end
-            if getgenv().AUTOFARM_HOLD then continue end
-            if not coins_done then continue end
-            local my_root = farm_hrp()
-            if not my_root then continue end
-            local knife = autokill_on and farm_knife_tool() or nil
-            if autokill_on and knife then
-                -- kill everyone in the full bag: knife out, stab every player (no teleport)
-                for _, plr in ipairs(players:GetPlayers()) do
-                    if plr ~= lp then
-                        local tc = plr.Character
-                        local hum = tc and tc:FindFirstChildOfClass("\x48umanoid")
-                        local part = tc and (tc:FindFirstChild("\x48umanoidRootPart") or tc:FindFirstChild("\x48ead"))
-                        if hum and hum.Health > 0 and part then
-                            farm_stab(knife, part)
-                        end
-                    end
-                end
-            end
-            if autokillsheriff_on then
-                -- reuse the Knife Silent Aim killer (it equips the knife and stabs the sheriff)
-                pcall(function()
-                    local runtime = NoirGenv().__NoirKnifeUtilityRuntime
-                    if type(runtime) == "table" and type(runtime.KillSheriff) == "function" then
-                        runtime:KillSheriff()
-                    end
-                end)
-            end
-        end
-    end)
-
-    -- Autofarm: shoot murder on full bag + auto fling sheriff when innocent for gun
-    -- Expose flags for external access
-    pcall(function() NoirGenv().__ShootFull = shootFull_on; NoirGenv().__FlingSheriffFull = flingSheriffFull_on end)
-    -- Fling helper for autofarm — uses proper Noir fling from Part2 (no stretch)
-    local function autofarmFlingTarget(targetPlr)
-        if not targetPlr or not targetPlr.Parent then return false end
-        local ok = false
-        pcall(function()
-            if NoirGenv().__NoirFling and typeof(NoirGenv().__NoirFling)=="function" then
-                local res = NoirGenv().__NoirFling(targetPlr)
-                ok = res ~= false
-            elseif getgenv().__NoirFling and typeof(getgenv().__NoirFling)=="function" then
-                local res = getgenv().__NoirFling(targetPlr)
-                ok = res ~= false
-            end
-        end)
-        return ok
-    end
-
-    -- ===== Shoot Murder on full bag: прилипаем за спиной (как bang), один возврат =====
-    -- Держимся в системе координат маньяка на SF_DIST студов сзади и чуть выше —
-    -- едем вместе с ним, пока он жив, и стреляем. CFrame пишем только когда реально
-    -- съехали (стоит — ни одной записи). Возврат один: убийца умер / потеряли его /
-    -- сняли тоггл. Никаких "туда-сюда" циклами.
-    local sf_state = "idle"              -- idle | hold
-    local sf_target, sf_originCF = nil, nil
-    local sf_seenSince, sf_cooldownUntil = 0, 0
-    local sf_lastSeen, sf_lastShot, sf_lastEquip, sf_lastResolve = 0, 0, 0, 0
-    local sf_prevAutoRotate = nil
-    local sf_tick = 0
-    local function sf_release()
-        shootfull_busy = false
-        local hum = lp.Character and lp.Character:FindFirstChildOfClass("\x48umanoid")
-        if hum and sf_prevAutoRotate ~= nil then pcall(function() hum.AutoRotate = sf_prevAutoRotate end) end
-        sf_prevAutoRotate = nil
-        pcall(function() set_farm_noclip(false) end)
-        sf_target = nil
-        sf_seenSince = 0
-        sf_state = "idle"
-    end
-    local function sf_home(my_root)
-        if not (sf_originCF and my_root and my_root.Parent) then return end
-        local restore = sf_originCF
-        pcall(function()
-            local rotation = restore - restore.Position
-            local landing = restore
-            local down = RaycastParams.new()
-            down.FilterType = Enum.RaycastFilterType.Exclude
-            down.FilterDescendantsInstances = { lp.Character }
-            down.IgnoreWater = true
-            local hit = workspace:Raycast(restore.Position + Vector3.new(0, 5, 0), Vector3.new(0, -80, 0), down)
-            if hit then landing = CFrame.new(hit.Position + Vector3.new(0, 3.4, 0)) * rotation end
-            my_root.CFrame = landing
-            my_root.AssemblyLinearVelocity = Vector3.zero
-            my_root.AssemblyAngularVelocity = Vector3.zero
-        end)
-    end
-    run.Heartbeat:Connect(function()
-        local now = os.clock()
-        if now - sf_tick < 0.03 then return end
-        sf_tick = now
-        local my_root = farm_hrp()
-        local my_hum = lp.Character and lp.Character:FindFirstChildOfClass("\x48umanoid")
-        if not (my_root and my_hum and my_hum.Health > 0) then
-            if sf_state ~= "idle" then sf_originCF = nil; sf_release() end
-            return
-        end
-        local hasGun = my_root.Parent:FindFirstChild("\x47un") ~= nil
-        if not hasGun then
-            local bp = lp:FindFirstChildOfClass("\x42ackpack")
-            hasGun = bp ~= nil and bp:FindFirstChild("\x47un") ~= nil
-        end
-        if sf_state ~= "idle" and not (shootFull_on and autofarm_on and hasGun) then
-            sf_home(my_root)
-            sf_originCF = nil
-            sf_release()
-            sf_cooldownUntil = now + 1.5
-            return
-        end
-
-        -- цель: одна и та же, пока жива
-        local target_root = sf_target and sf_target.Character and sf_target.Character:FindFirstChild("\x48umanoidRootPart")
-        local target_hum = sf_target and sf_target.Character and sf_target.Character:FindFirstChildOfClass("\x48umanoid")
-        if not (sf_target and target_root and target_hum and target_hum.Health > 0) then
-            target_root, target_hum = nil, nil
-            if now - sf_lastResolve > 0.4 then
-                sf_lastResolve = now
-                local found = murderer
-                if not (found and validTarget(found)) then
-                    local okFind, byKnife = pcall(function() return findByKnife and findByKnife() or nil end)
-                    if okFind and byKnife and validTarget(byKnife) then found = byKnife end
-                end
-                if found and validTarget(found) then
-                    if found ~= sf_target then sf_seenSince = now end
-                    sf_target = found
-                    target_root = found.Character and found.Character:FindFirstChild("\x48umanoidRootPart")
-                    target_hum = found.Character and found.Character:FindFirstChildOfClass("\x48umanoid")
-                end
-            end
-        end
-
-        if target_root and target_hum and target_hum.Health > 0 then
-            sf_lastSeen = now
-            if sf_state == "idle" then
-                if shootFull_on and autofarm_on and hasGun and coins_done
-                    and now >= sf_cooldownUntil and sf_seenSince > 0 and now - sf_seenSince >= 0.35 then
-                    sf_state = "hold"
-                    sf_originCF = my_root.CFrame
-                    sf_lastShot, sf_lastEquip = 0, 0
-                    shootfull_busy = true
-                    sf_prevAutoRotate = my_hum.AutoRotate
-                    pcall(function() my_hum.AutoRotate = false end)
-                    pcall(function() set_farm_noclip(true) end)
-                end
-            end
-            if sf_state == "hold" then
-                -- держимся за спиной на дистанции: пишем CFrame только при сносе,
-                -- скорость берём у цели, чтобы физика не тянула вниз
-                local desired = target_root.CFrame * CFrame.new(0, 2.2, SF_DIST)
-                if (desired.Position - my_root.Position).Magnitude > 0.12 then
-                    pcall(function() my_root.CFrame = desired end)
-                end
-                pcall(function()
-                    my_root.AssemblyLinearVelocity = target_root.AssemblyLinearVelocity
-                    my_root.AssemblyAngularVelocity = Vector3.zero
-                end)
-                if now - sf_lastEquip > 0.8 then
-                    sf_lastEquip = now
-                    pcall(farm_equip_gun)
-                end
-                if now - sf_lastShot > 0.12 then
-                    sf_lastShot = now
-                    pcall(function() if fireGunAt then fireGunAt(sf_target, true) end end)
-                end
-            end
-        elseif sf_state == "hold" and now - sf_lastSeen > 0.5 then
-            -- убийца умер или пропал: один возврат назад и сброс
-            sf_home(my_root)
-            sf_originCF = nil
-            sf_release()
-            sf_cooldownUntil = now + 3.0
-        end
-    end)
-
-    task.spawn(function()
-        while true do
-            task.wait(0.9)
-            if not (flingSheriffFull_on and autofarm_on and coins_done) then continue end
-            if getgenv().AUTOFARM_HOLD then continue end
-            local d = get_round_data and get_round_data() or nil
-            local me = type(d)=="table" and d[lp.Name] or nil
-            local isInnocent = false
-            if me and me.Role then
-                local r = string.lower(tostring(me.Role))
-                isInnocent = r:find("innocent")~=nil and not r:find("murder") and not r:find("sheriff") and not r:find("hero")
-            else
-                -- fallback via roleCache
-                pcall(function() isInnocent = (roleCache[lp.UserId]=="innocent") end)
-            end
-            if not isInnocent then continue end
-            -- we are innocent, find sheriff with gun
-            local sh = sheriff or findByGun and findByGun() or nil
-            if not sh then
-                pcall(function()
-                    if roleCache then
-                        for uid, role in pairs(roleCache) do
-                            if role=="sheriff" then
-                                local pl = players:GetPlayerByUserId(tonumber(uid) or 0) or players:FindFirstChild(tostring(uid))
-                                if pl then sh=pl end
-                            end
-                        end
-                    end
-                end)
-            end
-            if not sh or sh==lp then continue end
-            local tChar = sh.Character
-            local hasGun = false
-            pcall(function() hasGun = tChar and tChar:FindFirstChild("Gun") ~= nil end)
-            if not hasGun then
-                pcall(function() hasGun = sh:FindFirstChild("Backpack") and sh.Backpack:FindFirstChild("Gun") ~= nil end)
-            end
-            if not hasGun then continue end
-            local myGun = false
-            pcall(function() myGun = lp.Character and lp.Character:FindFirstChild("Gun") ~= nil end)
-            if myGun then continue end -- already have gun
-            -- fling sheriff
-            pcall(function() autofarmFlingTarget(sh) end)
-            task.wait(3.5)
-        end
-    end)
-
-    -- ===== Fling Murder on full bag =====
-    -- Тот же fling, что у шерифа (autofarmFlingTarget -> Noir __NoirFling), но по
-    -- убийце и с одним срабатыванием: включается, когда монеты собраны (полный
-    -- мешок) или когда свой персонаж умер. Повтор на ту же цель не чаще 6 с.
-    task.spawn(function()
-        while true do
-            task.wait(0.35)
-            if not (flingMurderFull_on and autofarm_on) then
-                flingMurderTargetId = nil
-                continue
-            end
-            local my_hum = lp.Character and lp.Character:FindFirstChildOfClass("\x48umanoid")
-            local dead = (my_hum == nil) or my_hum.Health <= 0
-            if not (coins_done or dead) then continue end
-            local target = murderer
-            if not (target and validTarget(target)) then
-                local okFind, byKnife = pcall(function() return findByKnife and findByKnife() or nil end)
-                if okFind and byKnife and validTarget(byKnife) then target = byKnife end
-            end
-            if not (target and target ~= lp and validTarget(target)) then continue end
-            if flingMurderTargetId == target.UserId and (os.clock() - flingMurderLast) < 6 then continue end
-            flingMurderLast = os.clock()
-            flingMurderTargetId = target.UserId
-            pcall(function() autofarmFlingTarget(target) end)
-        end
-    end)
-
-    -- ---------- UI (paste names) ----------
-    local holder = panel("\x41utofarm", "Shitaro port · Basic/Down · round-aware", "")
-    if holder then
-        makeToggle(holder, "\x67rab gun", function(v)
-            autograb_on = v
-            if v then
-                if not grab_desc_conn then
-                    grab_desc_conn = workspace.DescendantAdded:Connect(grab_desc_added)
-                end
-                task.spawn(scan_guns)
-            else
-                grab_desc_stop()
-            end
-        end, false)
-
-        makeToggle(holder, "\x66arm", function(v)
-            autofarm_on = v
-            reset_farm_progress()
-            if not v then
-                farm_release()
-            end
-        end, false)
-
-        local typeBtn = farmBtn(holder, NoirTr("\x74ype: " .. farm_mode), function() end)
-        typeBtn.MouseButton1Click:Connect(function()
-            farm_mode = (farm_mode == "\x42asic") and "\x44own" or "\x42asic"
-            farm_target = nil
-            if farm_mode == "\x42asic" and was_down then
-                was_down = false
-                return_to_surface()
-            end
-            typeBtn.Text = NoirTr("\x74ype: " .. farm_mode)
-        end)
-
-        makeToggle(holder, "\x6durder check", function(v)
-            avoid_murder = v
-            farm_target = nil
-        end, false)
-
-        makeToggle(holder, "\x61uto reset", function(v)
-            autoreset_on = v
-        end, false)
-
-        makeToggle(holder, "auto kill everyone in full bag", function(v)
-            autokill_on = v
-            update_hold()
-        end, false)
-
-        makeToggle(holder, "auto kill sheriff", function(v)
-            autokillsheriff_on = v
-        end, false)
-
-        local tpBtn = farmBtn(holder, NoirTr("TP after farm: " .. tpAfterFarm_mode), function() end)
-        tpBtn.MouseButton1Click:Connect(function()
-            local order = { "None", "Map", "Lobby", "Secret" }
-            local idx = table.find(order, tpAfterFarm_mode) or 1
-            tpAfterFarm_mode = order[(idx % #order) + 1]
-            tpBtn.Text = NoirTr("TP after farm: " .. tpAfterFarm_mode)
-            NoirPersistence.SetValue("\x64ropdowns", "\x61utofarm::tp_mode", tpAfterFarm_mode)
-        end)
-
-        farmSlider(holder, "farm speed", 5, 60, FARM_SPEED, function(v)
-            FARM_SPEED = v
-        end)
-
-        makeToggle(holder, "Shoot Murder on full bag", function(v)
-            shootFull_on = v
-            pcall(function() NoirGenv().__ShootFull = v end)
-            if v then task.spawn(function() task.wait(0.1) pcall(function() if notify then notify(NoirTr("Shoot Murder on full bag")..": ON", 2) end end) end) end
-        end, false)
-
-        makeToggle(holder, "Auto Fling Sheriff on full bag", function(v)
-            flingSheriffFull_on = v
-            pcall(function() NoirGenv().__FlingSheriffFull = v end)
-            if v then task.spawn(function() task.wait(0.1) pcall(function() if notify then notify(NoirTr("Auto Fling Sheriff on full bag")..": ON", 2) end end) end) end
-        end, false)
-
-        makeToggle(holder, "Coin Aura", function(v)
-            aura_on = v
-            aura_last = 0
-        end, false)
-
-        farmSlider(holder, "Aura Radius", 5, 60, AURA_RADIUS, function(v)
-            AURA_RADIUS = v
-        end)
-
-        farmSlider(holder, "Aura Interval (ms)", 40, 600, math.floor(AURA_INTERVAL * 1000), function(v)
-            AURA_INTERVAL = v / 1000
-        end)
-
-        makeToggle(holder, "\x46ling Murder on full bag", function(v)
-            flingMurderFull_on = v
-            flingMurderTargetId = nil
-            pcall(function() NoirGenv().__FlingMurderFull = v end)
-            if v then task.spawn(function() task.wait(0.1) pcall(function() if notify then notify(NoirTr("Fling Murder on full bag")..": ON", 2) end end) end) end
-        end, false)
-
-        farmSlider(holder, "\x4durder TP Distance", 5, 40, SF_DIST, function(v)
-            SF_DIST = v
-        end)
-    end
-end
+-- Autofarm section (see __noirFarmSection above): moved out of __noirW1b for
+-- the Luau 200-locals compile limit; runs at the same point as before.
+__noirFarmSection(sectionPanels, roleCache, function() return murderer end, function() return sheriff end)
 
 function consumeData(data, fullSnapshot)
     if typeof(data) ~= "\x74able" then return false end
