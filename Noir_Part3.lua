@@ -1,4 +1,4 @@
--- Protected by NRX2 2026-11-04 | Noir UI • Skins module
+-- Protected by NRX2 2026-11-05 | Noir UI • Skins module
 local _b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 local function b64decode(data)
   data = data:gsub('[^'.._b..'=]', '')
